@@ -17,6 +17,24 @@ The target architecture keeps Kratos as a Foundry Hosted Agent and incrementally
 7. Defer Graph OBO migration until Foundry identity passthrough is proven end to end.
 8. Treat Responses protocol and specialist Foundry agents as later, independent decisions.
 
+## Implementation Status
+
+Last updated: 2026-09-10
+
+- [x] Confirmed Toolbox and Hosted Agent support in Sweden Central.
+- [x] Added declarative `kratos-tools` provisioning with managed Web Search.
+- [x] Corrected the Bicep project endpoint output to use Azure's `AI Foundry API` endpoint.
+- [x] Added disabled-by-default, environment-controlled Toolbox consumption.
+- [x] Added renewable managed-identity authentication through the Copilot SDK MCP auth callback.
+- [x] Scoped Toolbox consumption to the `generic` persona and removed duplicate local `web_search` exposure while enabled.
+- [x] Deployed an active Hosted Agent and Toolbox in the `bankfdry` environment with Toolbox enabled.
+- [x] Added focused tests for disabled behavior, persona scoping, and endpoint-scoped authentication.
+- [x] Proved an end-to-end generic Web Search invocation through Toolbox; the deployed event stream recorded a successful `kratos-tools-web_search` call with sourced results.
+- [ ] Verify the Toolbox call and authentication behavior in the corresponding Application Insights trace.
+- [ ] Run the baseline and Toolbox variants of `generic/web-search-ai-trends` and record quality, latency, citations, and failures.
+- [ ] Run backend tests/lint and the API-only deployed smoke suite.
+- [ ] Verify and record the Hosted Agent identity's effective least-privilege Toolbox roles.
+
 ## Current State
 
 Foundry currently provides:
@@ -304,15 +322,15 @@ Do not create one Foundry agent per Kratos persona merely to mirror the current 
 
 The first pull request should contain only the foundation needed to prove one managed tool:
 
-1. Document and validate the current Toolbox resource/API support in the target region.
-2. Add declarative Toolbox provisioning or the smallest idempotent deployment hook supported by Foundry.
-3. Add azd outputs and hosted-agent environment configuration without hardcoded endpoints.
-4. Add an opt-in Toolbox MCP entry for the `generic` persona.
-5. Configure managed Web Search in Toolbox.
-6. Preserve the current local web-search implementation behind the disabled/default path.
-7. Add focused unit tests for configuration, persona scoping, and event normalization.
-8. Run the existing `web-search-ai-trends` scenario in both modes and record the comparison.
-9. Run backend tests/lint and the API-only deployed smoke suite.
+- [x] Document and validate the current Toolbox resource/API support in the target region.
+- [x] Add declarative Toolbox provisioning through the Foundry azd extension.
+- [x] Add azd outputs and hosted-agent environment configuration without hardcoded endpoints.
+- [x] Add an opt-in Toolbox MCP entry for the `generic` persona.
+- [x] Configure managed Web Search in Toolbox.
+- [x] Preserve the current local web-search implementation behind the disabled/default path.
+- [ ] Add focused unit tests for configuration, persona scoping, and event normalization. Configuration, scoping, and authentication tests are present; event normalization coverage remains.
+- [ ] Run the existing `web-search-ai-trends` scenario in both modes and record the comparison.
+- [ ] Run backend tests/lint and the API-only deployed smoke suite.
 
 Code Interpreter belongs in a follow-up pull request because file transfer and execution semantics require separate validation.
 
