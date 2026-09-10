@@ -1,5 +1,7 @@
 """Tests for the Copilot SDK agent service."""
 
+import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,6 +29,72 @@ def test_copilot_agent_init(copilot_agent, settings):
     assert copilot_agent.settings is settings
     assert copilot_agent._client is None
     assert copilot_agent._sessions == {}
+
+
+def test_foundry_toolbox_is_disabled_by_default(copilot_agent):
+    """Keep existing local tools as the default rollback path."""
+    assert copilot_agent._toolbox_endpoint() == ""
+    assert copilot_agent._apply_foundry_toolbox("generic", None) == {}
+
+
+def test_foundry_toolbox_is_scoped_to_generic_persona(settings, monkeypatch):
+    """Expose the pilot MCP server only to the generic persona."""
+    monkeypatch.setenv(
+        "TOOLBOX_KRATOS_TOOLS_MCP_ENDPOINT",
+        "https://example.test/versioned/toolbox/mcp?api-version=v1",
+    )
+    agent = CopilotAgent(
+        settings.model_copy(
+            update={
+                "toolbox_enabled": True,
+                "foundry_project_endpoint": "https://example.test/api/projects/project",
+            }
+        )
+    )
+
+    generic_servers = agent._apply_foundry_toolbox("generic", {"existing": {"type": "local"}})
+    assert generic_servers["kratos-tools"] == {
+        "type": "http",
+        "url": "https://example.test/versioned/toolbox/mcp?api-version=v1",
+        "tools": ["*"],
+    }
+    assert agent._apply_foundry_toolbox("finance-close", None) == {}
+
+
+@pytest.mark.asyncio
+async def test_foundry_toolbox_auth_is_renewable_and_endpoint_scoped(settings):
+    """Mint Foundry tokens only for the configured Toolbox endpoint."""
+    agent = CopilotAgent(
+        settings.model_copy(
+            update={
+                "toolbox_enabled": True,
+                "foundry_project_endpoint": "https://example.test/api/projects/project",
+            }
+        )
+    )
+    agent._credential = AsyncMock()
+    agent._credential.get_token.return_value = SimpleNamespace(
+        token="test-token",
+        expires_on=time.time() + 3600,
+    )
+    endpoint = agent._toolbox_endpoint()
+
+    result = await agent._handle_mcp_auth_request(
+        {"serverName": "kratos-tools", "serverUrl": endpoint, "reason": "initial"},
+        {},
+    )
+    assert result["kind"] == "token"
+    assert result["accessToken"] == "test-token"
+    assert result["tokenType"] == "Bearer"
+    assert 3500 <= result["expiresIn"] <= 3600
+    agent._credential.get_token.assert_awaited_once_with("https://ai.azure.com/.default")
+
+    rejected = await agent._handle_mcp_auth_request(
+        {"serverName": "kratos-tools", "serverUrl": "https://untrusted.test/mcp"},
+        {},
+    )
+    assert rejected == {"kind": "cancelled"}
+    agent._credential.get_token.assert_awaited_once()
 
 
 @pytest.mark.asyncio

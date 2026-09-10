@@ -318,6 +318,50 @@ class CopilotAgent:
         )
         return servers
 
+    def _toolbox_endpoint(self) -> str:
+        """Return the consumer endpoint for the configured Foundry Toolbox."""
+        if not self.settings.toolbox_enabled or not self.settings.toolbox_name:
+            return ""
+        injected_name = f"TOOLBOX_{self.settings.toolbox_name.upper().replace('-', '_')}_MCP_ENDPOINT"
+        injected_endpoint = os.environ.get(injected_name, "")
+        if injected_endpoint:
+            return injected_endpoint
+        project_endpoint = self.settings.foundry_project_endpoint.rstrip("/")
+        if not project_endpoint:
+            return ""
+        return f"{project_endpoint}/toolboxes/{self.settings.toolbox_name}/mcp?api-version=v1"
+
+    def _apply_foundry_toolbox(self, use_case: str, mcp_servers: dict | None) -> dict:
+        """Add the Toolbox MCP server for the generic-persona pilot."""
+        servers: dict = copy.deepcopy(mcp_servers) if mcp_servers else {}
+        endpoint = self._toolbox_endpoint()
+        if use_case == DEFAULT_USE_CASE and endpoint:
+            servers[self.settings.toolbox_name] = {
+                "type": "http",
+                "url": endpoint,
+                "tools": ["*"],
+            }
+        return servers
+
+    async def _handle_mcp_auth_request(self, request: dict, _context: dict) -> dict:
+        """Supply a renewable agent-identity token only to the trusted Toolbox."""
+        endpoint = self._toolbox_endpoint()
+        if (
+            not endpoint
+            or request.get("serverName") != self.settings.toolbox_name
+            or request.get("serverUrl", "").rstrip("/") != endpoint.rstrip("/")
+            or self._credential is None
+        ):
+            return {"kind": "cancelled"}
+
+        token = await self._credential.get_token("https://ai.azure.com/.default")
+        return {
+            "kind": "token",
+            "accessToken": token.token,
+            "tokenType": "Bearer",
+            "expiresIn": max(0, int(token.expires_on - time.time())),
+        }
+
     @staticmethod
     def _mcp_has_auth(mcp_servers: dict | None) -> bool:
         """True if any MCP server carries an ``Authorization`` header (identity-bearing)."""
@@ -676,6 +720,7 @@ class CopilotAgent:
             },
             "on_permission_request": PermissionHandler.approve_all,
             "on_user_input_request": self._handle_user_input_request,
+            "on_mcp_auth_request": self._handle_mcp_auth_request,
         }
         provider = self._build_provider_config()
         if provider is not None:
@@ -757,6 +802,11 @@ class CopilotAgent:
                 enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
                 skill_dirs = registry.get_skill_directories()
                 mcp_servers = getattr(registry, "mcp_servers", {})
+
+            use_case = self._conversation_use_cases.get(conversation_id, DEFAULT_USE_CASE)
+            mcp_servers = self._apply_foundry_toolbox(use_case, mcp_servers)
+            if use_case == DEFAULT_USE_CASE and self._toolbox_endpoint():
+                enabled_tools = [tool for tool in enabled_tools if tool.name != "web_search"]
 
             # Inject the signed-in user's OBO tokens as Authorization headers on the
             # matching remote MCP servers (and auto-add the env-configured OBO server

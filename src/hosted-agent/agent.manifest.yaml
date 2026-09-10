@@ -43,6 +43,10 @@ template:
       value: ${OBO_MCP_SERVER_MCP_URL}
     - name: OBO_MCP_SERVER_NAME
       value: graph-obo
+    - name: TOOLBOX_ENABLED
+      value: ${TOOLBOX_ENABLED=false}
+    - name: TOOLBOX_NAME
+      value: kratos-tools
 parameters:
   properties: []
 resources: []

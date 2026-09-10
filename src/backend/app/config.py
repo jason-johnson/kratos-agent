@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     foundry_agent_invocations_endpoint: str = ""  # full URL override (optional)
     foundry_api_version: str = "v1"
 
+    # Foundry Toolbox pilot. Disabled by default so existing local tools remain
+    # the rollback path. The pilot replaces web_search only for the generic persona.
+    toolbox_enabled: bool = False
+    toolbox_name: str = "kratos-tools"
+
     # Hosted-agent keep-warm — the backend keeps a small pool of pre-provisioned,
     # UNCLAIMED hosted-agent sandboxes ready. Each new conversation claims its own
     # warm sandbox (fast startup) that it owns exclusively (its own /tmp — no file

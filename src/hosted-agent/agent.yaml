@@ -48,6 +48,11 @@ environment_variables:
     value: ${OBO_MCP_SERVER_MCP_URL}
   - name: OBO_MCP_SERVER_NAME
     value: graph-obo
+  # Foundry Toolbox pilot. Disabled by default; enable per azd environment.
+  - name: TOOLBOX_ENABLED
+    value: ${TOOLBOX_ENABLED=false}
+  - name: TOOLBOX_NAME
+    value: kratos-tools
   # Environment tag
   - name: ENVIRONMENT
     value: production
