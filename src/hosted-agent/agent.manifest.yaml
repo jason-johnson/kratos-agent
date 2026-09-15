@@ -25,8 +25,6 @@ template:
     # Capture prompts + completions on the invoke_agent span for Foundry Traces.
     - name: AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED
       value: "true"
-    - name: APPLICATIONINSIGHTS_CONNECTION_STRING
-      value: ${AZURE_APP_INSIGHTS_CONNECTION_STRING}
     - name: COSMOS_DB_ENDPOINT
       value: ${AZURE_COSMOS_DB_ENDPOINT}
     - name: KEY_VAULT_URI

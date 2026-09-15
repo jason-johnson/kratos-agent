@@ -24,8 +24,6 @@ environment_variables:
   # details. Off by default in OTel; we opt in here.
   - name: AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED
     value: "true"
-  - name: APPLICATIONINSIGHTS_CONNECTION_STRING
-    value: ${AZURE_APP_INSIGHTS_CONNECTION_STRING}
   # Azure service endpoints (injected by Bicep / azd env)
   - name: COSMOS_DB_ENDPOINT
     value: ${AZURE_COSMOS_DB_ENDPOINT}

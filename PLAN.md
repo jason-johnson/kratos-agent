@@ -31,12 +31,13 @@ Last updated: 2026-09-15
 - [x] Added focused tests for disabled behavior, persona scoping, and endpoint-scoped authentication.
 - [x] Proved an end-to-end generic Web Search invocation through Toolbox; the deployed event stream recorded a successful `kratos-tools-web_search` call with sourced results.
 - [x] Fixed the eval CLI scenario filter payload to match the backend `scenarios` contract.
-- [x] Added explicit hosted-agent Application Insights connection-string mapping through the azd environment; deployment and ingestion verification remain pending.
-- [ ] Verify the Toolbox call and authentication behavior in the corresponding Application Insights trace.
-- [ ] Recreate the deleted or disabled `bankfdry` Hosted Agent instance identity by deploying a new agent version, then reapply its declarative role assignments.
-- [ ] Run the baseline and Toolbox variants of `generic/web-search-ai-trends` and record quality, latency, citations, and failures. The first Toolbox run was blocked during warmup by the invalid Hosted Agent identity and produced no scenario result.
-- [ ] Run backend tests/lint and the API-only deployed smoke suite.
-- [ ] Verify and record the Hosted Agent identity's effective least-privilege Toolbox roles.
+- [x] Confirmed platform-managed Application Insights telemetry after full Hosted Agent recreation; the reserved connection string remains absent from the agent definition and must not be declared there.
+- [x] Verified a successful `execute_tool kratos-tools-web_search` dependency span in Application Insights with Foundry agent, project, session, invocation, and GenAI tool dimensions. Authentication succeeded operationally, but no dedicated auth dimension is emitted.
+- [x] Recreated the deleted `bankfdry` Hosted Agent instance identity by deleting and redeploying the hosted agent, then reapplied its declarative role assignments; a minimal model invocation returned `OK`.
+- [ ] Complete the disabled baseline comparison for `generic/web-search-ai-trends`. The recovered Toolbox run completed in 33.3 seconds with 13 citation URLs and scores of Coherence 5/5, Relevance 5/5, Intent Resolution 4/5, and Task Adherence 0/5; Tool Call Accuracy was not scored. The `bankka` azd environment currently lacks clean backend URL and resource-group outputs, blocking the matching baseline request.
+- [x] Ran the API-only deployed smoke suite against `bankfdry`; it completed successfully.
+- [ ] Run backend tests and lint when `uv` is available in the development environment.
+- [x] Verified the recreated Hosted Agent identity has only the declared ARM data-plane roles (`Cognitive Services OpenAI User`, `Cognitive Services User`, `Key Vault Secrets User`, and `Storage Blob Data Reader`) plus one Cosmos DB data-plane assignment; Toolbox execution succeeds with this set.
 
 ## Current State
 
