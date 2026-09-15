@@ -31,6 +31,7 @@ Last updated: 2026-09-15
 - [x] Added focused tests for disabled behavior, persona scoping, and endpoint-scoped authentication.
 - [x] Proved an end-to-end generic Web Search invocation through Toolbox; the deployed event stream recorded a successful `kratos-tools-web_search` call with sourced results.
 - [x] Fixed the eval CLI scenario filter payload to match the backend `scenarios` contract.
+- [x] Added explicit hosted-agent Application Insights connection-string mapping through the azd environment; deployment and ingestion verification remain pending.
 - [ ] Verify the Toolbox call and authentication behavior in the corresponding Application Insights trace.
 - [ ] Recreate the deleted or disabled `bankfdry` Hosted Agent instance identity by deploying a new agent version, then reapply its declarative role assignments.
 - [ ] Run the baseline and Toolbox variants of `generic/web-search-ai-trends` and record quality, latency, citations, and failures. The first Toolbox run was blocked during warmup by the invalid Hosted Agent identity and produced no scenario result.
