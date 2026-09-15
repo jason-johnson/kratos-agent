@@ -254,20 +254,67 @@ def _extract_tool_calls(response: Any) -> list[dict[str, Any]]:
     return calls
 
 
-def _filter_tool_calls(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Remove internal GHCP SDK tools and normalise MCP prefix."""
-    filtered: list[dict[str, Any]] = []
-    for tc in tool_calls:
-        name = tc.get("name", "")
-        if name in _INTERNAL_TOOLS:
+def _normalise_tool_calls(tool_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert completed Kratos tool events to evaluator tool-call records."""
+    calls: list[dict[str, Any]] = []
+    for index, event in enumerate(tool_events):
+        if event.get("status") == "started":
             continue
-        if name and not name.startswith(_MCP_PREFIX):
-            tc = {**tc, "name": _MCP_PREFIX + name}
-        filtered.append(tc)
-    return filtered
+
+        name = str(event.get("name") or event.get("skillName") or "")
+        if not name or name in _INTERNAL_TOOLS:
+            continue
+
+        raw_arguments = event.get("arguments", event.get("input", {}))
+        if isinstance(raw_arguments, str):
+            try:
+                arguments = json.loads(raw_arguments) if raw_arguments else {}
+            except json.JSONDecodeError:
+                arguments = {"input": raw_arguments}
+        else:
+            arguments = raw_arguments or {}
+
+        call_id = str(event.get("id") or event.get("toolCallId") or f"tool_{index}")
+        calls.append(
+            {
+                "type": "tool_call",
+                "tool_call": {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {"name": name, "arguments": arguments},
+                },
+                "result": event.get("result", event.get("output", "")),
+            }
+        )
+    return calls
 
 
-def _build_tool_definitions(expected_tool_calls: list[str]) -> list[dict[str, Any]]:
+def _build_task_adherence_response(response: str, tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build the conversation-shaped response expected by TaskAdherenceEvaluator."""
+    messages: list[dict[str, Any]] = []
+    for call in tool_calls:
+        tool_call = call["tool_call"]
+        messages.append(
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_call", "tool_call": tool_call}],
+            }
+        )
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": tool_call["id"],
+                "content": [{"type": "tool_result", "tool_result": str(call.get("result", ""))}],
+            }
+        )
+    messages.append({"role": "assistant", "content": [{"type": "text", "text": response}]})
+    return messages
+
+
+def _build_tool_definitions(
+    expected_tool_calls: list[str],
+    tool_calls: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     """Build the tool_definitions list for evaluators from expected tool names.
 
     ToolCallAccuracyEvaluator requires each definition to carry a ``parameters``
@@ -275,10 +322,15 @@ def _build_tool_definitions(expected_tool_calls: list[str]) -> list[dict[str, An
     so emit an empty-object schema which matches the evaluator's contract while
     staying generic.
     """
-    filtered = [t for t in expected_tool_calls if t not in _INTERNAL_TOOLS]
+    filtered = [t if t.startswith(_MCP_PREFIX) else _MCP_PREFIX + t for t in expected_tool_calls if t not in _INTERNAL_TOOLS]
+    for call in tool_calls or []:
+        observed_name = str(call.get("tool_call", {}).get("function", {}).get("name", ""))
+        if observed_name and observed_name not in filtered:
+            filtered.append(observed_name)
     return [
         {
-            "name": t if t.startswith(_MCP_PREFIX) else _MCP_PREFIX + t,
+            "id": t,
+            "name": t,
             "description": f"Skill: {t}",
             "parameters": {"type": "object", "properties": {}},
         }
@@ -749,8 +801,8 @@ class EvalService:
 
             eval_query = f"{result.query}\n\nExpected: {expected_behavior}" if expected_behavior else result.query
 
-            filtered_tool_calls = _filter_tool_calls(result.tool_calls)
-            tool_defs = _build_tool_definitions(expected_tools)
+            filtered_tool_calls = _normalise_tool_calls(result.tool_calls)
+            tool_defs = _build_tool_definitions(expected_tools, filtered_tool_calls)
 
             scores: dict[str, dict[str, Any]] = {}
             for eval_name, evaluator in evaluators.items():
@@ -759,8 +811,19 @@ class EvalService:
                         "query": eval_query,
                         "response": result.response,
                     }
+                    if eval_name == "TaskAdherence" and filtered_tool_calls:
+                        kwargs["query"] = [
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": eval_query}],
+                            }
+                        ]
+                        kwargs["response"] = _build_task_adherence_response(result.response, filtered_tool_calls)
                     if eval_name == "ToolCallAccuracy" and filtered_tool_calls:
-                        kwargs["tool_calls"] = filtered_tool_calls
+                        kwargs["tool_calls"] = [
+                            {"type": call["type"], "tool_call": call["tool_call"]}
+                            for call in filtered_tool_calls
+                        ]
                         kwargs["tool_definitions"] = tool_defs
                     # Run synchronous evaluator in executor to avoid blocking event loop
                     score_result = await asyncio.get_event_loop().run_in_executor(
