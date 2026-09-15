@@ -934,15 +934,15 @@ Real findings from deploying this repo end-to-end on a fresh Azure subscription.
 
 This is wired correctly in `src/backend/app/services/eval_service.py` and in the e2e-smoke chat helper. If you write a new client, mirror the invocations pattern.
 
-### 4-identity AcrPull / Foundry User dance on a fresh deploy
+### Hosted-agent identity roles on a fresh deploy
 
 **Symptom:** On a brand-new resource group, the hosted agent returns `server_error` on first call. `az role assignment list` shows correct grants on the account-level MI, but the agent's own instance/blueprint identities are missing roles.
 
-**Cause:** Foundry hosted agents have **four** identity surfaces that all need RBAC:
-1. The Foundry project MI (system-assigned on the account)
-2. The deployer/CI MI (Contributor + `User Access Administrator` on the Foundry account)
-3. The **instance** identity (per-agent runtime SP — created at first deploy)
-4. The **blueprint** identity (per-agent platform SP — created at first deploy)
+**Cause:** Foundry hosted agents expose several identity surfaces with different responsibilities:
+1. The Foundry project MI pulls the container image and needs `AcrPull`.
+2. The deployer/CI MI needs Contributor plus `User Access Administrator` on the Foundry account.
+3. The **instance** identity is the per-agent runtime SP and needs the agent's data-plane roles.
+4. The **blueprint** identity is a platform principal. Azure rejects it as an RBAC assignee; do not grant Azure roles to it.
 
 The `azd ai agent` postdeploy hook auto-assigns `Foundry User` (GUID `53ca6127-db72-4b80-b1b0-d745d6d5456d`) to (3) and (4) **if** the deployer has `Azure AI Project Manager` on the project. Confirm with `azd ai agent show` — the `instance_identity.principal_id` and `blueprint.principal_id` should appear in `az role assignment list --assignee <principal_id> --all`.
 
@@ -951,7 +951,7 @@ If empty, grant manually:
 ACCT="/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>"
 PROJ="$ACCT/projects/<project>"
 FOUNDRY_USER=53ca6127-db72-4b80-b1b0-d745d6d5456d
-for PID in <instance_pid> <blueprint_pid> <project_mi_pid>; do
+for PID in <instance_pid> <project_mi_pid>; do
   az role assignment create --assignee "$PID" --role "$FOUNDRY_USER" --scope "$ACCT"
   az role assignment create --assignee "$PID" --role "$FOUNDRY_USER" --scope "$PROJ"
   az role assignment create --assignee "$PID" --role AcrPull \

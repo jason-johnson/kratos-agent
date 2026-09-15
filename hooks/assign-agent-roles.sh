@@ -27,6 +27,7 @@
 set -uo pipefail
 
 ROLE_MODULE="infra/modules/agent-role-assignments.bicep"
+ACR_ROLE_MODULE="infra/modules/agent-acr-pull.bicep"
 DEPLOYMENT_NAME="kratos-agent-role-assignments"
 
 # ─── Context from the azd environment (all values are deployment-specific and
@@ -37,6 +38,7 @@ PROJECT_ID="${AZURE_AI_PROJECT_ID:-}"            # .../accounts/<account>/projec
 COSMOS_ENDPOINT="${AZURE_COSMOS_DB_ENDPOINT:-}"  # https://<account>.documents.azure.com:443/
 STORAGE_ACCOUNT="${AZURE_BLOB_STORAGE_ACCOUNT_NAME:-}"
 KEY_VAULT_URI="${AZURE_KEY_VAULT_URI:-}"          # https://<vault>.vault.azure.net/
+CONTAINER_REGISTRY="${AZURE_CONTAINER_REGISTRY_NAME:-}"
 
 if [ -z "$PROJECT_ID" ] || [ -z "$SUBSCRIPTION_ID" ] || [ -z "$RESOURCE_GROUP" ]; then
   echo "⚠️  AZURE_AI_PROJECT_ID / AZURE_SUBSCRIPTION_ID / AZURE_RESOURCE_GROUP not set."
@@ -44,8 +46,8 @@ if [ -z "$PROJECT_ID" ] || [ -z "$SUBSCRIPTION_ID" ] || [ -z "$RESOURCE_GROUP" ]
   exit 0
 fi
 
-if [ ! -f "$ROLE_MODULE" ]; then
-  echo "⚠️  $ROLE_MODULE not found (run from the repository root). Skipping."
+if [ ! -f "$ROLE_MODULE" ] || [ ! -f "$ACR_ROLE_MODULE" ]; then
+  echo "⚠️  Hosted-agent role modules not found (run from the repository root). Skipping."
   exit 0
 fi
 
@@ -65,24 +67,30 @@ echo "  Foundry account : ${FOUNDRY_ACCOUNT}"
 echo "  Foundry project : ${FOUNDRY_PROJECT}"
 
 if [ -z "$FOUNDRY_ACCOUNT" ] || [ -z "$FOUNDRY_PROJECT" ] || [ -z "$COSMOS_NAME" ] \
-   || [ -z "$KEY_VAULT_NAME" ] || [ -z "$STORAGE_ACCOUNT" ]; then
+  || [ -z "$KEY_VAULT_NAME" ] || [ -z "$STORAGE_ACCOUNT" ] || [ -z "$CONTAINER_REGISTRY" ]; then
   echo "⚠️  Could not derive all resource names from the azd environment. Skipping."
   exit 0
 fi
 
-# ─── Resolve the hosted-agent instance identity (the Entra lookup Bicep can't do) ───
-# Foundry names the agent's service principal deterministically:
-#   <account>-<project>-<agentName>-AgentIdentity
-# Matching the "<account>-<project>-" prefix plus the "-AgentIdentity" suffix
-# discovers every hosted agent under this project without hard-coding the agent
-# name, so the hook keeps working if the template is renamed or grows more agents.
+# ─── Resolve the current hosted-agent identities ───
+# Agent names are reusable, so an Entra display-name lookup can return a stale
+# principal left by a deleted agent. The extension reports the authoritative
+# runtime instance principal for the current agent version. Blueprint principals
+# are not valid Azure RBAC assignees.
 PREFIX="${FOUNDRY_ACCOUNT}-${FOUNDRY_PROJECT}-"
-AGENT_PRINCIPAL_IDS="$(az ad sp list --display-name "$PREFIX" \
-  --query "[?ends_with(displayName, '-AgentIdentity')].id" -o tsv 2>/dev/null || true)"
+AGENT_DETAILS="$(azd ai agent show -e "${AZURE_ENV_NAME:-}" --output json 2>/dev/null || true)"
+AGENT_PRINCIPAL_IDS="$(printf '%s' "$AGENT_DETAILS" | jq -r \
+  '[.instance_identity.principal_id] | map(select(. != null and . != "")) | unique[]' \
+  2>/dev/null || true)"
 
 if [ -z "$AGENT_PRINCIPAL_IDS" ]; then
-  echo "⚠️  No '*-AgentIdentity' service principal found yet for prefix '${PREFIX}'."
-  echo "    The hosted agent identity may still be propagating in Microsoft Entra ID."
+  AGENT_PRINCIPAL_IDS="$(az ad sp list --display-name "$PREFIX" \
+    --query "[?ends_with(displayName, '-AgentIdentity')].id" -o tsv 2>/dev/null || true)"
+fi
+
+if [ -z "$AGENT_PRINCIPAL_IDS" ]; then
+  echo "⚠️  No current hosted-agent identity found yet for prefix '${PREFIX}'."
+  echo "    The hosted agent identities may still be propagating in Microsoft Entra ID."
   echo "    Re-run 'azd deploy kratos-agent' (or 'azd up') once it appears."
   exit 0
 fi
@@ -98,6 +106,22 @@ done
 PRINCIPALS_JSON="${PRINCIPALS_JSON}]"
 
 # ─── Apply the declarative Bicep role-assignment module ───
+echo ""
+echo "  Deploying ${ACR_ROLE_MODULE} (image-pull role assignments)..."
+az deployment group create \
+    --name "${DEPLOYMENT_NAME}-acr" \
+    --subscription "$SUBSCRIPTION_ID" \
+    --resource-group "$RESOURCE_GROUP" \
+    --template-file "$ACR_ROLE_MODULE" \
+    --parameters \
+        agentPrincipalIds="$PRINCIPALS_JSON" \
+        containerRegistryName="$CONTAINER_REGISTRY" \
+    --only-show-errors >/dev/null || {
+  echo "   ⚠️  Hosted-agent image-pull role assignment failed."
+  exit 0
+}
+echo "   ✅ Hosted-agent image-pull role assignments applied."
+
 echo ""
 echo "  Deploying ${ROLE_MODULE} (declarative role assignments)..."
 DEPLOY_ERR="$(mktemp)"

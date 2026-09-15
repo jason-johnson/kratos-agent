@@ -110,3 +110,4 @@ resource agentCosmosData 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignmen
     scope: cosmosDb.id
   }
 }]
+
