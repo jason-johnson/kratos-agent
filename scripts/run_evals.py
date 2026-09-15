@@ -41,7 +41,7 @@ def start_run(use_case: str, mode: str, scenario_names: list[str] | None) -> dic
     url = f"{BACKEND_URL}/api/use-cases/{use_case}/evals/run"
     payload: dict[str, Any] = {"mode": mode}
     if scenario_names:
-        payload["scenario_names"] = scenario_names
+        payload["scenarios"] = scenario_names
     with httpx.Client(timeout=60.0) as client:
         r = client.post(url, json=payload, headers=_headers())
     r.raise_for_status()

@@ -19,7 +19,7 @@ The target architecture keeps Kratos as a Foundry Hosted Agent and incrementally
 
 ## Implementation Status
 
-Last updated: 2026-09-10
+Last updated: 2026-09-15
 
 - [x] Confirmed Toolbox and Hosted Agent support in Sweden Central.
 - [x] Added declarative `kratos-tools` provisioning with managed Web Search.
@@ -30,8 +30,10 @@ Last updated: 2026-09-10
 - [x] Deployed an active Hosted Agent and Toolbox in the `bankfdry` environment with Toolbox enabled.
 - [x] Added focused tests for disabled behavior, persona scoping, and endpoint-scoped authentication.
 - [x] Proved an end-to-end generic Web Search invocation through Toolbox; the deployed event stream recorded a successful `kratos-tools-web_search` call with sourced results.
+- [x] Fixed the eval CLI scenario filter payload to match the backend `scenarios` contract.
 - [ ] Verify the Toolbox call and authentication behavior in the corresponding Application Insights trace.
-- [ ] Run the baseline and Toolbox variants of `generic/web-search-ai-trends` and record quality, latency, citations, and failures.
+- [ ] Recreate the deleted or disabled `bankfdry` Hosted Agent instance identity by deploying a new agent version, then reapply its declarative role assignments.
+- [ ] Run the baseline and Toolbox variants of `generic/web-search-ai-trends` and record quality, latency, citations, and failures. The first Toolbox run was blocked during warmup by the invalid Hosted Agent identity and produced no scenario result.
 - [ ] Run backend tests/lint and the API-only deployed smoke suite.
 - [ ] Verify and record the Hosted Agent identity's effective least-privilege Toolbox roles.
 
