@@ -1,6 +1,7 @@
 from app.services.eval_service import (
     _build_task_adherence_response,
     _build_tool_definitions,
+    _evaluator_score_passed,
     _normalise_tool_calls,
 )
 
@@ -27,15 +28,10 @@ def test_normalises_completed_kratos_tool_event_for_evaluators() -> None:
     assert calls == [
         {
             "type": "tool_call",
-            "tool_call": {
-                "id": "tool_1",
-                "type": "function",
-                "function": {
-                    "name": "kratos-tools-web_search",
-                    "arguments": {"query": "Foundry"},
-                },
-            },
-            "result": "search result",
+            "name": "kratos-tools-web_search",
+            "arguments": {"query": "Foundry"},
+            "tool_call_id": "tool_1",
+            "tool_result": "search result",
         }
     ]
 
@@ -55,7 +51,12 @@ def test_builds_task_adherence_conversation_with_tool_result() -> None:
     response = _build_task_adherence_response("final answer", calls)
 
     assert [message["role"] for message in response] == ["assistant", "tool", "assistant"]
-    assert response[0]["content"][0]["tool_call"]["function"]["name"] == "kratos-tools-web_search"
+    assert response[0]["content"][0] == {
+        "type": "tool_call",
+        "name": "kratos-tools-web_search",
+        "arguments": {},
+        "tool_call_id": "tool_0",
+    }
     assert response[1]["content"][0]["tool_result"] == "search result"
     assert response[2]["content"][0]["text"] == "final answer"
 
@@ -71,3 +72,22 @@ def test_tool_definitions_include_required_id() -> None:
     assert definitions[0]["name"] == "mcp-tools-web-search"
     assert definitions[1]["id"] == "kratos-tools-web_search"
     assert definitions[1]["name"] == "kratos-tools-web_search"
+
+
+def test_evaluator_score_does_not_treat_errors_or_skipped_thresholds_as_passes() -> None:
+    assert not _evaluator_score_passed({"error": "invalid payload"})
+    assert not _evaluator_score_passed(
+        {
+            "tool_call_accuracy_score": None,
+            "tool_call_accuracy_result": "not_applicable",
+            "tool_call_accuracy_status": "skipped",
+            "tool_call_accuracy_threshold": 3,
+        }
+    )
+    assert _evaluator_score_passed(
+        {
+            "task_adherence_score": 4.0,
+            "task_adherence_result": "pass",
+            "task_adherence_threshold": 3,
+        }
+    )

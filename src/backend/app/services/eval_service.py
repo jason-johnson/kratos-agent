@@ -278,12 +278,10 @@ def _normalise_tool_calls(tool_events: list[dict[str, Any]]) -> list[dict[str, A
         calls.append(
             {
                 "type": "tool_call",
-                "tool_call": {
-                    "id": call_id,
-                    "type": "function",
-                    "function": {"name": name, "arguments": arguments},
-                },
-                "result": event.get("result", event.get("output", "")),
+                "name": name,
+                "arguments": arguments,
+                "tool_call_id": call_id,
+                "tool_result": event.get("result", event.get("output", "")),
             }
         )
     return calls
@@ -293,18 +291,24 @@ def _build_task_adherence_response(response: str, tool_calls: list[dict[str, Any
     """Build the conversation-shaped response expected by TaskAdherenceEvaluator."""
     messages: list[dict[str, Any]] = []
     for call in tool_calls:
-        tool_call = call["tool_call"]
         messages.append(
             {
                 "role": "assistant",
-                "content": [{"type": "tool_call", "tool_call": tool_call}],
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "name": call["name"],
+                        "arguments": call["arguments"],
+                        "tool_call_id": call["tool_call_id"],
+                    }
+                ],
             }
         )
         messages.append(
             {
                 "role": "tool",
-                "tool_call_id": tool_call["id"],
-                "content": [{"type": "tool_result", "tool_result": str(call.get("result", ""))}],
+                "tool_call_id": call["tool_call_id"],
+                "content": [{"type": "tool_result", "tool_result": str(call.get("tool_result", ""))}],
             }
         )
     messages.append({"role": "assistant", "content": [{"type": "text", "text": response}]})
@@ -324,7 +328,7 @@ def _build_tool_definitions(
     """
     filtered = [t if t.startswith(_MCP_PREFIX) else _MCP_PREFIX + t for t in expected_tool_calls if t not in _INTERNAL_TOOLS]
     for call in tool_calls or []:
-        observed_name = str(call.get("tool_call", {}).get("function", {}).get("name", ""))
+        observed_name = str(call.get("name", ""))
         if observed_name and observed_name not in filtered:
             filtered.append(observed_name)
     return [
@@ -336,6 +340,41 @@ def _build_tool_definitions(
         }
         for t in filtered
     ]
+
+
+def _evaluator_score_passed(score: dict[str, Any]) -> bool:
+    if score.get("error"):
+        return False
+
+    for key, value in score.items():
+        if (key == "passed" or key.endswith("_passed")) and isinstance(value, bool):
+            return value
+
+    for key, value in score.items():
+        if key == "result" or key.endswith("_result"):
+            return value == "pass"
+
+    score_value = next(
+        (
+            value
+            for key, value in score.items()
+            if (key == "score" or key.endswith("_score"))
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+        ),
+        None,
+    )
+    threshold = next(
+        (
+            value
+            for key, value in score.items()
+            if (key == "threshold" or key.endswith("_threshold"))
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+        ),
+        3,
+    )
+    return score_value is not None and score_value >= threshold
 
 
 def _apply_openai_max_tokens_patch() -> None:
@@ -820,10 +859,7 @@ class EvalService:
                         ]
                         kwargs["response"] = _build_task_adherence_response(result.response, filtered_tool_calls)
                     if eval_name == "ToolCallAccuracy" and filtered_tool_calls:
-                        kwargs["tool_calls"] = [
-                            {"type": call["type"], "tool_call": call["tool_call"]}
-                            for call in filtered_tool_calls
-                        ]
+                        kwargs["tool_calls"] = filtered_tool_calls
                         kwargs["tool_definitions"] = tool_defs
                     # Run synchronous evaluator in executor to avoid blocking event loop
                     score_result = await asyncio.get_event_loop().run_in_executor(
@@ -846,12 +882,7 @@ class EvalService:
             for criterion, sd in scores.items():
                 if criterion not in criteria_totals:
                     criteria_totals[criterion] = {"passed": 0, "failed": 0}
-                passed = sd.get("passed", False)
-                if not passed:
-                    # Treat numeric score >= 3 as pass (5-point scale)
-                    score_val = next((v for v in sd.values() if isinstance(v, (int, float))), None)
-                    passed = bool(score_val is not None and score_val >= 3)
-                if passed:
+                if _evaluator_score_passed(sd):
                     criteria_totals[criterion]["passed"] += 1
                 else:
                     criteria_totals[criterion]["failed"] += 1
@@ -863,15 +894,7 @@ class EvalService:
             if result.status == "error":
                 failed_count += 1
                 continue
-            all_passed = all(
-                sd.get("passed", False)
-                or (
-                    next((v for v in sd.values() if isinstance(v, (int, float))), None) is not None
-                    and next((v for v in sd.values() if isinstance(v, (int, float))), 0) >= 3
-                )
-                for sd in result.scores.values()
-                if "error" not in sd
-            )
+            all_passed = all(_evaluator_score_passed(sd) for sd in result.scores.values())
             if all_passed and result.scores:
                 passed_count += 1
             else:
