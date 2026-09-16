@@ -71,6 +71,21 @@ def poll(use_case: str, run_id: str) -> dict[str, Any]:
     raise TimeoutError(f"Run {run_id} did not finish within {POLL_TIMEOUT_S}s")
 
 
+def _score_value(score: Any) -> float | None:
+    if isinstance(score, (int, float)) and not isinstance(score, bool):
+        return float(score)
+    if not isinstance(score, dict):
+        return None
+    for key, value in score.items():
+        if (
+            (key == "score" or key.endswith("_score"))
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+        ):
+            return float(value)
+    return None
+
+
 def print_summary(run: dict[str, Any]) -> None:
     print()
     print(f"Run:      {run.get('run_id')}")
@@ -88,14 +103,21 @@ def print_summary(run: dict[str, Any]) -> None:
         return
 
     print()
-    print(f"{'scenario':<40} {'status':<10} avg")
-    print("-" * 65)
+    print(f"{'scenario':<40} {'status':<10} {'duration':>9}  scores")
+    print("-" * 100)
     for r in results:
         scores = r.get("scores") or {}
-        numeric = [v for v in scores.values() if isinstance(v, (int, float))]
-        avg = (sum(numeric) / len(numeric)) if numeric else None
-        avg_str = f"{avg:.2f}" if avg is not None else "n/a"
-        print(f"{r.get('scenario_name', ''):<40} {r.get('status', ''):<10} {avg_str}")
+        rendered_scores = []
+        for name, score in scores.items():
+            value = _score_value(score)
+            if value is not None:
+                maximum = 1 if name == "TaskAdherence" else 5
+                rendered_scores.append(f"{name}={value:g}/{maximum}")
+        duration = f"{float(r.get('duration_ms', 0)) / 1000:.1f}s"
+        print(
+            f"{r.get('scenario', ''):<40} {r.get('status', ''):<10} "
+            f"{duration:>9}  {', '.join(rendered_scores) or 'n/a'}"
+        )
 
 
 def main() -> int:

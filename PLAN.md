@@ -34,8 +34,9 @@ Last updated: 2026-09-16
 - [x] Confirmed platform-managed Application Insights telemetry after full Hosted Agent recreation; the reserved connection string remains absent from the agent definition and must not be declared there.
 - [x] Verified a successful `execute_tool kratos-tools-web_search` dependency span in Application Insights with Foundry agent, project, session, invocation, and GenAI tool dimensions. Authentication succeeded operationally, but no dedicated auth dimension is emitted.
 - [x] Recreated the deleted `bankfdry` Hosted Agent instance identity by deleting and redeploying the hosted agent, then reapplied its declarative role assignments; a minimal model invocation returned `OK`.
-- [x] Deployed and verified the evaluator adapter in `bankfdry`. A post-fix Toolbox run of `generic/web-search-ai-trends` completed in 25.7 seconds, invoked `kratos-tools-web_search`, passed the aggregate, and scored Coherence 5/5, Relevance 4/5, Intent Resolution 4/5, Tool Call Accuracy 5/5, and Task Adherence 1/5. Task Adherence now executes instead of failing schema validation, explicit evaluator pass flags take precedence over numeric-score thresholds, and failed/skipped evaluators can no longer produce a false passing run summary.
-- [x] Completed the disabled baseline comparison for `generic/web-search-ai-trends` in `bankfdry` and restored Toolbox immediately afterward. The local `web_search` run completed in 30.9 seconds and scored Coherence 5/5, Relevance 5/5, Intent Resolution 4/5, Tool Call Accuracy 5/5, and Task Adherence 1/5, with an aggregate pass. The earlier Toolbox run completed in 31.6 seconds with the same criterion scores and an explicit Task Adherence pass; its stored aggregate failure was produced by the older threshold-based aggregation and is not a quality difference. Deployment-spanning warm-pool sessions can retain the previous agent version, so controlled comparisons must drain the two-session pool before measuring. `bankka` remained untouched.
+- [x] Deployed and verified the evaluator adapter in `bankfdry`. A post-fix Toolbox run of `generic/web-search-ai-trends` completed in 25.7 seconds, invoked `kratos-tools-web_search`, passed the aggregate, and scored Coherence 5/5, Relevance 4/5, Intent Resolution 4/5, Tool Call Accuracy 5/5, and Task Adherence 1/1. Task Adherence now executes instead of failing schema validation, explicit evaluator pass flags take precedence over numeric-score thresholds, and failed/skipped evaluators can no longer produce a false passing run summary.
+- [x] Completed the disabled baseline comparison for `generic/web-search-ai-trends` in `bankfdry` and restored Toolbox immediately afterward. The local `web_search` run completed in 30.9 seconds and scored Coherence 5/5, Relevance 5/5, Intent Resolution 4/5, Tool Call Accuracy 5/5, and Task Adherence 1/1, with an aggregate pass. The earlier Toolbox run completed in 31.6 seconds with the same criterion scores and an explicit Task Adherence pass; its stored aggregate failure was produced by the older threshold-based aggregation and is not a quality difference. Deployment-spanning warm-pool sessions can retain the previous agent version, so controlled comparisons must drain the two-session pool before measuring. `bankka` remained untouched.
+- [x] Added a guarded multi-run comparison command that verifies the selected azd environment, drains the warm pool after each Hosted Agent deployment, enforces release thresholds, and restores Toolbox after failures.
 - [x] Ran the API-only deployed smoke suite against `bankfdry`; it completed successfully.
 - [x] Restored backend dependencies through Azure Artifacts; all 83 backend tests pass and focused evaluator lint is clean. Whole-tree Ruff still reports three unrelated existing findings.
 - [x] Verified the recreated Hosted Agent identity has only the declared ARM data-plane roles (`Cognitive Services OpenAI User`, `Cognitive Services User`, `Key Vault Secrets User`, and `Storage Blob Data Reader`) plus one Cosmos DB data-plane assignment; Toolbox execution succeeds with this set.
@@ -210,6 +211,27 @@ The repository already invokes the Hosted Agent and scores scenarios with `azure
 - Compare local-tool and Toolbox runs using the same committed scenarios.
 - Link cloud evaluation reports and trace identifiers from Kratos run records.
 - Define release thresholds for pilot scenarios and prevent a failed eval from being treated as a successful migration.
+
+### Pilot Promotion Thresholds
+
+- Measure at least five runs per mode after one unmeasured warm-pool drain run.
+- Require a 100% aggregate and per-criterion pass rate in both modes.
+- Require every local run to invoke `web_search` and every Toolbox run to invoke `kratos-tools-web_search`.
+- Require Toolbox p95 scenario latency to be no more than 20% above the local p95.
+- Do not remove the local fallback until per-run tool cost is observable. Once available, require Toolbox cost to be no more than 20% above local cost unless the increase is explicitly accepted.
+
+Run the guarded comparison from `src/backend`:
+
+```bash
+uv run python ../../scripts/compare_toolbox_evals.py \
+  --environment "$(azd env get-value AZURE_ENV_NAME)" \
+  --runs 5 \
+  --min-pass-rate 1.0 \
+  --max-p95-regression 0.20 \
+  --confirm-disruptive
+```
+
+The command performs two Hosted Agent redeployments and always attempts to restore Toolbox to enabled. It does not persist response content or deployment values.
 
 ### Evaluation Exit Criteria
 
