@@ -34,8 +34,8 @@ Last updated: 2026-09-16
 - [x] Confirmed platform-managed Application Insights telemetry after full Hosted Agent recreation; the reserved connection string remains absent from the agent definition and must not be declared there.
 - [x] Verified a successful `execute_tool kratos-tools-web_search` dependency span in Application Insights with Foundry agent, project, session, invocation, and GenAI tool dimensions. Authentication succeeded operationally, but no dedicated auth dimension is emitted.
 - [x] Recreated the deleted `bankfdry` Hosted Agent instance identity by deleting and redeploying the hosted agent, then reapplied its declarative role assignments; a minimal model invocation returned `OK`.
-- [x] Deployed and verified the evaluator adapter in `bankfdry`. A Toolbox run of `generic/web-search-ai-trends` completed in 31.6 seconds, invoked `kratos-tools-web_search`, and scored Coherence 5/5, Relevance 5/5, Intent Resolution 4/5, Tool Call Accuracy 5/5, and Task Adherence 1/5. Task Adherence now executes instead of failing schema validation, and failed/skipped evaluators can no longer produce a false passing run summary.
-- [x] Completed the disabled baseline comparison for `generic/web-search-ai-trends` in `bankfdry` and restored Toolbox immediately afterward. The local `web_search` run completed in 30.9 seconds and scored Coherence 5/5, Relevance 5/5, Intent Resolution 4/5, Tool Call Accuracy 5/5, and Task Adherence 1/5, with an aggregate pass. The Toolbox run completed in 31.6 seconds with the same criterion scores except that its aggregate failed because Task Adherence reported a failing pass flag. Deployment-spanning warm-pool sessions can retain the previous agent version, so controlled comparisons must drain the two-session pool before measuring. `bankka` remained untouched.
+- [x] Deployed and verified the evaluator adapter in `bankfdry`. A post-fix Toolbox run of `generic/web-search-ai-trends` completed in 25.7 seconds, invoked `kratos-tools-web_search`, passed the aggregate, and scored Coherence 5/5, Relevance 4/5, Intent Resolution 4/5, Tool Call Accuracy 5/5, and Task Adherence 1/5. Task Adherence now executes instead of failing schema validation, explicit evaluator pass flags take precedence over numeric-score thresholds, and failed/skipped evaluators can no longer produce a false passing run summary.
+- [x] Completed the disabled baseline comparison for `generic/web-search-ai-trends` in `bankfdry` and restored Toolbox immediately afterward. The local `web_search` run completed in 30.9 seconds and scored Coherence 5/5, Relevance 5/5, Intent Resolution 4/5, Tool Call Accuracy 5/5, and Task Adherence 1/5, with an aggregate pass. The earlier Toolbox run completed in 31.6 seconds with the same criterion scores and an explicit Task Adherence pass; its stored aggregate failure was produced by the older threshold-based aggregation and is not a quality difference. Deployment-spanning warm-pool sessions can retain the previous agent version, so controlled comparisons must drain the two-session pool before measuring. `bankka` remained untouched.
 - [x] Ran the API-only deployed smoke suite against `bankfdry`; it completed successfully.
 - [x] Restored backend dependencies through Azure Artifacts; all 83 backend tests pass and focused evaluator lint is clean. Whole-tree Ruff still reports three unrelated existing findings.
 - [x] Verified the recreated Hosted Agent identity has only the declared ARM data-plane roles (`Cognitive Services OpenAI User`, `Cognitive Services User`, `Key Vault Secrets User`, and `Storage Blob Data Reader`) plus one Cosmos DB data-plane assignment; Toolbox execution succeeds with this set.
@@ -333,9 +333,9 @@ The first pull request should contain only the foundation needed to prove one ma
 - [x] Add an opt-in Toolbox MCP entry for the `generic` persona.
 - [x] Configure managed Web Search in Toolbox.
 - [x] Preserve the current local web-search implementation behind the disabled/default path.
-- [ ] Add focused unit tests for configuration, persona scoping, and event normalization. Configuration, scoping, and authentication tests are present; event normalization coverage remains.
-- [ ] Run the existing `web-search-ai-trends` scenario in both modes and record the comparison.
-- [ ] Run backend tests/lint and the API-only deployed smoke suite.
+- [x] Add focused unit tests for configuration, persona scoping, authentication, and event normalization.
+- [x] Run the existing `web-search-ai-trends` scenario in both modes and record the comparison.
+- [x] Run backend tests/lint and the API-only deployed smoke suite.
 
 Code Interpreter belongs in a follow-up pull request because file transfer and execution semantics require separate validation.
 

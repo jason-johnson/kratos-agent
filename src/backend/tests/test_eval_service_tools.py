@@ -86,7 +86,16 @@ def test_evaluator_score_does_not_treat_errors_or_skipped_thresholds_as_passes()
     )
     assert _evaluator_score_passed(
         {
-            "task_adherence_score": 4.0,
+            "task_adherence_score": 1.0,
+            "task_adherence_passed": True,
+            "task_adherence_result": "pass",
+            "task_adherence_threshold": 3,
+        }
+    )
+    assert not _evaluator_score_passed(
+        {
+            "task_adherence_score": 5.0,
+            "task_adherence_passed": False,
             "task_adherence_result": "pass",
             "task_adherence_threshold": 3,
         }
