@@ -19,7 +19,7 @@ The target architecture keeps Kratos as a Foundry Hosted Agent and incrementally
 
 ## Implementation Status
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16
 
 - [x] Confirmed Toolbox and Hosted Agent support in Sweden Central.
 - [x] Added declarative `kratos-tools` provisioning with managed Web Search.
@@ -36,7 +36,7 @@ Last updated: 2026-09-15
 - [x] Recreated the deleted `bankfdry` Hosted Agent instance identity by deleting and redeploying the hosted agent, then reapplied its declarative role assignments; a minimal model invocation returned `OK`.
 - [ ] Complete the disabled baseline comparison for `generic/web-search-ai-trends`. The recovered Toolbox run completed in 33.3 seconds with 13 citation URLs and scores of Coherence 5/5, Relevance 5/5, Intent Resolution 4/5, and Task Adherence 0/5; Tool Call Accuracy was not scored. The `bankka` azd environment currently lacks clean backend URL and resource-group outputs, blocking the matching baseline request.
 - [x] Ran the API-only deployed smoke suite against `bankfdry`; it completed successfully.
-- [ ] Run backend tests and lint when `uv` is available in the development environment.
+- [x] Restored backend dependencies through Azure Artifacts; all 83 backend tests pass and focused evaluator lint is clean. Whole-tree Ruff still reports three unrelated existing findings.
 - [x] Verified the recreated Hosted Agent identity has only the declared ARM data-plane roles (`Cognitive Services OpenAI User`, `Cognitive Services User`, `Key Vault Secrets User`, and `Storage Blob Data Reader`) plus one Cosmos DB data-plane assignment; Toolbox execution succeeds with this set.
 
 ## Current State
