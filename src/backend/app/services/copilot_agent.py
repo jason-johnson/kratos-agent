@@ -36,6 +36,7 @@ from app.config import Settings
 from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UsageEvent, UserInputRequestEvent
 from app.observability import operation_duration_histogram, token_usage_histogram
 from app.services.skill_tools import ALL_TOOLS, _ctx_conversation_id, _ctx_eval_run_id, _ctx_use_case
+from app.services.toolbox_tools import create_toolbox_web_search_tool
 
 if TYPE_CHECKING:
     from app.services.cosmos_service import CosmosService
@@ -333,17 +334,14 @@ class CopilotAgent:
             return ""
         return f"{project_endpoint}/toolboxes/{self.settings.toolbox_name}/mcp?api-version=v1"
 
-    def _apply_foundry_toolbox(self, use_case: str, mcp_servers: dict | None) -> dict:
-        """Add the Toolbox MCP server for the generic-persona pilot."""
-        servers: dict = copy.deepcopy(mcp_servers) if mcp_servers else {}
+    def _apply_foundry_toolbox_tools(self, use_case: str, enabled_tools: list) -> list:
+        """Replace local web search with the metadata-preserving Toolbox bridge."""
         endpoint = self._toolbox_endpoint()
-        if use_case == DEFAULT_USE_CASE and endpoint:
-            servers[self.settings.toolbox_name] = {
-                "type": "http",
-                "url": endpoint,
-                "tools": ["*"],
-            }
-        return servers
+        if use_case != DEFAULT_USE_CASE or not endpoint:
+            return enabled_tools
+        tools = [tool for tool in enabled_tools if tool.name != "web_search"]
+        tools.append(create_toolbox_web_search_tool(endpoint))
+        return tools
 
     async def _handle_mcp_auth_request(self, request: dict, _context: dict) -> dict:
         """Supply a renewable agent-identity token only to the trusted Toolbox."""
@@ -441,6 +439,18 @@ class CopilotAgent:
                 prompt = prompt[m.end() :].strip()
             return prompt
         return self._system_prompt
+
+    def _apply_toolbox_prompt(self, use_case: str, prompt: str) -> str:
+        """Add routing guidance only while the generic Toolbox pilot is active."""
+        if use_case != DEFAULT_USE_CASE or not self._toolbox_endpoint():
+            return prompt
+        return (
+            f"{prompt}\n\n## Foundry Toolbox Web Search\n\n"
+            "For web research, call kratos-tools-web_search once first. Cite only URLs in its citations list; "
+            "when that list is empty, do not provide links. Retry it at most once, and only "
+            "when the first result does not contain enough evidence to answer the request. Do not call web_fetch "
+            "unless the user explicitly asks you to open or inspect a specific page."
+        )
 
     def set_cosmos_service(self, cosmos_service: "CosmosService") -> None:
         """Inject the Cosmos service for session persistence."""
@@ -806,9 +816,7 @@ class CopilotAgent:
                 mcp_servers = getattr(registry, "mcp_servers", {})
 
             use_case = self._conversation_use_cases.get(conversation_id, DEFAULT_USE_CASE)
-            mcp_servers = self._apply_foundry_toolbox(use_case, mcp_servers)
-            if use_case == DEFAULT_USE_CASE and self._toolbox_endpoint():
-                enabled_tools = [tool for tool in enabled_tools if tool.name != "web_search"]
+            enabled_tools = self._apply_foundry_toolbox_tools(use_case, enabled_tools)
 
             # Inject the signed-in user's OBO tokens as Authorization headers on the
             # matching remote MCP servers (and auto-add the env-configured OBO server
@@ -837,7 +845,7 @@ class CopilotAgent:
                 len(enabled_tools),
             )
 
-            system_prompt = self._get_system_prompt(conversation_id)
+            system_prompt = self._apply_toolbox_prompt(use_case, self._get_system_prompt(conversation_id))
             config = self._build_session_config(enabled_tools, skill_dirs, system_prompt, mcp_servers)
 
             # Identity-bearing sessions must never resume a persisted session id (Cosmos

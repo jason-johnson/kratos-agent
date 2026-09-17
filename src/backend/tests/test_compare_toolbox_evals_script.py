@@ -81,6 +81,24 @@ def test_rejects_failed_or_slow_toolbox_runs() -> None:
     assert any("p95" in failure for failure in failures)
 
 
+def test_summarizes_invocation_errors_as_failed_runs() -> None:
+    response, tool_output = _grounded_response()
+    failed_run = {
+        "status": "completed",
+        "results": [{"status": "error", "duration_ms": 100, "error": "Hosted agent error: HTTP 409"}],
+    }
+
+    metrics = compare.summarize_runs(
+        "local",
+        [_run(10_000, "web_search", response=response, tool_output=tool_output), failed_run],
+        "web_search",
+    )
+
+    assert metrics.runs == 2
+    assert metrics.passed == 1
+    assert metrics.median_ms == 10_000
+
+
 def test_web_search_contract_ignores_task_adherence_when_evidence_is_valid() -> None:
     response, tool_output = _grounded_response()
     run = _run(

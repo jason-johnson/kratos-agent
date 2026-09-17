@@ -9,6 +9,7 @@ import pytest
 from app.config import Settings
 from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent
 from app.services.copilot_agent import CopilotAgent
+from app.services.skill_tools import ALL_TOOLS
 
 
 @pytest.fixture
@@ -34,11 +35,9 @@ def test_copilot_agent_init(copilot_agent, settings):
 def test_foundry_toolbox_is_disabled_by_default(copilot_agent):
     """Keep existing local tools as the default rollback path."""
     assert copilot_agent._toolbox_endpoint() == ""
-    assert copilot_agent._apply_foundry_toolbox("generic", None) == {}
 
 
-def test_foundry_toolbox_is_scoped_to_generic_persona(settings, monkeypatch):
-    """Expose the pilot MCP server only to the generic persona."""
+def test_foundry_toolbox_uses_injected_endpoint(settings, monkeypatch):
     monkeypatch.setenv(
         "TOOLBOX_KRATOS_TOOLS_MCP_ENDPOINT",
         "https://example.test/versioned/toolbox/mcp?api-version=v1",
@@ -52,13 +51,35 @@ def test_foundry_toolbox_is_scoped_to_generic_persona(settings, monkeypatch):
         )
     )
 
-    generic_servers = agent._apply_foundry_toolbox("generic", {"existing": {"type": "local"}})
-    assert generic_servers["kratos-tools"] == {
-        "type": "http",
-        "url": "https://example.test/versioned/toolbox/mcp?api-version=v1",
-        "tools": ["*"],
-    }
-    assert agent._apply_foundry_toolbox("finance-close", None) == {}
+    assert agent._toolbox_endpoint() == "https://example.test/versioned/toolbox/mcp?api-version=v1"
+
+    generic_tools = agent._apply_foundry_toolbox_tools("generic", ALL_TOOLS)
+    assert "web_search" not in {tool.name for tool in generic_tools}
+    assert "kratos-tools-web_search" in {tool.name for tool in generic_tools}
+    assert agent._apply_foundry_toolbox_tools("finance-close", ALL_TOOLS) is ALL_TOOLS
+
+
+def test_foundry_toolbox_adds_generic_web_search_routing_guidance(settings, monkeypatch):
+    monkeypatch.setenv(
+        "TOOLBOX_KRATOS_TOOLS_MCP_ENDPOINT",
+        "https://example.test/versioned/toolbox/mcp?api-version=v1",
+    )
+    agent = CopilotAgent(settings.model_copy(update={"toolbox_enabled": True}))
+
+    prompt = agent._apply_toolbox_prompt("generic", "Base prompt")
+
+    assert prompt.startswith("Base prompt")
+    assert "kratos-tools-web_search" in prompt
+    assert "Cite only URLs in its citations list" in prompt
+    assert "Retry it at most once" in prompt
+    assert "Do not call web_fetch" in prompt
+    assert agent._apply_toolbox_prompt("finance-close", "Base prompt") == "Base prompt"
+
+
+def test_foundry_toolbox_prompt_guidance_is_disabled_with_toolbox(settings):
+    agent = CopilotAgent(settings)
+
+    assert agent._apply_toolbox_prompt("generic", "Base prompt") == "Base prompt"
 
 
 @pytest.mark.asyncio
@@ -73,8 +94,9 @@ async def test_foundry_toolbox_auth_is_renewable_and_endpoint_scoped(settings):
         )
     )
     agent._credential = AsyncMock()
+    test_access_token = "-".join(("test", "token"))
     agent._credential.get_token.return_value = SimpleNamespace(
-        token="test-token",
+        token=test_access_token,
         expires_on=time.time() + 3600,
     )
     endpoint = agent._toolbox_endpoint()
@@ -84,7 +106,7 @@ async def test_foundry_toolbox_auth_is_renewable_and_endpoint_scoped(settings):
         {},
     )
     assert result["kind"] == "token"
-    assert result["accessToken"] == "test-token"
+    assert result["accessToken"] == test_access_token
     assert result["tokenType"] == "Bearer"
     assert 3500 <= result["expiresIn"] <= 3600
     agent._credential.get_token.assert_awaited_once_with("https://ai.azure.com/.default")

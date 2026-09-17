@@ -161,8 +161,8 @@ def summarize_runs(label: str, runs: list[dict[str, Any]], expected_tool: str | 
         for result in run.get("results") or []
         if result.get("status") == "completed"
     ]
-    if not runs or len(durations) != len(runs):
-        raise ValueError(f"{label}: every run must contain one completed scenario result")
+    if not runs or not durations:
+        raise ValueError(f"{label}: no run contained a completed scenario result")
     ordered = sorted(durations)
     p95_index = max(0, math.ceil(0.95 * len(ordered)) - 1)
     tools = sorted({tool for run in runs for tool in _tool_names(run)})
