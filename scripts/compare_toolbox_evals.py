@@ -13,10 +13,12 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import statistics
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import run_evals
@@ -52,9 +54,95 @@ def _azd_optional_value(name: str) -> str:
         return ""
 
 
+def _verify_deployed_scenario(use_case: str, scenario: str) -> None:
+    scenario_path = Path(__file__).parents[1] / "use-cases" / use_case / "evals" / "scenarios" / f"{scenario}.json"
+    expected = json.loads(scenario_path.read_text(encoding="utf-8"))
+    url = f"{run_evals.BACKEND_URL}/api/use-cases/{use_case}/evals/scenarios"
+    with run_evals.httpx.Client(timeout=30.0) as client:
+        response = client.get(url, headers=run_evals._headers())  # noqa: SLF001
+    response.raise_for_status()
+    deployed = next((item for item in response.json().get("scenarios", []) if item.get("name") == scenario), None)
+    if deployed != expected:
+        raise RuntimeError(
+            f"Deployed scenario {use_case}/{scenario} differs from {scenario_path}; "
+            "synchronize the blob-backed scenario before running the comparison"
+        )
+
+
 def _run_passed(run: dict[str, Any]) -> bool:
     counts = (run.get("foundry") or {}).get("result_counts") or {}
     return run.get("status") == "completed" and counts.get("failed") == 0 and counts.get("passed", 0) > 0
+
+
+def _score_passed(score: dict[str, Any]) -> bool:
+    if score.get("error"):
+        return False
+    pass_flags = [
+        value
+        for key, value in score.items()
+        if (key == "passed" or key.endswith("_passed")) and isinstance(value, bool)
+    ]
+    return bool(pass_flags) and all(pass_flags)
+
+
+def _completed_tool_events(run: dict[str, Any], expected_tool: str) -> list[dict[str, Any]]:
+    return [
+        event
+        for result in run.get("results") or []
+        for event in result.get("tool_calls") or []
+        if event.get("status") == "completed" and event.get("skillName") == expected_tool
+    ]
+
+
+def _urls(text: str) -> list[str]:
+    return [url.rstrip(".,;:") for url in re.findall(r"https?://[^\s)>\]]+", text)]
+
+
+def web_search_contract_failures(run: dict[str, Any], expected_tool: str) -> list[str]:
+    failures: list[str] = []
+    results = run.get("results") or []
+    if run.get("status") != "completed" or len(results) != 1 or results[0].get("status") != "completed":
+        return ["run did not contain one completed scenario result"]
+
+    tool_events = _completed_tool_events(run, expected_tool)
+    if not tool_events:
+        failures.append(f"did not invoke {expected_tool}")
+
+    response = str(results[0].get("response") or "")
+    if not response.lstrip().startswith("1. "):
+        failures.append("response must start with the first numbered item and contain no preamble")
+    matches = list(re.finditer(r"(?ms)^\s*(\d+)\.\s+(.+?)(?=^\s*\d+\.\s+|\Z)", response))
+    item_numbers = [int(match.group(1)) for match in matches]
+    if item_numbers != [1, 2, 3, 4, 5]:
+        failures.append("response must contain exactly five consecutively numbered items")
+        return failures
+
+    evidence = "\n".join(str(event.get("output") or event.get("result") or "") for event in tool_events)
+    evidence_urls = set(_urls(evidence))
+    for number, match in enumerate(matches, start=1):
+        item = match.group(2).strip()
+        if "\n" in item:
+            failures.append(f"item {number} must stay on one line")
+        item_urls = _urls(item)
+        if len(item_urls) != 1:
+            failures.append(f"item {number} must contain exactly one source citation")
+        for url in item_urls:
+            if url not in evidence_urls:
+                failures.append(f"item {number} citation is not present in tool evidence: {url}")
+
+        prose = re.sub(r"https?://[^\s)>\]]+", "", item)
+        prose = re.sub(r"\[[^\]]*\]\([^)]*\)", "", prose)
+        if len(re.findall(r"[.!?](?=\s|$)", prose)) != 1:
+            failures.append(f"item {number} must contain one sentence")
+    return failures
+
+
+def web_search_run_passed(run: dict[str, Any], expected_tool: str) -> bool:
+    if web_search_contract_failures(run, expected_tool):
+        return False
+    scores = (run.get("results") or [{}])[0].get("scores") or {}
+    quality_scores = [score for name, score in scores.items() if name != "TaskAdherence"]
+    return bool(quality_scores) and all(_score_passed(score) for score in quality_scores)
 
 
 def _tool_names(run: dict[str, Any]) -> set[str]:
@@ -66,7 +154,7 @@ def _tool_names(run: dict[str, Any]) -> set[str]:
     }
 
 
-def summarize_runs(label: str, runs: list[dict[str, Any]]) -> RunMetrics:
+def summarize_runs(label: str, runs: list[dict[str, Any]], expected_tool: str | None = None) -> RunMetrics:
     durations = [
         float(result.get("duration_ms", 0))
         for run in runs
@@ -81,7 +169,10 @@ def summarize_runs(label: str, runs: list[dict[str, Any]]) -> RunMetrics:
     return RunMetrics(
         label=label,
         runs=len(runs),
-        passed=sum(_run_passed(run) for run in runs),
+        passed=sum(
+            web_search_run_passed(run, expected_tool) if expected_tool else _run_passed(run)
+            for run in runs
+        ),
         median_ms=statistics.median(durations),
         p95_ms=ordered[p95_index],
         tools=tuple(tools),
@@ -173,6 +264,7 @@ def main() -> int:
 
     backend_url = _azd_optional_value("AGENT_SERVICE_DIRECT_URL") or _azd_value("AGENT_SERVICE_URL")
     run_evals.BACKEND_URL = backend_url.rstrip("/")
+    _verify_deployed_scenario(args.use_case, args.scenario)
 
     restored = False
     try:
@@ -186,8 +278,13 @@ def main() -> int:
             print("Restoring Toolbox after interrupted comparison...", file=sys.stderr)
             _deploy(args.environment, True)
 
-    local = summarize_runs("local", local_runs)
-    toolbox = summarize_runs("Toolbox", toolbox_runs)
+    use_contract_gate = args.scenario == "web-search-ai-trends"
+    local = summarize_runs("local", local_runs, "web_search" if use_contract_gate else None)
+    toolbox = summarize_runs(
+        "Toolbox",
+        toolbox_runs,
+        "kratos-tools-web_search" if use_contract_gate else None,
+    )
     print()
     _print_metrics(local)
     _print_metrics(toolbox)

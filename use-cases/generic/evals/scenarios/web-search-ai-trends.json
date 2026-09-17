@@ -2,7 +2,7 @@
   "name": "web-search-ai-trends",
   "category": "standard",
   "description": "Open-ended web research — agent must call web-search and cite sources.",
-  "input_message": "Search the web for the latest AI trends in 2026. Summarize the top 5 as a numbered list with one sentence and one source citation per item.",
+  "input_message": "Search the web for the latest AI trends in 2026. Return exactly five numbered lines and nothing else. Format each line as: 1. **Trend name** - One-sentence description. [Source](https://source-url)",
   "input_data": {},
   "expected_behavior": "Calls web-search. Returns the top 5 trends as a numbered list with a one-line description and a citation per item. Does not fabricate trends.",
   "expected_tool_calls": ["web-search"],
