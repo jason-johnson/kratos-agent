@@ -230,6 +230,52 @@ async def test_copilot_agent_run_streams_tool_events(copilot_agent):
 
 
 @pytest.mark.asyncio
+async def test_copilot_agent_retains_tool_output_for_evaluation(copilot_agent):
+    mock_session = AsyncMock()
+    mock_client = AsyncMock()
+    mock_client.create_session = AsyncMock(return_value=mock_session)
+    tool_output = "x" * 15_000
+
+    def fake_on(callback):
+        start_event = MagicMock()
+        start_event.type.value = "tool.execution_start"
+        start_event.data.tool_name = "web_search"
+        callback(start_event)
+
+        end_event = MagicMock()
+        end_event.type.value = "tool.execution_complete"
+        end_event.data.tool_name = "web_search"
+        end_event.data.output = tool_output
+        end_event.data.success = True
+        callback(end_event)
+
+        idle_event = MagicMock()
+        idle_event.type.value = "session.idle"
+        callback(idle_event)
+
+    mock_session.on = fake_on
+    mock_session.send = AsyncMock()
+
+    with (
+        patch("app.services.copilot_agent.CopilotClient", return_value=mock_client),
+        patch("app.services.copilot_agent.ManagedIdentityCredential", return_value=AsyncMock()),
+        patch("app.services.copilot_agent._HAS_CLI_CREDENTIAL", False),
+        patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"),
+    ):
+        await copilot_agent.start()
+        events = [
+            event
+            async for event in copilot_agent.run(
+                message="Search the web",
+                conversation_id="test-conv-tool-output",
+            )
+        ]
+
+    completed = next(event for event in events if isinstance(event, ToolCallEvent) and event.status == "completed")
+    assert completed.output == tool_output[:12_000]
+
+
+@pytest.mark.asyncio
 async def test_copilot_agent_run_handles_error(copilot_agent):
     """Test that run() yields ErrorEvent on SDK error."""
     mock_session = AsyncMock()

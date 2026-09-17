@@ -43,6 +43,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
+_TOOL_EVENT_OUTPUT_LIMIT = 12_000
+
 # Regex patterns for extracting actual skill name from the generic "skill" tool
 _SKILL_OUTPUT_RE = re.compile(r'Skill ["\']([^"\']+ )["\']')
 _SKILL_INPUT_NAME_RE = re.compile(r'["\']?name["\']?\s*[:=]\s*["\']([^"\'\.]+)["\']')
@@ -1200,7 +1202,7 @@ class CopilotAgent:
                                         status="completed" if success is not False else "failed",
                                         output=_extract_tool_value(
                                             getattr(event.data, "output", "") or getattr(event.data, "result", "")
-                                        )[:2000],
+                                        )[:_TOOL_EVENT_OUTPUT_LIMIT],
                                         durationMs=duration_ms,
                                         source=self._resolve_skill_source(cid, tool_name),
                                     )
