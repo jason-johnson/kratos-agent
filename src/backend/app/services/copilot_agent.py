@@ -449,7 +449,9 @@ class CopilotAgent:
             "For web research, call kratos-tools-web_search once first. Cite only URLs in its citations list; "
             "when that list is empty, do not provide links. Retry it at most once, and only "
             "when the first result does not contain enough evidence to answer the request. Do not call web_fetch "
-            "unless the user explicitly asks you to open or inspect a specific page."
+            "unless the user explicitly asks you to open or inspect a specific page. Do not narrate the search, "
+            "announce progress, or add a preamble. When the user specifies an exact response format or says "
+            '"nothing else," begin directly with the requested content and follow that format exactly.'
         )
 
     def set_cosmos_service(self, cosmos_service: "CosmosService") -> None:

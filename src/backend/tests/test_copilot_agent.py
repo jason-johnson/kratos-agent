@@ -73,6 +73,8 @@ def test_foundry_toolbox_adds_generic_web_search_routing_guidance(settings, monk
     assert "Cite only URLs in its citations list" in prompt
     assert "Retry it at most once" in prompt
     assert "Do not call web_fetch" in prompt
+    assert "Do not narrate the search" in prompt
+    assert "follow that format exactly" in prompt
     assert agent._apply_toolbox_prompt("finance-close", "Base prompt") == "Base prompt"
 
 
