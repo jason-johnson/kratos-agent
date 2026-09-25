@@ -236,7 +236,7 @@ Experiment sequence:
 
 1. [x] Confirm Code Interpreter availability for the deployed model in Sweden Central and add it to a non-default Toolbox version.
 2. [x] Add an application-owned `code_interpreter` MCP bridge with no-file math coverage, session billing telemetry, and fail-closed output normalization.
-3. [ ] Run the pure-math local-versus-Toolbox comparison with synthetic inputs only.
+3. [x] Run the pure-math local-versus-Toolbox comparison with synthetic inputs only.
 4. Separately prove generated-file download translation and file cleanup using non-sensitive synthetic data.
 5. Stop without promotion if project-shared container context cannot meet Kratos's user-isolation requirements.
 
@@ -245,9 +245,11 @@ No-file pilot result on 2026-09-25:
 - Created immutable Toolbox version 5 with `web_search` and `code_interpreter`; the creation check confirmed the published default remained version 1.
 - Called the version-specific MCP endpoint directly with a `code`-only synthetic standard-library program. `tools/list` exposed only the expected `search_query` and `code` required fields, and Code Interpreter returned mean 9, hypotenuse 5, and sum of squares 404 without an MCP error or file input.
 - Added a disabled-by-default, numeric-version-pinned application bridge for the generic persona. It replaces the local interpreter only when both pilot settings are explicitly enabled, normalizes text output fail-closed, and emits one billable `session` per successful managed call.
-- One local `generic/code-interpreter-math` baseline completed in 31.7 seconds without calling an interpreter; evaluator scores were Task Adherence 1, Intent Resolution 4, Coherence 4, Relevance 3, and Tool Call Accuracy 2. This is not an acceptable promotion baseline.
-- The first hosted-agent pilot deploy used disabled defaults because the new azd values had not been persisted. A subsequent preflight did not return reliable Toolbox default metadata, so the managed end-to-end eval was not attempted again. The azd pilot controls were reset to disabled/version 0. Version 5 was not published or promoted.
-- Stop here before file experiments or production promotion: the direct capability is proven, but an application-routed managed eval, generated-file translation, and project-user isolation remain unresolved.
+- One local `generic/code-interpreter-math` baseline completed in 31.7 seconds without calling an interpreter; evaluator scores were Task Adherence 1, Intent Resolution 4, Coherence 4, Relevance 3, and Tool Call Accuracy 2. A later local rollback run called the interpreter, returned both expected values in 17.6 seconds, and exposed no managed-session billing.
+- The first hosted-agent pilot deploy used disabled defaults because Foundry injects only variables declared in `src/hosted-agent/agent.yaml`; `azure.yaml` `config.env` is not propagated to the hosted runtime. Both live hosted-agent manifests now declare the disabled-by-default enable and version controls.
+- Two application-routed managed runs completed in 18.5 and 20.3 seconds. Each used exactly one `kratos-tools-code_interpreter` call, exposed one billable session, made no local interpreter call or file reference, and returned both expected values. Task Adherence passed at 1/1, Coherence and Relevance at 4/5, Tool Call Accuracy at 5/5, and Intent Resolution at 5/5 and 4/5. At the current public rate, the two measured runs are estimated at $0.066 total/$0.033 per run.
+- Rollback was exercised by deploying hosted-agent version 41 with the controls disabled/version 0, draining two stale pre-deploy warm sandboxes with no-tool synthetic requests, and confirming a fresh sandbox used only the local interpreter with no session billing. Toolbox version 5 remains immutable and unpromoted; the published default remains Web Search-only version 1.
+- Stop here before file experiments or production promotion: no-file application routing is proven, but generated-file translation and project-user isolation remain unresolved.
 
 ## Phase 3: Foundry Evaluation Expansion (Web Search Complete; Reuse Pending)
 
