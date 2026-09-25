@@ -258,7 +258,7 @@ async def test_copilot_agent_retains_tool_output_for_evaluation(copilot_agent):
     mock_session = AsyncMock()
     mock_client = AsyncMock()
     mock_client.create_session = AsyncMock(return_value=mock_session)
-    tool_output = "x" * 15_000
+    tool_output = '{"billing":{"unit":"transaction","quantity":1},"text":"' + "x" * 15_000 + '"}'
 
     def fake_on(callback):
         start_event = MagicMock()
@@ -296,7 +296,9 @@ async def test_copilot_agent_retains_tool_output_for_evaluation(copilot_agent):
         ]
 
     completed = next(event for event in events if isinstance(event, ToolCallEvent) and event.status == "completed")
-    assert completed.output == tool_output[:12_000]
+    assert len(completed.output) == 12_000
+    assert completed.output.startswith('{\n  "billing":')
+    assert completed.billing == {"unit": "transaction", "quantity": 1}
 
 
 @pytest.mark.asyncio

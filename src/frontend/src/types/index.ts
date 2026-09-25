@@ -47,6 +47,7 @@ export interface ToolCallEvent {
   output: string;
   durationMs: number;
   source?: string;
+  billing?: { unit: string; quantity: number } | null;
 }
 
 export interface ContentEvent {

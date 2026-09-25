@@ -133,6 +133,25 @@ def _extract_tool_value(obj) -> str:
     return text
 
 
+def _extract_tool_billing(obj) -> dict[str, str | int] | None:
+    if obj is None:
+        return None
+    value = getattr(obj, "content", obj)
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    billing = value.get("billing") if isinstance(value, dict) else None
+    if not isinstance(billing, dict):
+        return None
+    unit = billing.get("unit")
+    quantity = billing.get("quantity")
+    if not isinstance(unit, str) or not unit or not isinstance(quantity, int) or isinstance(quantity, bool) or quantity < 0:
+        return None
+    return {"unit": unit, "quantity": quantity}
+
+
 SYSTEM_PROMPT = """You are Kratos, an enterprise AI assistant.
 
 You MUST use your available skills (tools) whenever they are relevant to the user's request.
@@ -1181,6 +1200,7 @@ class CopilotAgent:
                                     duration_ms,
                                     error,
                                 )
+                                raw_output = getattr(event.data, "output", "") or getattr(event.data, "result", "")
 
                                 # End the corresponding tool span
                                 tool_span = _tool_spans.pop(tool_name, None)
@@ -1190,9 +1210,7 @@ class CopilotAgent:
                                 if tool_span is not None:
                                     # Remove from stack by identity
                                     _tool_span_stack[:] = [(n, s) for n, s in _tool_span_stack if s is not tool_span]
-                                    output_str = str(
-                                        getattr(event.data, "output", "") or getattr(event.data, "result", "")
-                                    )[:2000]
+                                    output_str = str(raw_output)[:2000]
                                     tool_span.set_attribute("gen_ai.tool.call.result", output_str)
                                     if error:
                                         tool_span.set_attribute(
@@ -1210,11 +1228,10 @@ class CopilotAgent:
                                     ToolCallEvent(
                                         skillName=tool_name,
                                         status="completed" if success is not False else "failed",
-                                        output=_extract_tool_value(
-                                            getattr(event.data, "output", "") or getattr(event.data, "result", "")
-                                        )[:_TOOL_EVENT_OUTPUT_LIMIT],
+                                        output=_extract_tool_value(raw_output)[:_TOOL_EVENT_OUTPUT_LIMIT],
                                         durationMs=duration_ms,
                                         source=self._resolve_skill_source(cid, tool_name),
+                                        billing=_extract_tool_billing(raw_output),
                                     )
                                 )
 

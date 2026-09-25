@@ -66,6 +66,7 @@ def _normalize_web_search_result(result: Mapping, search_query: str) -> dict:
         "text": "\n\n".join(text_parts),
         "citations": citations,
         "grounded": bool(citations),
+        "billing": {"unit": "transaction", "quantity": 1},
     }
     if not citations:
         response["grounding_warning"] = (
@@ -167,6 +168,10 @@ def create_toolbox_web_search_tool(endpoint: str):
     async def toolbox_web_search(params: ToolboxWebSearchParams) -> dict:
         with tracer.start_as_current_span("skill.toolbox_web_search") as span:
             _set_kratos_attrs(span)
-            return await _call_toolbox_web_search(endpoint, params.search_query)
+            result = await _call_toolbox_web_search(endpoint, params.search_query)
+            if "error" not in result:
+                span.set_attribute("kratos.tool.billing.unit", "transaction")
+                span.set_attribute("kratos.tool.billing.quantity", 1)
+            return result
 
     return toolbox_web_search

@@ -116,6 +116,7 @@ class ToolCallEvent(BaseModel):
     output: str = ""
     durationMs: int = 0
     source: str = ""  # "local" | "blob" | "apm:<package>" — populated best-effort from the registry
+    billing: dict[str, str | int] | None = None
 
 
 class ThoughtEvent(BaseModel):

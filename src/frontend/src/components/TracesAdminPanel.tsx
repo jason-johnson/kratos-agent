@@ -57,6 +57,8 @@ const SPAN_HIGHLIGHT_KEYS: Array<{ key: string; label: string }> = [
   { key: "kratos.use_case", label: "Use case" },
   { key: "kratos.conversation_id", label: "Conversation" },
   { key: "kratos.eval_run_id", label: "Eval run" },
+  { key: "kratos.tool.billing.unit", label: "Billing unit" },
+  { key: "kratos.tool.billing.quantity", label: "Billable quantity" },
   { key: "error.type", label: "Error" },
 ];
 

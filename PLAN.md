@@ -16,10 +16,11 @@ The target architecture keeps Kratos as a Foundry Hosted Agent and incrementally
 6. Keep prompts and persona routing in source control for now.
 7. Defer Graph OBO migration until Foundry identity passthrough is proven end to end.
 8. Treat Responses protocol and specialist Foundry agents as later, independent decisions.
+9. Evaluate moving portable `SKILL.md` workflows into Foundry only after the managed-tool, shared-integration, evaluation, and identity work is complete.
 
 ## Implementation Status
 
-Last updated: 2026-09-17
+Last updated: 2026-09-25
 
 - [x] Confirmed Toolbox and Hosted Agent support in Sweden Central.
 - [x] Added declarative `kratos-tools` provisioning with managed Web Search.
@@ -48,10 +49,24 @@ Last updated: 2026-09-17
 - [x] Made the comparison report invocation errors as failed samples while computing latency from completed scenarios, instead of discarding the full comparison. Focused regression coverage verifies the partial-failure behavior.
 - [x] Added Toolbox-only guidance to copy citation URLs exactly from managed-search evidence and ran a warm-pool drain plus five diagnostic samples on active Hosted Agent version 27. Toolbox passed 0/5 with a 23.2-second median and 37.9-second p95: one sample failed with Hosted Agent HTTP 409, three returned prose that violated the exact five-line response contract, and one still substituted all five citation URLs. All four completed samples used exactly one managed search with no `web_fetch` or failed tool calls. The experiment was rejected and the citation-specific sentences were removed; active version 28 restores the earlier routing-only guidance. Toolbox remains unpromoted, the local fallback stays available, and Code Interpreter remains deferred.
 - [x] Replaced the generic Copilot SDK MCP handoff with an application-owned Streamable HTTP bridge for `kratos-tools-web_search`. The bridge sends the documented `search_query`, preserves resource text and citation metadata, deduplicates authoritative HTTP(S) sources, and explicitly forbids invented links when Toolbox returns no source URLs. Added generic-pilot guidance that suppresses search narration and honors exact response formats, then deployed Hosted Agent version 31 with Toolbox enabled in `bankfdry`. A targeted `generic/web-search-ai-trends` run completed in 25.8 seconds, invoked the bridge once, started directly with item 1, and passed the deterministic contract with five response URLs backed by 22 evidence URLs. All 100 backend tests, focused gate tests, touched-file Ruff, format, and mypy checks pass. After installing the locked Node dependencies through the configured Azure Artifacts feed, all 15 post-deploy API smoke tests passed in 31.3 seconds.
-- [x] Completed a fresh guarded five-sample comparison and restored Toolbox on active Hosted Agent version 33. Local passed 5/5 with a 29.2-second median and 34.6-second p95; Toolbox passed 5/5 with a 23.0-second median and 26.0-second p95. Every run used the expected tool, Toolbox p95 was 24.9% lower than local, and all 15 final API smoke tests passed in 24.4 seconds. Toolbox therefore passes the defined quality, reliability, and latency gates for the generic Web Search pilot and remains enabled in `bankfdry`; retain the local fallback until per-run cost is observable.
+- [x] Completed a fresh guarded five-sample comparison and restored Toolbox on active Hosted Agent version 33. Local passed 5/5 with a 29.2-second median and 34.6-second p95; Toolbox passed 5/5 with a 23.0-second median and 26.0-second p95. Every run used the expected tool, Toolbox p95 was 24.9% lower than local, and all 15 final API smoke tests passed in 24.4 seconds. Toolbox therefore passed the defined quality, reliability, and latency gates for the generic Web Search pilot and remains enabled in `bankfdry`; retain the local fallback through the cost/release observation period and rollback exercise.
 - [x] Ran the API-only deployed smoke suite against `bankfdry`; it completed successfully.
 - [x] Restored backend dependencies through Azure Artifacts; all 83 backend tests pass and focused evaluator lint is clean. Whole-tree Ruff still reports three unrelated existing findings.
 - [x] Verified the recreated Hosted Agent identity has only the declared ARM data-plane roles (`Cognitive Services OpenAI User`, `Cognitive Services User`, `Key Vault Secrets User`, and `Storage Blob Data Reader`) plus one Cosmos DB data-plane assignment; Toolbox execution succeeds with this set.
+- [x] Added invocation-level Web Search billing telemetry to both local and Toolbox adapters. Successful calls record one billable `transaction` in structured tool-event metadata and OpenTelemetry, the traces API/UI exposes the billing dimensions, and the guarded comparison estimates cost from explicitly supplied rates while failing closed if any expected call is unmetered. Billing is carried separately from retained tool evidence because large evidence is truncated at 12,000 characters. The current public list price is $14 per 1,000 Web Search transactions as of 2026-09-25; rates remain command inputs because actual agreement pricing and future rates can differ.
+- [x] Deployed the structured billing meter and ran a cost-enabled five-sample comparison in `bankfdry`. All ten measured calls were observable: local and Toolbox each used five transactions, estimated at $0.070 total and $0.014 per run, so the cost-regression gate passed. Local passed 4/5 with a 29.0-second median and 35.6-second p95; Toolbox passed 4/5 with a 22.3-second median and 23.1-second p95. The local failure added a preamble and broke the exact five-item format; the Toolbox failure used one item-5 citation absent from tool evidence. All non-Task quality evaluators passed. The overall 100% quality gate therefore failed even though cost observability, equal estimated cost, and Toolbox latency passed. The comparison also exercised rollback by deploying and validating the local fallback, then restored and validated Toolbox. Toolbox remains enabled, the local fallback remains, and all 15 post-deploy API smoke tests passed.
+- [x] Added a non-disruptive Toolbox-only observation mode with explicit quality, p95, complete-metering, and cost-per-run limits. The gate canonicalizes scheme/host casing, trailing path slashes, and fragments while preserving query-string distinctions, so resource-equivalent citations do not produce false failures and genuinely unsupported sources still fail.
+- [ ] Web Search release observation: 1 of 3 consecutive five-run batches passes, with the first and last required to be at least 24 hours apart. Batch 1 passed 5/5 with a 22.5-second median, 27.6-second p95, five observable transactions, and an estimated $0.070 total/$0.014 per measured run. Its initially reported item-5 citation failure was a trailing-slash/fragment variant of an authoritative evidence URL and passed after the deterministic gate was corrected. Toolbox remains enabled.
+
+### Remaining Work, In Order
+
+1. Complete two more consecutive passing Web Search observation batches, with the final batch at least 24 hours after batch 1, before considering removal of the local fallback. Rollback and restoration have been exercised.
+2. Evaluate Foundry-managed Code Interpreter with no-file math first, then file-transfer, package, execution-limit, persistence, cost, download-flow, and user-isolation coverage. Do not promote it while the Toolbox container context is shared across users.
+3. Finish the reusable Foundry evaluation/process-evaluator path for each promoted capability.
+4. Inventory and migrate eligible non-user-specific MCP, OpenAPI, and Azure AI Search integrations.
+5. Complete the Graph OBO identity and security spike; retain the custom path unless Foundry preserves the current user-isolation boundary.
+6. Make separate product decisions about the optional Responses protocol and specialist agents.
+7. Experiment with portable Foundry Skills after the preceding work. Filesystem use alone is not a blocker; runtime dependencies and product contracts determine portability.
 
 ## Current State
 
@@ -62,18 +77,19 @@ Foundry currently provides:
 - Per-session isolation and scale-to-zero behavior.
 - Container versioning and lifecycle management.
 - Application Insights integration and OpenTelemetry traces.
+- A declaratively provisioned Toolbox whose managed Web Search is promoted for the `generic` persona in `bankfdry`.
 
 Kratos currently provides inside the hosted container:
 
 - Persona selection and system prompts.
 - Copilot SDK session orchestration.
-- Built-in Python tools such as web search, Azure AI Search, code interpreter, CRM, and agent delegation.
+- The local Web Search fallback, Azure AI Search, code interpreter, CRM, and agent delegation.
 - `SKILL.md` discovery and APM package management.
 - MCP server discovery and per-user OBO token injection.
 - Cosmos-backed application state and the custom SSE event contract.
 - Evaluation scenario storage, invocation, scoring, and reporting.
 
-Because the Hosted Agent is bring-your-own code, Foundry cannot introspect its internal Copilot SDK tools. The empty tool list in the Foundry UI is therefore expected. Tools moved into a Toolbox will become Foundry-managed and visible there.
+Because the Hosted Agent is bring-your-own code, Foundry cannot introspect its internal Copilot SDK tools. Only capabilities registered with Foundry, such as the promoted Toolbox Web Search, are Foundry-managed and visible there.
 
 ## Target Architecture
 
@@ -83,17 +99,18 @@ flowchart LR
     API --> HA[Foundry Hosted Agent]
     HA --> ORCH[Kratos Copilot SDK orchestration]
     ORCH --> TB[Foundry Toolbox MCP endpoint]
-    ORCH --> LOCAL[Kratos local skills and tools]
+    ORCH --> LOCAL[Kratos local fallbacks and product-specific tools]
     TB --> WEB[Managed web search]
     TB --> CODE[Managed code interpreter]
     TB --> SEARCH[Azure AI Search]
     TB --> MCP[Approved MCP and OpenAPI services]
+    TB --> FSKILLS[Portable Foundry Skills, evaluated last]
     HA --> MODEL[Foundry model deployment]
     HA --> DATA[Cosmos, Blob, Key Vault]
     HA --> OBS[Foundry traces and evaluations]
 ```
 
-Toolbox is additive at first. A tool is removed from the local registry only after its Toolbox replacement passes functional, identity, latency, cost, and evaluation checks.
+Toolbox remains additive during migration. A tool is removed from the local registry only after its Toolbox replacement passes functional, identity, latency, cost, and evaluation checks and survives a release observation period.
 
 ## Success Criteria
 
@@ -113,9 +130,9 @@ Toolbox is additive at first. A tool is removed from the local registry only aft
 - Replacing the frontend or backend proxy.
 - Changing the Invocations protocol in the initial work.
 - Migrating delegated Microsoft Graph access in the pilot.
-- Moving every local file-manipulation or workflow skill into Toolbox.
+- Forcing every local file-manipulation or workflow skill into Toolbox or a Foundry-managed runtime regardless of compatibility.
 
-## Phase 0: Baseline and Compatibility Spike
+## Phase 0: Baseline and Compatibility Spike (Complete)
 
 ### Work
 
@@ -135,7 +152,7 @@ Toolbox is additive at first. A tool is removed from the local registry only aft
 - Baseline eval artifacts are available for comparison.
 - No unsupported preview dependency is accepted without an explicit decision and rollback plan.
 
-## Phase 1: Toolbox Foundation
+## Phase 1: Toolbox Foundation (Complete)
 
 ### Infrastructure
 
@@ -170,7 +187,7 @@ Toolbox is additive at first. A tool is removed from the local registry only aft
 
 ## Phase 2: Pilot Managed Tools
 
-### 2A. Web Search
+### 2A. Web Search (Promoted; Cost and Observation Pending)
 
 Move the current web-search capability to Toolbox first.
 
@@ -187,7 +204,7 @@ Acceptance criteria:
 - Quality and success rate meet or exceed the baseline.
 - Added latency and cost are measured and accepted.
 
-### 2B. Code Interpreter
+### 2B. Code Interpreter (Next Managed-Tool Migration)
 
 Evaluate Foundry-managed Code Interpreter against the current local Python subprocess.
 
@@ -206,7 +223,24 @@ Acceptance criteria:
 
 Do not remove the local interpreter until file transfer and package compatibility are proven.
 
-## Phase 3: Foundry Evaluation Expansion
+Current platform constraints, verified against Microsoft documentation on 2026-09-25:
+
+- Toolbox Code Interpreter in a Hosted Agent does not support user isolation; users in the same Foundry project share the Toolbox container context. Do not expose it to general multi-user or sensitive-file workloads unless this boundary changes or a stronger isolation design is proven.
+- Start with the pure `generic/code-interpreter-math` scenario using no files or sensitive data. Treat this as a capability experiment, not a production promotion.
+- Code Interpreter has a fixed package set, no outbound network access, a one-hour active session limit, and a 30-minute idle timeout. Custom packages require a different/custom interpreter path.
+- Toolbox file inputs must use the resource-level Files endpoint with the project header; project-scoped uploads fail ownership verification.
+- Generated files are returned as Foundry `container_id`/`file_id` annotations. Kratos must download and validate them into its `/tmp` file flow before the existing frontend download contract can be considered compatible.
+- Current public list price is $0.033 per Code Interpreter session. Concurrent conversations create separate billed sessions.
+
+Experiment sequence:
+
+1. Confirm Code Interpreter availability for the deployed model in Sweden Central and add it to a non-default Toolbox version.
+2. Add an application-owned `code_interpreter` MCP bridge with no-file math coverage, session billing telemetry, and fail-closed output normalization.
+3. Run the pure-math local-versus-Toolbox comparison with synthetic inputs only.
+4. Separately prove generated-file download translation and file cleanup using non-sensitive synthetic data.
+5. Stop without promotion if project-shared container context cannot meet Kratos's user-isolation requirements.
+
+## Phase 3: Foundry Evaluation Expansion (Web Search Complete; Reuse Pending)
 
 The repository already invokes the Hosted Agent and scores scenarios with `azure-ai-evaluation`. Extend this rather than replacing it.
 
@@ -230,7 +264,16 @@ The repository already invokes the Hosted Agent and scores scenarios with `azure
 - Require a 100% aggregate and per-criterion pass rate in both modes.
 - Require every local run to invoke `web_search` and every Toolbox run to invoke `kratos-tools-web_search`.
 - Require Toolbox p95 scenario latency to be no more than 20% above the local p95.
-- Do not remove the local fallback until per-run tool cost is observable. Once available, require Toolbox cost to be no more than 20% above local cost unless the increase is explicitly accepted.
+- Require Toolbox cost to be no more than 20% above local cost unless the increase is explicitly accepted. Do not remove the local fallback until cost remains acceptable through the release observation period and rollback has been exercised.
+
+### Web Search Release Observation Exit
+
+- Require three consecutive Toolbox-only batches of five measured runs, with the first and last batch at least 24 hours apart.
+- Require every batch to pass 5/5 under the deterministic response/evidence contract and non-Task quality evaluators.
+- Require every expected managed Web Search call to expose billing metadata.
+- Hold p95 at or below 41.6 seconds, the accepted local promotion p95 plus 20%.
+- At an explicitly supplied $14 per 1,000 transaction rate, hold estimated measured cost at or below $0.014 per run. Recalculate this limit if the current agreement rate differs.
+- Any failed batch resets the consecutive-batch count. Keep Toolbox enabled and the local fallback available throughout observation.
 
 Run the guarded comparison from `src/backend`:
 
@@ -240,16 +283,36 @@ uv run python ../../scripts/compare_toolbox_evals.py \
   --runs 5 \
   --min-pass-rate 1.0 \
   --max-p95-regression 0.20 \
+  --local-cost-per-1000-usd 14 \
+  --toolbox-cost-per-1000-usd 14 \
+  --max-cost-regression 0.20 \
   --confirm-disruptive
 ```
 
-The command performs two Hosted Agent redeployments and always attempts to restore Toolbox to enabled. It does not persist response content or deployment values.
+The command performs two Hosted Agent redeployments and always attempts to restore Toolbox to enabled. It does not persist response content or deployment values. The rates are explicit estimates, not invoice data; verify current rates and agreement pricing before each release comparison.
+
+Run a non-disruptive observation batch against the already-enabled Toolbox from `src/backend`:
+
+```bash
+uv run python ../../scripts/compare_toolbox_evals.py \
+  --environment "$(azd env get-value AZURE_ENV_NAME)" \
+  --runs 5 \
+  --min-pass-rate 1.0 \
+  --toolbox-cost-per-1000-usd 14 \
+  --observe-toolbox-only \
+  --max-observation-p95-seconds 41.6 \
+  --max-observation-cost-per-run-usd 0.014
+```
+
+This mode verifies that Toolbox is enabled, validates scenario drift, performs one unmeasured warm-pool drain, and then gates five measured runs without changing environment settings or deploying a new Hosted Agent version.
 
 The first five-sample promotion run did not pass the quality gate. Both modes used the expected tool on every measured run, and Toolbox p95 latency was 3.1% lower than local p95, but aggregate pass rates were 60% for local and 40% for Toolbox.
 
 After retaining up to 12,000 characters of tool evidence, local reached 100% in three consecutive five-sample comparisons while Toolbox remained at 60%. The release decision now uses a deterministic citation-and-format contract plus non-Task response-quality evaluators because Task Adherence proved unreliable for the managed-tool transcript. The first valid deterministic comparison passed local 5/5 and Toolbox 2/5; narrowly scoped routing guidance later improved a Toolbox-only diagnostic to 4/5 and eliminated redundant searches, `web_fetch`, and failed tool calls. That result was not promotion-valid because the paired local measurement suffered platform failures.
 
-Exact citation-copying guidance did not close the remaining gap. The subsequent version 27 Toolbox-only diagnostic passed 0/5: one HTTP 409 invocation error, three format-contract failures, and one response with five unsupported citation URLs. The application-owned bridge and no-preamble guidance resolved those failure modes: the version 33 paired comparison passed both modes 5/5, with Toolbox p95 24.9% lower than local. Promote Toolbox for the generic Web Search pilot in `bankfdry`, retain the local fallback until per-run cost is observable, and use the same evidence-first gate before expanding Toolbox to other personas or tools.
+Exact citation-copying guidance did not close the remaining gap. The subsequent version 27 Toolbox-only diagnostic passed 0/5: one HTTP 409 invocation error, three format-contract failures, and one response with five unsupported citation URLs. The application-owned bridge and no-preamble guidance resolved those failure modes: the version 33 paired comparison passed both modes 5/5, with Toolbox p95 24.9% lower than local. Promote Toolbox for the generic Web Search pilot in `bankfdry`, retain the local fallback through release observation and the rollback exercise, and use the same evidence-first gate before expanding Toolbox to other personas or tools.
+
+The first deployed cost-enabled observation sample measured five transactions and an estimated $0.070 total ($0.014 per run) in each mode with no unmetered calls. Toolbox p95 was 23.1 seconds versus 35.6 seconds locally, but each mode passed only 4/5: local produced one format/preamble failure and Toolbox produced one unsupported citation. Cost and latency passed; the overall 100% quality gate did not. Keep Toolbox enabled for observation, retain the local fallback, and do not treat one earlier 5/5 comparison as sufficient to close the release observation period.
 
 ### Evaluation Exit Criteria
 
@@ -266,8 +329,7 @@ Priority order:
 1. Non-user-specific remote MCP servers.
 2. Stable internal APIs represented by OpenAPI.
 3. Azure AI Search connections where indexes and authorization fit Toolbox's model.
-4. Shared workflows suitable for versioned Foundry Skills.
-5. A2A delegation to independently owned specialist agents.
+4. A2A delegation to independently owned specialist agents.
 
 For each candidate:
 
@@ -277,7 +339,7 @@ For each candidate:
 - Run the relevant use-case eval suite before removing the old path.
 - Document data residency and third-party data-flow implications.
 
-Local `SKILL.md` workflows should remain in Kratos when they depend on the container filesystem, installed CLIs, custom interactive input, or tight coupling to the Copilot SDK session.
+Do not include `SKILL.md` migration in this phase. The dedicated Foundry Skills experiment follows the other migration and identity work.
 
 ## Phase 5: Graph OBO Identity Spike
 
@@ -330,16 +392,37 @@ Create separate Foundry agents only where a capability has independent ownership
 
 Do not create one Foundry agent per Kratos persona merely to mirror the current directory structure. Persona configuration should stay lightweight unless separation provides a concrete governance or operational benefit.
 
+## Phase 8: Foundry Skills Experiment
+
+Run this experiment only after Phases 2 through 5 are complete and the optional Phase 6 and 7 decisions have been recorded.
+
+Foundry Skills attached to a Toolbox are currently preview and are exposed as MCP resources (`skill://...`), not ordinary tools. The client must support `resources/list` and resource reads plus progressive instruction disclosure. The current Copilot SDK `skill_directories` path does not consume those resources automatically, so the experiment requires either an application-owned resource bridge or a supported framework integration.
+
+Filesystem use does not by itself require a skill to remain in Kratos: the current container is already Foundry-hosted, and portable workflows may also fit a Foundry-managed skill runtime. Classify each workflow by its actual requirements:
+
+- Move prompt-only, self-contained, versionable workflows into the Foundry Skills experiment first.
+- Test bundled scripts and assets when the managed runtime supports their language, package, filesystem, network, and execution requirements.
+- Prefer managed Code Interpreter for bounded Python analysis and approved MCP/OpenAPI tools for service integration.
+- Keep a workflow in Kratos when it requires the custom SSE interaction contract, live Copilot SDK session state, unsupported binaries or package installation, durable local-file assumptions, or a stronger per-user authorization boundary.
+
+Acceptance criteria:
+
+- Inputs, generated files, citations, and errors map to the existing Kratos frontend contract.
+- Package and binary dependencies are reproducible through approved feeds or the managed runtime.
+- Persona allowlists, data residency, identity, latency, quality, and per-run cost meet the same promotion gates as managed tools.
+- Blob/APM authoring, versioning, deployment, and rollback have an explicit replacement or coexistence model.
+- Each migrated skill survives a release observation period before its Kratos implementation is removed.
+
 ## Rollout Strategy
 
-1. Development environment only, Toolbox disabled by default.
-2. Enable for the generic persona and internal test users.
-3. Run baseline and Toolbox evals repeatedly.
-4. Enable one pilot tool at a time.
-5. Observe traces, errors, latency, token usage, and cost.
-6. Promote only after acceptance thresholds are met.
-7. Expand to selected personas and integrations.
-8. Remove local implementations only after a full release cycle with no required rollback.
+1. [x] Provision in the `bankfdry` environment with Toolbox consumption disabled by default in code.
+2. [x] Enable managed Web Search for the generic persona.
+3. [x] Run repeated paired baseline and Toolbox evaluations and promote Web Search on quality, reliability, and latency.
+4. [ ] Complete the Web Search release observation period; per-run cost is observable and rollback/restoration have been exercised.
+5. [ ] Evaluate one additional managed capability at a time, beginning with Code Interpreter; promote only when its authorization and isolation model is acceptable.
+6. [ ] Expand to selected personas and shared integrations only after capability-specific evaluations pass.
+7. [ ] Run the Foundry Skills experiment after the other planned migration and identity work.
+8. [ ] Remove a local implementation only after all gates pass and a full release cycle requires no rollback.
 
 ## Rollback Strategy
 
@@ -359,6 +442,7 @@ Do not create one Foundry agent per Kratos persona merely to mirror the current 
 | Managed tool output differs from current event schema | Normalize at the hosted-agent boundary and cover with contract tests |
 | Added network hop increases latency or cost | Benchmark before/after and set acceptance thresholds |
 | Tool authentication broadens privileges | Use dedicated agent identity, managed connections, and least-privilege RBAC |
+| Toolbox Code Interpreter shares container context across project users | Restrict the experiment to synthetic no-file inputs and do not promote until user isolation is proven |
 | OBO passthrough weakens user isolation | Defer migration and require dedicated security testing |
 | Portal configuration drifts from source control | Provision declaratively where supported and document unavoidable control-plane steps |
 | Local development becomes dependent on Azure | Keep Toolbox optional and preserve local implementations |
@@ -377,14 +461,15 @@ The first pull request should contain only the foundation needed to prove one ma
 - [x] Run the existing `web-search-ai-trends` scenario in both modes and record the comparison.
 - [x] Run backend tests/lint and the API-only deployed smoke suite.
 
-Code Interpreter belongs in a follow-up pull request because file transfer and execution semantics require separate validation.
+Code Interpreter is the next managed-tool migration because file transfer and execution semantics require separate validation. Foundry Skills remain later work.
 
-## Open Decisions Before the First Edit
+## Remaining Decisions
 
-- Which azd environment and region will host the pilot?
-- Is the current Foundry Toolbox feature/API available there and suitable for production, or preview-only?
-- Can Toolbox resources and tool connections be provisioned through Bicep at the required API version?
-- What latency, quality, success-rate, and cost deltas are acceptable?
-- Should the pilot use one project-wide Toolbox with persona filtering or a dedicated generic-persona Toolbox?
+- Is application-observed transaction count multiplied by the current agreement rate sufficient for release gating, or is reconciliation with delayed Azure invoice data also required?
+- Does managed Code Interpreter preserve the existing generated-file download flow and approved package-source policy?
+- Which non-user-specific MCP, OpenAPI, and Azure AI Search integrations benefit from Foundry governance enough to migrate?
+- Can Foundry preserve the current Graph OBO user-isolation and token-handling boundary?
+- Do Responses protocol or specialist agents provide enough product value to justify their migration costs?
+- Which portable workflow should be the first Foundry Skills experiment after the other phases are complete?
 
-Default recommendation: begin with a dedicated pilot Toolbox in a non-production azd environment. This gives the clearest authorization and rollback boundary while the integration is being learned.
+Current recommendation: keep the project Toolbox in `bankfdry`, complete the cost/observation gate, then evaluate Code Interpreter. Use a self-contained, non-OBO workflow as the eventual Foundry Skills pilot.

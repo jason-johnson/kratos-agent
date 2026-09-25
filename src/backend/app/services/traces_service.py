@@ -187,7 +187,9 @@ union dependencies, requests
     kratos_use_case = tostring(customDimensions['kratos.use_case']),
     kratos_conversation_id = tostring(customDimensions['kratos.conversation_id']),
     kratos_eval_run_id = tostring(customDimensions['kratos.eval_run_id']),
-    kratos_skill_name = tostring(customDimensions['kratos.skill.name'])
+    kratos_skill_name = tostring(customDimensions['kratos.skill.name']),
+    billing_unit = tostring(customDimensions['kratos.tool.billing.unit']),
+    billing_quantity = toint(customDimensions['kratos.tool.billing.quantity'])
 | order by timestamp asc
 """
 
@@ -334,6 +336,11 @@ def _parse_spans(
                 attributes["kratos.eval_run_id"] = str(s["kratos_eval_run_id"])
             if s.get("kratos_skill_name"):
                 attributes["kratos.skill.name"] = str(s["kratos_skill_name"])
+            if s.get("billing_unit"):
+                attributes["kratos.tool.billing.unit"] = str(s["billing_unit"])
+            if s.get("billing_quantity") is not None:
+                with contextlib.suppress(ValueError, TypeError):
+                    attributes["kratos.tool.billing.quantity"] = int(s["billing_quantity"])
 
             success_raw = s.get("success", True)
             success = bool(success_raw) if success_raw is not None else True

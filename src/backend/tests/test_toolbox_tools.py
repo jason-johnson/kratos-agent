@@ -32,6 +32,7 @@ def test_normalizes_text_and_citations_from_all_supported_locations():
             {"url": "https://three.example/news"},
         ],
         "grounded": True,
+        "billing": {"unit": "transaction", "quantity": 1},
     }
 
 
@@ -86,6 +87,7 @@ async def test_bridge_sends_documented_search_query(monkeypatch):
     }
     assert client.headers["Mcp-Session-Id"] == "session-1"
     assert result["grounded"] is False
+    assert result["billing"] == {"unit": "transaction", "quantity": 1}
     credential.get_token.assert_awaited_once_with("https://ai.azure.com/.default")
     credential.close.assert_awaited_once()
 

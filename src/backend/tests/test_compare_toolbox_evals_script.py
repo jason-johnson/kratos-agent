@@ -21,6 +21,7 @@ def _run(
     *,
     response: str = "",
     tool_output: str = "",
+    billing: dict | None = None,
 ) -> dict:
     return {
         "status": "completed",
@@ -39,6 +40,7 @@ def _run(
                         "status": "completed",
                         "skillName": tool,
                         "output": tool_output,
+                        **({"billing": billing} if billing is not None else {}),
                     }
                 ],
             }
@@ -53,6 +55,10 @@ def _grounded_response() -> tuple[str, str]:
         for index, url in enumerate(urls, start=1)
     )
     return response, "\n".join(urls)
+
+
+def _billable_output(quantity: int = 1) -> str:
+    return json.dumps({"billing": {"unit": "transaction", "quantity": quantity}})
 
 
 def test_summarizes_runs_and_accepts_thresholds() -> None:
@@ -79,6 +85,111 @@ def test_rejects_failed_or_slow_toolbox_runs() -> None:
 
     assert any("pass rate" in failure for failure in failures)
     assert any("p95" in failure for failure in failures)
+
+
+def test_summarizes_and_compares_estimated_cost_per_run() -> None:
+    local = compare.summarize_runs(
+        "local",
+        [_run(10_000, "web_search", tool_output=_billable_output()) for _ in range(2)],
+        cost_per_1000_usd=14.0,
+    )
+    toolbox = compare.summarize_runs(
+        "Toolbox",
+        [_run(10_000, "kratos-tools-web_search", tool_output=_billable_output()) for _ in range(2)],
+        cost_per_1000_usd=14.0,
+    )
+
+    assert local.billable_transactions == 2
+    assert local.estimated_cost_usd == pytest.approx(0.028)
+    assert compare.threshold_failures(local, toolbox, 1, 0.2, 0.2) == []
+
+
+def test_cost_gate_rejects_unobservable_or_more_expensive_toolbox() -> None:
+    local = compare.summarize_runs(
+        "local",
+        [_run(10_000, "web_search", tool_output=_billable_output())],
+        cost_per_1000_usd=10.0,
+    )
+    unobservable = compare.summarize_runs(
+        "Toolbox",
+        [_run(10_000, "kratos-tools-web_search")],
+        cost_per_1000_usd=10.0,
+    )
+    expensive = compare.summarize_runs(
+        "Toolbox",
+        [_run(10_000, "kratos-tools-web_search", tool_output=_billable_output())],
+        cost_per_1000_usd=13.0,
+    )
+
+    assert any("not observable" in failure for failure in compare.threshold_failures(local, unobservable, 1, 0.2))
+    assert any("estimated cost/run" in failure for failure in compare.threshold_failures(local, expensive, 1, 0.2))
+
+
+def test_cost_gate_rejects_partially_unobservable_calls() -> None:
+    local = compare.summarize_runs(
+        "local",
+        [_run(10_000, "web_search", tool_output=_billable_output()) for _ in range(2)],
+        "web_search",
+        14.0,
+    )
+    toolbox = compare.summarize_runs(
+        "Toolbox",
+        [
+            _run(
+                10_000,
+                "kratos-tools-web_search",
+                tool_output="truncated invalid JSON",
+                billing={"unit": "transaction", "quantity": 1},
+            ),
+            _run(10_000, "kratos-tools-web_search", tool_output="truncated invalid JSON"),
+        ],
+        "kratos-tools-web_search",
+        14.0,
+    )
+
+    assert toolbox.billable_transactions == 1
+    assert toolbox.unobservable_billable_calls == 1
+    assert any("every expected call" in failure for failure in compare.threshold_failures(local, toolbox, 1, 0.2))
+
+
+def test_accepts_toolbox_observation_thresholds() -> None:
+    response, evidence = _grounded_response()
+    metrics = compare.summarize_runs(
+        "Toolbox",
+        [
+            _run(
+                20_000,
+                "kratos-tools-web_search",
+                response=response,
+                tool_output=evidence,
+                billing={"unit": "transaction", "quantity": 1},
+            )
+            for _ in range(5)
+        ],
+        "kratos-tools-web_search",
+        14.0,
+    )
+
+    assert compare.observation_threshold_failures(metrics, 1.0, 41_600, 0.014) == []
+
+
+def test_rejects_toolbox_observation_regressions() -> None:
+    runs = [
+        _run(45_000, "kratos-tools-web_search", passed=False, tool_output=_billable_output(2)),
+        _run(20_000, "kratos-tools-web_search", tool_output="truncated invalid JSON"),
+    ]
+    metrics = compare.summarize_runs(
+        "Toolbox",
+        runs,
+        "kratos-tools-web_search",
+        14.0,
+    )
+
+    failures = compare.observation_threshold_failures(metrics, 1.0, 41_600, 0.014)
+
+    assert any("pass rate" in failure for failure in failures)
+    assert any("p95" in failure for failure in failures)
+    assert any("not observable for every expected call" in failure for failure in failures)
 
 
 def test_summarizes_invocation_errors_as_failed_runs() -> None:
@@ -121,6 +232,14 @@ def test_web_search_contract_rejects_unsupported_citation() -> None:
     failures = compare.web_search_contract_failures(run, "kratos-tools-web_search")
 
     assert any("not present in tool evidence" in failure for failure in failures)
+
+
+def test_web_search_contract_accepts_trailing_slash_canonicalization() -> None:
+    response, tool_output = _grounded_response()
+    response = response.replace("https://example.com/source-5", "https://EXAMPLE.com/source-5/#section")
+    run = _run(10_000, "kratos-tools-web_search", response=response, tool_output=tool_output)
+
+    assert compare.web_search_contract_failures(run, "kratos-tools-web_search") == []
 
 
 def test_web_search_contract_rejects_non_concise_items() -> None:

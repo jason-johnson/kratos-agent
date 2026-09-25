@@ -146,7 +146,14 @@ async def web_search(params: WebSearchParams) -> dict:
             (t1 - t0) * 1000,
             (time.monotonic() - t1) * 1000,
         )
-        return {"text": text, "citations": citations, "query": query}
+        span.set_attribute("kratos.tool.billing.unit", "transaction")
+        span.set_attribute("kratos.tool.billing.quantity", 1)
+        return {
+            "text": text,
+            "citations": citations,
+            "query": query,
+            "billing": {"unit": "transaction", "quantity": 1},
+        }
 
 
 # ─── RAG Search ──────────────────────────────────────────────────────────────

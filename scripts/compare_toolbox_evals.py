@@ -20,6 +20,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import run_evals
 
@@ -32,6 +33,9 @@ class RunMetrics:
     median_ms: float
     p95_ms: float
     tools: tuple[str, ...]
+    billable_transactions: int = 0
+    unobservable_billable_calls: int = 0
+    estimated_cost_usd: float | None = None
 
     @property
     def pass_rate(self) -> float:
@@ -98,6 +102,12 @@ def _urls(text: str) -> list[str]:
     return [url.rstrip(".,;:") for url in re.findall(r"https?://[^\s)>\]]+", text)]
 
 
+def _canonical_url(url: str) -> str:
+    parsed = urlsplit(url)
+    path = parsed.path.rstrip("/") or "/"
+    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, ""))
+
+
 def web_search_contract_failures(run: dict[str, Any], expected_tool: str) -> list[str]:
     failures: list[str] = []
     results = run.get("results") or []
@@ -118,7 +128,7 @@ def web_search_contract_failures(run: dict[str, Any], expected_tool: str) -> lis
         return failures
 
     evidence = "\n".join(str(event.get("output") or event.get("result") or "") for event in tool_events)
-    evidence_urls = set(_urls(evidence))
+    evidence_urls = {_canonical_url(url) for url in _urls(evidence)}
     for number, match in enumerate(matches, start=1):
         item = match.group(2).strip()
         if "\n" in item:
@@ -127,7 +137,7 @@ def web_search_contract_failures(run: dict[str, Any], expected_tool: str) -> lis
         if len(item_urls) != 1:
             failures.append(f"item {number} must contain exactly one source citation")
         for url in item_urls:
-            if url not in evidence_urls:
+            if _canonical_url(url) not in evidence_urls:
                 failures.append(f"item {number} citation is not present in tool evidence: {url}")
 
         prose = re.sub(r"https?://[^\s)>\]]+", "", item)
@@ -154,7 +164,37 @@ def _tool_names(run: dict[str, Any]) -> set[str]:
     }
 
 
-def summarize_runs(label: str, runs: list[dict[str, Any]], expected_tool: str | None = None) -> RunMetrics:
+def _billing_metrics(run: dict[str, Any], expected_tool: str | None) -> tuple[int, int]:
+    transactions = 0
+    unobservable_calls = 0
+    for result in run.get("results") or []:
+        for event in result.get("tool_calls") or []:
+            if event.get("status") != "completed" or (expected_tool and event.get("skillName") != expected_tool):
+                continue
+            billing = event.get("billing")
+            if not isinstance(billing, dict):
+                output = event.get("output") or event.get("result") or {}
+                if isinstance(output, str):
+                    try:
+                        output = json.loads(output)
+                    except json.JSONDecodeError:
+                        output = {}
+                billing = output.get("billing") if isinstance(output, dict) else None
+            if isinstance(billing, dict) and billing.get("unit") == "transaction":
+                quantity = billing.get("quantity")
+                if isinstance(quantity, int) and not isinstance(quantity, bool) and quantity >= 0:
+                    transactions += quantity
+                    continue
+            unobservable_calls += 1
+    return transactions, unobservable_calls
+
+
+def summarize_runs(
+    label: str,
+    runs: list[dict[str, Any]],
+    expected_tool: str | None = None,
+    cost_per_1000_usd: float | None = None,
+) -> RunMetrics:
     durations = [
         float(result.get("duration_ms", 0))
         for run in runs
@@ -166,6 +206,9 @@ def summarize_runs(label: str, runs: list[dict[str, Any]], expected_tool: str | 
     ordered = sorted(durations)
     p95_index = max(0, math.ceil(0.95 * len(ordered)) - 1)
     tools = sorted({tool for run in runs for tool in _tool_names(run)})
+    billing_metrics = [_billing_metrics(run, expected_tool) for run in runs]
+    billable_transactions = sum(transactions for transactions, _ in billing_metrics)
+    unobservable_billable_calls = sum(unobservable for _, unobservable in billing_metrics)
     return RunMetrics(
         label=label,
         runs=len(runs),
@@ -176,6 +219,11 @@ def summarize_runs(label: str, runs: list[dict[str, Any]], expected_tool: str | 
         median_ms=statistics.median(durations),
         p95_ms=ordered[p95_index],
         tools=tuple(tools),
+        billable_transactions=billable_transactions,
+        unobservable_billable_calls=unobservable_billable_calls,
+        estimated_cost_usd=(
+            billable_transactions * cost_per_1000_usd / 1000 if cost_per_1000_usd is not None else None
+        ),
     )
 
 
@@ -184,6 +232,7 @@ def threshold_failures(
     toolbox: RunMetrics,
     min_pass_rate: float,
     max_p95_regression: float,
+    max_cost_regression: float = 0.20,
 ) -> list[str]:
     failures = []
     if local.pass_rate < min_pass_rate:
@@ -200,6 +249,61 @@ def threshold_failures(
         failures.append("local runs did not invoke web_search")
     if "kratos-tools-web_search" not in toolbox.tools:
         failures.append("Toolbox runs did not invoke kratos-tools-web_search")
+    if (local.estimated_cost_usd is None) != (toolbox.estimated_cost_usd is None):
+        failures.append("cost estimates must be enabled for both local and Toolbox runs")
+    elif local.estimated_cost_usd is not None and toolbox.estimated_cost_usd is not None:
+        if local.unobservable_billable_calls or toolbox.unobservable_billable_calls:
+            failures.append(
+                "billable Web Search transactions were not observable for every expected call "
+                f"(local missing={local.unobservable_billable_calls}, "
+                f"Toolbox missing={toolbox.unobservable_billable_calls})"
+            )
+        elif local.billable_transactions == 0 or toolbox.billable_transactions == 0:
+            failures.append("billable Web Search transactions were not observable in both modes")
+        else:
+            local_cost_per_run = local.estimated_cost_usd / local.runs
+            toolbox_cost_per_run = toolbox.estimated_cost_usd / toolbox.runs
+            allowed_cost = local_cost_per_run * (1 + max_cost_regression)
+            if toolbox_cost_per_run > allowed_cost:
+                failures.append(
+                    f"Toolbox estimated cost/run ${toolbox_cost_per_run:.6f} exceeds "
+                    f"local ${local_cost_per_run:.6f} by more than {max_cost_regression:.0%}"
+                )
+    return failures
+
+
+def observation_threshold_failures(
+    metrics: RunMetrics,
+    min_pass_rate: float,
+    max_p95_ms: float,
+    max_cost_per_run_usd: float,
+) -> list[str]:
+    failures = []
+    if metrics.pass_rate < min_pass_rate:
+        failures.append(f"Toolbox pass rate {metrics.pass_rate:.0%} is below {min_pass_rate:.0%}")
+    if metrics.p95_ms > max_p95_ms:
+        failures.append(
+            f"Toolbox p95 {metrics.p95_ms / 1000:.1f}s exceeds "
+            f"the observation limit of {max_p95_ms / 1000:.1f}s"
+        )
+    if "kratos-tools-web_search" not in metrics.tools:
+        failures.append("Toolbox runs did not invoke kratos-tools-web_search")
+    if metrics.estimated_cost_usd is None:
+        failures.append("Toolbox estimated cost is not enabled")
+    elif metrics.unobservable_billable_calls:
+        failures.append(
+            "billable Web Search transactions were not observable for every expected call "
+            f"(Toolbox missing={metrics.unobservable_billable_calls})"
+        )
+    elif metrics.billable_transactions == 0:
+        failures.append("billable Web Search transactions were not observable")
+    else:
+        cost_per_run = metrics.estimated_cost_usd / metrics.runs
+        if cost_per_run - max_cost_per_run_usd > 1e-12:
+            failures.append(
+                f"Toolbox estimated cost/run ${cost_per_run:.6f} exceeds "
+                f"the observation limit of ${max_cost_per_run_usd:.6f}"
+            )
     return failures
 
 
@@ -233,10 +337,17 @@ def _measure(label: str, count: int, use_case: str, scenario: str) -> list[dict[
 
 
 def _print_metrics(metrics: RunMetrics) -> None:
+    cost = (
+        f" transactions={metrics.billable_transactions} "
+        f"unobservable_calls={metrics.unobservable_billable_calls} "
+        f"estimated_cost=${metrics.estimated_cost_usd:.6f}"
+        if metrics.estimated_cost_usd is not None
+        else ""
+    )
     print(
         f"{metrics.label:<8} pass={metrics.passed}/{metrics.runs} "
         f"median={metrics.median_ms / 1000:.1f}s p95={metrics.p95_ms / 1000:.1f}s "
-        f"tools={','.join(metrics.tools) or 'none'}"
+        f"tools={','.join(metrics.tools) or 'none'}{cost}"
     )
 
 
@@ -248,15 +359,43 @@ def main() -> int:
     parser.add_argument("--runs", type=int, default=5, choices=range(2, 21))
     parser.add_argument("--min-pass-rate", type=float, default=1.0)
     parser.add_argument("--max-p95-regression", type=float, default=0.20)
+    parser.add_argument("--local-cost-per-1000-usd", type=float)
+    parser.add_argument("--toolbox-cost-per-1000-usd", type=float)
+    parser.add_argument("--max-cost-regression", type=float, default=0.20)
+    parser.add_argument("--observe-toolbox-only", action="store_true")
+    parser.add_argument("--max-observation-p95-seconds", type=float)
+    parser.add_argument("--max-observation-cost-per-run-usd", type=float)
     parser.add_argument("--confirm-disruptive", action="store_true")
     args = parser.parse_args()
 
-    if not args.confirm_disruptive:
+    if not args.observe_toolbox_only and not args.confirm_disruptive:
         parser.error("--confirm-disruptive is required because this command redeploys the Hosted Agent twice")
+    if args.observe_toolbox_only and args.confirm_disruptive:
+        parser.error("--confirm-disruptive cannot be combined with --observe-toolbox-only")
     if not 0 <= args.min_pass_rate <= 1:
         parser.error("--min-pass-rate must be between 0 and 1")
     if args.max_p95_regression < 0:
         parser.error("--max-p95-regression must be non-negative")
+    if args.max_cost_regression < 0:
+        parser.error("--max-cost-regression must be non-negative")
+    if not args.observe_toolbox_only and (
+        (args.local_cost_per_1000_usd is None) != (args.toolbox_cost_per_1000_usd is None)
+    ):
+        parser.error("both cost-per-1000 values are required to enable the cost gate")
+    if args.observe_toolbox_only and args.local_cost_per_1000_usd is not None:
+        parser.error("--local-cost-per-1000-usd cannot be combined with --observe-toolbox-only")
+    if args.observe_toolbox_only and args.toolbox_cost_per_1000_usd is None:
+        parser.error("--toolbox-cost-per-1000-usd is required with --observe-toolbox-only")
+    if args.observe_toolbox_only and args.max_observation_p95_seconds is None:
+        parser.error("--max-observation-p95-seconds is required with --observe-toolbox-only")
+    if args.observe_toolbox_only and args.max_observation_cost_per_run_usd is None:
+        parser.error("--max-observation-cost-per-run-usd is required with --observe-toolbox-only")
+    if any(rate is not None and rate < 0 for rate in (args.local_cost_per_1000_usd, args.toolbox_cost_per_1000_usd)):
+        parser.error("cost-per-1000 values must be non-negative")
+    if args.max_observation_p95_seconds is not None and args.max_observation_p95_seconds < 0:
+        parser.error("--max-observation-p95-seconds must be non-negative")
+    if args.max_observation_cost_per_run_usd is not None and args.max_observation_cost_per_run_usd < 0:
+        parser.error("--max-observation-cost-per-run-usd must be non-negative")
     if _azd_value("AZURE_ENV_NAME") != args.environment:
         parser.error("--environment must match the currently selected azd environment")
     if _azd_value("TOOLBOX_ENABLED").lower() != "true":
@@ -265,6 +404,26 @@ def main() -> int:
     backend_url = _azd_optional_value("AGENT_SERVICE_DIRECT_URL") or _azd_value("AGENT_SERVICE_URL")
     run_evals.BACKEND_URL = backend_url.rstrip("/")
     _verify_deployed_scenario(args.use_case, args.scenario)
+
+    if args.observe_toolbox_only:
+        toolbox_runs = _measure("Toolbox observation", args.runs, args.use_case, args.scenario)
+        use_contract_gate = args.scenario == "web-search-ai-trends"
+        toolbox = summarize_runs(
+            "Toolbox",
+            toolbox_runs,
+            "kratos-tools-web_search" if use_contract_gate else None,
+            args.toolbox_cost_per_1000_usd,
+        )
+        _print_metrics(toolbox)
+        failures = observation_threshold_failures(
+            toolbox,
+            args.min_pass_rate,
+            args.max_observation_p95_seconds * 1000,
+            args.max_observation_cost_per_run_usd,
+        )
+        for failure in failures:
+            print(f"FAIL: {failure}", file=sys.stderr)
+        return 1 if failures else 0
 
     restored = False
     try:
@@ -279,16 +438,28 @@ def main() -> int:
             _deploy(args.environment, True)
 
     use_contract_gate = args.scenario == "web-search-ai-trends"
-    local = summarize_runs("local", local_runs, "web_search" if use_contract_gate else None)
+    local = summarize_runs(
+        "local",
+        local_runs,
+        "web_search" if use_contract_gate else None,
+        args.local_cost_per_1000_usd,
+    )
     toolbox = summarize_runs(
         "Toolbox",
         toolbox_runs,
         "kratos-tools-web_search" if use_contract_gate else None,
+        args.toolbox_cost_per_1000_usd,
     )
     print()
     _print_metrics(local)
     _print_metrics(toolbox)
-    failures = threshold_failures(local, toolbox, args.min_pass_rate, args.max_p95_regression)
+    failures = threshold_failures(
+        local,
+        toolbox,
+        args.min_pass_rate,
+        args.max_p95_regression,
+        args.max_cost_regression,
+    )
     for failure in failures:
         print(f"FAIL: {failure}", file=sys.stderr)
     return 1 if failures else 0
