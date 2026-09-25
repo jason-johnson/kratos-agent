@@ -49,6 +49,8 @@ services:
                 OBO_MCP_SERVER_MCP_URL: ${OBO_MCP_SERVER_MCP_URL}
                 OBO_MCP_SERVER_NAME: graph-obo
                 TOOLBOX_ENABLED: ${TOOLBOX_ENABLED=false}
+                TOOLBOX_CODE_INTERPRETER_ENABLED: ${TOOLBOX_CODE_INTERPRETER_ENABLED=false}
+                TOOLBOX_CODE_INTERPRETER_VERSION: ${TOOLBOX_CODE_INTERPRETER_VERSION=0}
                 TOOLBOX_NAME: kratos-tools
     obo-mcp-server:
         project: ./src/obo-mcp-server

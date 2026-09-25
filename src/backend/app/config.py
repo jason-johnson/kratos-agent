@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     # the rollback path. The pilot replaces web_search only for the generic persona.
     toolbox_enabled: bool = False
     toolbox_name: str = "kratos-tools"
+    toolbox_code_interpreter_enabled: bool = False
+    toolbox_code_interpreter_version: str = ""
 
     # Hosted-agent keep-warm — the backend keeps a small pool of pre-provisioned,
     # UNCLAIMED hosted-agent sandboxes ready. Each new conversation claims its own

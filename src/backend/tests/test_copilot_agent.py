@@ -84,6 +84,51 @@ def test_foundry_toolbox_prompt_guidance_is_disabled_with_toolbox(settings):
     assert agent._apply_toolbox_prompt("generic", "Base prompt") == "Base prompt"
 
 
+def test_code_interpreter_pilot_uses_immutable_version_for_generic_only(settings):
+    agent = CopilotAgent(
+        settings.model_copy(
+            update={
+                "toolbox_enabled": True,
+                "toolbox_code_interpreter_enabled": True,
+                "toolbox_code_interpreter_version": "5",
+                "foundry_project_endpoint": "https://example.test/api/projects/project",
+            }
+        )
+    )
+
+    assert agent._toolbox_code_interpreter_endpoint() == (
+        "https://example.test/api/projects/project/toolboxes/kratos-tools/versions/5/mcp?api-version=v1"
+    )
+    generic_tools = agent._apply_foundry_toolbox_tools("generic", ALL_TOOLS)
+    generic_names = {tool.name for tool in generic_tools}
+    assert "code_interpreter" not in generic_names
+    assert "kratos-tools-code_interpreter" in generic_names
+    assert agent._apply_foundry_toolbox_tools("finance-close", ALL_TOOLS) is ALL_TOOLS
+
+    prompt = agent._apply_toolbox_prompt("generic", "Base prompt")
+    assert "kratos-tools-code_interpreter" in prompt
+    assert "synthetic, no-file computation" in prompt
+    assert "user-uploaded data" in prompt
+
+
+def test_code_interpreter_pilot_rejects_unpinned_version(settings):
+    agent = CopilotAgent(
+        settings.model_copy(
+            update={
+                "toolbox_enabled": True,
+                "toolbox_code_interpreter_enabled": True,
+                "toolbox_code_interpreter_version": "latest",
+                "foundry_project_endpoint": "https://example.test/api/projects/project",
+            }
+        )
+    )
+
+    assert agent._toolbox_code_interpreter_endpoint() == ""
+    generic_names = {tool.name for tool in agent._apply_foundry_toolbox_tools("generic", ALL_TOOLS)}
+    assert "code_interpreter" in generic_names
+    assert "kratos-tools-code_interpreter" not in generic_names
+
+
 @pytest.mark.asyncio
 async def test_foundry_toolbox_auth_is_renewable_and_endpoint_scoped(settings):
     """Mint Foundry tokens only for the configured Toolbox endpoint."""

@@ -92,6 +92,56 @@ async def test_bridge_sends_documented_search_query(monkeypatch):
     credential.close.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_code_interpreter_bridge_sends_code_only(monkeypatch):
+    credential = AsyncMock()
+    credential.get_token.return_value = SimpleNamespace(token="-".join(("test", "token")))
+    monkeypatch.setattr(toolbox_tools, "DefaultAzureCredential", lambda: credential)
+
+    initialize_response = SimpleNamespace(
+        headers={"mcp-session-id": "session-1", "content-type": "application/json"},
+        json=lambda: {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-03-26"}},
+        raise_for_status=lambda: None,
+    )
+    notification_response = SimpleNamespace()
+    tool_response = SimpleNamespace(
+        headers={"content-type": "application/json"},
+        json=lambda: {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {"content": [{"type": "text", "text": "result=404"}], "isError": False},
+        },
+        raise_for_status=lambda: None,
+    )
+    client = AsyncMock(headers={})
+    client.__aenter__.return_value = client
+    client.__aexit__.return_value = None
+    client.post.side_effect = [initialize_response, notification_response, tool_response]
+    monkeypatch.setattr(toolbox_tools.httpx, "AsyncClient", lambda **_kwargs: client)
+
+    result = await toolbox_tools._call_toolbox_code_interpreter(
+        "https://toolbox.example/mcp", "print(sum(value * value for value in [3, 7, 11, 15]))"
+    )
+
+    tool_call = client.post.await_args_list[2].kwargs["json"]
+    assert tool_call["params"] == {
+        "name": "code_interpreter",
+        "arguments": {"code": "print(sum(value * value for value in [3, 7, 11, 15]))"},
+    }
+    assert result == {"text": "result=404", "billing": {"unit": "session", "quantity": 1}}
+
+
+def test_code_interpreter_normalizer_fails_closed_on_tool_error():
+    normalized = toolbox_tools._normalize_code_interpreter_result(
+        {"content": [{"type": "text", "text": "Execution failed"}], "isError": True}
+    )
+
+    assert normalized == {
+        "error": "Execution failed",
+        "billing": {"unit": "session", "quantity": 1},
+    }
+
+
 def test_parse_mcp_sse_response():
     response = toolbox_tools.httpx.Response(
         200,

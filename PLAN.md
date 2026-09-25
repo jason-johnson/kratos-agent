@@ -234,11 +234,20 @@ Current platform constraints, verified against Microsoft documentation on 2026-0
 
 Experiment sequence:
 
-1. Confirm Code Interpreter availability for the deployed model in Sweden Central and add it to a non-default Toolbox version.
-2. Add an application-owned `code_interpreter` MCP bridge with no-file math coverage, session billing telemetry, and fail-closed output normalization.
-3. Run the pure-math local-versus-Toolbox comparison with synthetic inputs only.
+1. [x] Confirm Code Interpreter availability for the deployed model in Sweden Central and add it to a non-default Toolbox version.
+2. [x] Add an application-owned `code_interpreter` MCP bridge with no-file math coverage, session billing telemetry, and fail-closed output normalization.
+3. [ ] Run the pure-math local-versus-Toolbox comparison with synthetic inputs only.
 4. Separately prove generated-file download translation and file cleanup using non-sensitive synthetic data.
 5. Stop without promotion if project-shared container context cannot meet Kratos's user-isolation requirements.
+
+No-file pilot result on 2026-09-25:
+
+- Created immutable Toolbox version 5 with `web_search` and `code_interpreter`; the creation check confirmed the published default remained version 1.
+- Called the version-specific MCP endpoint directly with a `code`-only synthetic standard-library program. `tools/list` exposed only the expected `search_query` and `code` required fields, and Code Interpreter returned mean 9, hypotenuse 5, and sum of squares 404 without an MCP error or file input.
+- Added a disabled-by-default, numeric-version-pinned application bridge for the generic persona. It replaces the local interpreter only when both pilot settings are explicitly enabled, normalizes text output fail-closed, and emits one billable `session` per successful managed call.
+- One local `generic/code-interpreter-math` baseline completed in 31.7 seconds without calling an interpreter; evaluator scores were Task Adherence 1, Intent Resolution 4, Coherence 4, Relevance 3, and Tool Call Accuracy 2. This is not an acceptable promotion baseline.
+- The first hosted-agent pilot deploy used disabled defaults because the new azd values had not been persisted. A subsequent preflight did not return reliable Toolbox default metadata, so the managed end-to-end eval was not attempted again. The azd pilot controls were reset to disabled/version 0. Version 5 was not published or promoted.
+- Stop here before file experiments or production promotion: the direct capability is proven, but an application-routed managed eval, generated-file translation, and project-user isolation remain unresolved.
 
 ## Phase 3: Foundry Evaluation Expansion (Web Search Complete; Reuse Pending)
 

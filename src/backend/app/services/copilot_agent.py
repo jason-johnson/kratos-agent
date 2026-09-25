@@ -36,7 +36,7 @@ from app.config import Settings
 from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UsageEvent, UserInputRequestEvent
 from app.observability import operation_duration_histogram, token_usage_histogram
 from app.services.skill_tools import ALL_TOOLS, _ctx_conversation_id, _ctx_eval_run_id, _ctx_use_case
-from app.services.toolbox_tools import create_toolbox_web_search_tool
+from app.services.toolbox_tools import create_toolbox_code_interpreter_tool, create_toolbox_web_search_tool
 
 if TYPE_CHECKING:
     from app.services.cosmos_service import CosmosService
@@ -353,13 +353,40 @@ class CopilotAgent:
             return ""
         return f"{project_endpoint}/toolboxes/{self.settings.toolbox_name}/mcp?api-version=v1"
 
+    def _toolbox_code_interpreter_endpoint(self) -> str:
+        """Return an immutable Toolbox endpoint only for an explicit pilot version."""
+        version_label = self.settings.toolbox_code_interpreter_version
+        if (
+            not self.settings.toolbox_enabled
+            or not self.settings.toolbox_code_interpreter_enabled
+            or not self.settings.toolbox_name
+            or not re.fullmatch(r"[1-9][0-9]*", version_label)
+        ):
+            return ""
+        project_endpoint = self.settings.foundry_project_endpoint.rstrip("/")
+        if not project_endpoint:
+            return ""
+        return (
+            f"{project_endpoint}/toolboxes/{self.settings.toolbox_name}/versions/"
+            f"{version_label}/mcp?api-version=v1"
+        )
+
     def _apply_foundry_toolbox_tools(self, use_case: str, enabled_tools: list) -> list:
-        """Replace local web search with the metadata-preserving Toolbox bridge."""
-        endpoint = self._toolbox_endpoint()
-        if use_case != DEFAULT_USE_CASE or not endpoint:
+        """Replace opted-in local tools with application-owned Toolbox bridges."""
+        web_search_endpoint = self._toolbox_endpoint()
+        code_interpreter_endpoint = self._toolbox_code_interpreter_endpoint()
+        if use_case != DEFAULT_USE_CASE or not (web_search_endpoint or code_interpreter_endpoint):
             return enabled_tools
-        tools = [tool for tool in enabled_tools if tool.name != "web_search"]
-        tools.append(create_toolbox_web_search_tool(endpoint))
+        replaced_names = set()
+        if web_search_endpoint:
+            replaced_names.add("web_search")
+        if code_interpreter_endpoint:
+            replaced_names.add("code_interpreter")
+        tools = [tool for tool in enabled_tools if tool.name not in replaced_names]
+        if web_search_endpoint:
+            tools.append(create_toolbox_web_search_tool(web_search_endpoint))
+        if code_interpreter_endpoint:
+            tools.append(create_toolbox_code_interpreter_tool(code_interpreter_endpoint))
         return tools
 
     async def _handle_mcp_auth_request(self, request: dict, _context: dict) -> dict:
@@ -461,17 +488,30 @@ class CopilotAgent:
 
     def _apply_toolbox_prompt(self, use_case: str, prompt: str) -> str:
         """Add routing guidance only while the generic Toolbox pilot is active."""
-        if use_case != DEFAULT_USE_CASE or not self._toolbox_endpoint():
+        if use_case != DEFAULT_USE_CASE:
             return prompt
-        return (
-            f"{prompt}\n\n## Foundry Toolbox Web Search\n\n"
-            "For web research, call kratos-tools-web_search once first. Cite only URLs in its citations list; "
-            "when that list is empty, do not provide links. Retry it at most once, and only "
-            "when the first result does not contain enough evidence to answer the request. Do not call web_fetch "
-            "unless the user explicitly asks you to open or inspect a specific page. Do not narrate the search, "
-            "announce progress, or add a preamble. When the user specifies an exact response format or says "
-            '"nothing else," begin directly with the requested content and follow that format exactly.'
-        )
+        guidance = []
+        if self._toolbox_endpoint():
+            guidance.append(
+                "## Foundry Toolbox Web Search\n\n"
+                "For web research, call kratos-tools-web_search once first. Cite only URLs in its citations list; "
+                "when that list is empty, do not provide links. Retry it at most once, and only "
+                "when the first result does not contain enough evidence to answer the request. Do not call "
+                "web_fetch unless the user explicitly asks you to open or inspect a specific page. Do not "
+                "narrate the search, announce progress, or add a preamble. When the user specifies an exact "
+                'response format or says "nothing else," begin directly with the requested content and follow '
+                "that format exactly."
+            )
+        if self._toolbox_code_interpreter_endpoint():
+            guidance.append(
+                "## Foundry Toolbox Code Interpreter Pilot\n\n"
+                "Use kratos-tools-code_interpreter only for synthetic, no-file computation. Pass only Python "
+                "source in its code field. Do not use files, user-uploaded data, environment values, secrets, "
+                "network access, or package installation."
+            )
+        if not guidance:
+            return prompt
+        return f"{prompt}\n\n" + "\n\n".join(guidance)
 
     def set_cosmos_service(self, cosmos_service: "CosmosService") -> None:
         """Inject the Cosmos service for session persistence."""

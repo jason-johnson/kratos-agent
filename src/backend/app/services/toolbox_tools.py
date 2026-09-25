@@ -24,6 +24,10 @@ class ToolboxWebSearchParams(BaseModel):
     search_query: str = Field(description="The search query to look up on the public web")
 
 
+class ToolboxCodeInterpreterParams(BaseModel):
+    code: str = Field(description="Python code to execute in the managed sandbox")
+
+
 def _collect_urls(value: object) -> list[str]:
     urls: list[str] = []
     if isinstance(value, Mapping):
@@ -86,12 +90,8 @@ def _parse_mcp_response(response: httpx.Response) -> dict:
     raise ValueError("Toolbox returned an empty MCP event stream")
 
 
-async def _call_toolbox_web_search(endpoint: str, search_query: str) -> dict:
-    if not search_query.strip():
-        return {"error": "Missing required search_query for Toolbox web search"}
-
+async def _call_toolbox_tool(endpoint: str, tool_name: str, arguments: dict) -> dict:
     credential = DefaultAzureCredential()
-    started = time.monotonic()
     try:
         token = await credential.get_token("https://ai.azure.com/.default")
         headers = {
@@ -132,21 +132,30 @@ async def _call_toolbox_web_search(endpoint: str, search_query: str) -> dict:
                     "id": 2,
                     "method": "tools/call",
                     "params": {
-                        "name": "web_search",
-                        "arguments": {"search_query": search_query},
+                        "name": tool_name,
+                        "arguments": arguments,
                     },
                 },
             )
             tool_response.raise_for_status()
             tool_payload = _parse_mcp_response(tool_response)
             if error := tool_payload.get("error"):
-                raise ValueError(f"Toolbox web_search failed: {error}")
-            result = tool_payload.get("result") or {}
+                raise ValueError(f"Toolbox {tool_name} failed: {error}")
+            return tool_payload.get("result") or {}
+    finally:
+        await credential.close()
+
+
+async def _call_toolbox_web_search(endpoint: str, search_query: str) -> dict:
+    if not search_query.strip():
+        return {"error": "Missing required search_query for Toolbox web search"}
+
+    started = time.monotonic()
+    try:
+        result = await _call_toolbox_tool(endpoint, "web_search", {"search_query": search_query})
     except Exception as exc:
         logger.exception("Toolbox web search failed")
         return {"error": f"Toolbox web search failed: {exc}"}
-    finally:
-        await credential.close()
 
     normalized = _normalize_web_search_result(result, search_query)
     logger.info(
@@ -156,6 +165,32 @@ async def _call_toolbox_web_search(endpoint: str, search_query: str) -> dict:
         (time.monotonic() - started) * 1000,
     )
     return normalized
+
+
+def _normalize_code_interpreter_result(result: Mapping) -> dict:
+    text = "\n\n".join(
+        item["text"]
+        for item in result.get("content", [])
+        if item.get("type") == "text" and isinstance(item.get("text"), str)
+    )
+    response: dict[str, object] = {"billing": {"unit": "session", "quantity": 1}}
+    if result.get("isError") or not text:
+        response["error"] = text or "Toolbox Code Interpreter returned no output"
+    else:
+        response["text"] = text
+    return response
+
+
+async def _call_toolbox_code_interpreter(endpoint: str, code: str) -> dict:
+    if not code.strip():
+        return {"error": "Missing required code for Toolbox Code Interpreter"}
+
+    try:
+        result = await _call_toolbox_tool(endpoint, "code_interpreter", {"code": code})
+    except Exception as exc:
+        logger.exception("Toolbox Code Interpreter failed")
+        return {"error": f"Toolbox Code Interpreter failed: {exc}"}
+    return _normalize_code_interpreter_result(result)
 
 
 def create_toolbox_web_search_tool(endpoint: str):
@@ -175,3 +210,18 @@ def create_toolbox_web_search_tool(endpoint: str):
             return result
 
     return toolbox_web_search
+
+
+def create_toolbox_code_interpreter_tool(endpoint: str):
+    """Create the code-only Toolbox Code Interpreter pilot tool."""
+
+    @define_tool(
+        name="kratos-tools-code_interpreter",
+        description="Execute Python computations in Microsoft Foundry Code Interpreter without file inputs.",
+    )
+    async def toolbox_code_interpreter(params: ToolboxCodeInterpreterParams) -> dict:
+        with tracer.start_as_current_span("skill.toolbox_code_interpreter") as span:
+            _set_kratos_attrs(span)
+            return await _call_toolbox_code_interpreter(endpoint, params.code)
+
+    return toolbox_code_interpreter
