@@ -505,9 +505,11 @@ class CopilotAgent:
         if self._toolbox_code_interpreter_endpoint():
             guidance.append(
                 "## Foundry Toolbox Code Interpreter Pilot\n\n"
-                "Use kratos-tools-code_interpreter only for synthetic, no-file computation. Pass only Python "
-                "source in its code field. Do not use files, user-uploaded data, environment values, secrets, "
-                "network access, or package installation."
+                "Use kratos-tools-code_interpreter only for synthetic computation and synthetic generated "
+                "output files. Pass only Python source in its code field. Do not use file inputs, user-uploaded "
+                "data, environment values, secrets, network access, or package installation. When the tool "
+                "returns generated_files, include each exact local path in the final response so Kratos can "
+                "make the requested output downloadable."
             )
         if not guidance:
             return prompt

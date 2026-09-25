@@ -237,7 +237,7 @@ Experiment sequence:
 1. [x] Confirm Code Interpreter availability for the deployed model in Sweden Central and add it to a non-default Toolbox version.
 2. [x] Add an application-owned `code_interpreter` MCP bridge with no-file math coverage, session billing telemetry, and fail-closed output normalization.
 3. [x] Run the pure-math local-versus-Toolbox comparison with synthetic inputs only.
-4. Separately prove generated-file download translation and file cleanup using non-sensitive synthetic data.
+4. [x] Separately prove generated-file download translation and file cleanup using non-sensitive synthetic data.
 5. Stop without promotion if project-shared container context cannot meet Kratos's user-isolation requirements.
 
 No-file pilot result on 2026-09-25:
@@ -249,7 +249,11 @@ No-file pilot result on 2026-09-25:
 - The first hosted-agent pilot deploy used disabled defaults because Foundry injects only variables declared in `src/hosted-agent/agent.yaml`; `azure.yaml` `config.env` is not propagated to the hosted runtime. Both live hosted-agent manifests now declare the disabled-by-default enable and version controls.
 - Two application-routed managed runs completed in 18.5 and 20.3 seconds. Each used exactly one `kratos-tools-code_interpreter` call, exposed one billable session, made no local interpreter call or file reference, and returned both expected values. Task Adherence passed at 1/1, Coherence and Relevance at 4/5, Tool Call Accuracy at 5/5, and Intent Resolution at 5/5 and 4/5. At the current public rate, the two measured runs are estimated at $0.066 total/$0.033 per run.
 - Rollback was exercised by deploying hosted-agent version 41 with the controls disabled/version 0, draining two stale pre-deploy warm sandboxes with no-tool synthetic requests, and confirming a fresh sandbox used only the local interpreter with no session billing. Toolbox version 5 remains immutable and unpromoted; the published default remains Web Search-only version 1.
-- Stop here before file experiments or production promotion: no-file application routing is proven, but generated-file translation and project-user isolation remain unresolved.
+- A direct version-5 synthetic-file probe created a 26-byte CSV with no file input. Toolbox returned text content whose private metadata contained one citation with exactly `container_id`, `file_id`, and `filename`; no file bytes or identifiers were persisted in the repository or logs.
+- The project-scoped container content endpoint returned the exact expected CSV bytes. Deleting that generated file returned HTTP 200, and a follow-up content request returned HTTP 404. The two direct generated-file probes consumed two additional Code Interpreter sessions, estimated at $0.066 total at the current public rate.
+- The application adapter now translates generated-file citations into unique local `/tmp` files for the existing hosted-agent collection flow. It accepts at most five allowlisted output files of at most 10 MiB each, rejects path traversal and unsupported extensions, exposes only local filename/path/size metadata, deletes each Foundry-side file even when download validation fails, and removes partial local output on failure.
+- Generated-output routing remains disabled by default, immutable-version-pinned, generic-only, and restricted to synthetic output with no file inputs, user uploads, environment values, secrets, network access, or package installation. Focused adapter and routing tests pass, but the translated path has not been deployed through the full hosted-agent/frontend route.
+- Stop before production promotion: direct generated-file translation and cleanup are proven, but Toolbox's project-shared container context still fails Kratos's user-isolation requirement.
 
 ## Phase 3: Foundry Evaluation Expansion (Web Search Complete; Reuse Pending)
 

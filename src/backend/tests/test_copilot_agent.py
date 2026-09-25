@@ -107,7 +107,9 @@ def test_code_interpreter_pilot_uses_immutable_version_for_generic_only(settings
 
     prompt = agent._apply_toolbox_prompt("generic", "Base prompt")
     assert "kratos-tools-code_interpreter" in prompt
-    assert "synthetic, no-file computation" in prompt
+    assert "synthetic generated output files" in prompt
+    assert "Do not use file inputs" in prompt
+    assert "include each exact local path" in prompt
     assert "user-uploaded data" in prompt
 
 

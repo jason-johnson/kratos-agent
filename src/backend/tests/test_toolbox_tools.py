@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -138,6 +140,124 @@ def test_code_interpreter_normalizer_fails_closed_on_tool_error():
 
     assert normalized == {
         "error": "Execution failed",
+        "billing": {"unit": "session", "quantity": 1},
+    }
+
+
+@pytest.mark.asyncio
+async def test_downloads_and_deletes_generated_file(monkeypatch):
+    requests = []
+
+    async def handler(request):
+        requests.append((request.method, str(request.url)))
+        if request.method == "GET":
+            return toolbox_tools.httpx.Response(200, content=b"month,value\nJan,10\n")
+        return toolbox_tools.httpx.Response(200)
+
+    monkeypatch.setattr(toolbox_tools, "uuid4", lambda: SimpleNamespace(hex="test-id"))
+    result = {
+        "content": [
+            {
+                "_meta": {
+                    "container_file_citations": json.dumps(
+                        [
+                            {
+                                "container_id": "container-1",
+                                "file_id": "file-1",
+                                "filename": "summary.csv",
+                            }
+                        ]
+                    )
+                }
+            }
+        ]
+    }
+
+    async with toolbox_tools.httpx.AsyncClient(transport=toolbox_tools.httpx.MockTransport(handler)) as client:
+        files = await toolbox_tools._download_generated_files(
+            client, "https://project.example/toolboxes/kratos/versions/5/mcp?api-version=v1", result
+        )
+
+    local_path = Path(files[0]["path"])
+    try:
+        assert files == [{"filename": "summary.csv", "path": "/tmp/toolbox-test-id-summary.csv", "size": 19}]
+        assert local_path.read_bytes() == b"month,value\nJan,10\n"
+        assert [method for method, _url in requests] == ["GET", "DELETE"]
+        assert all("container-1" in url and "file-1" in url for _method, url in requests)
+    finally:
+        local_path.unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_rejects_unsafe_generated_filename_before_download():
+    result = {
+        "content": [
+            {
+                "_meta": {
+                    "container_file_citations": [
+                        {"container_id": "container-1", "file_id": "file-1", "filename": "../secret.txt"}
+                    ]
+                }
+            }
+        ]
+    }
+    client = AsyncMock()
+
+    with pytest.raises(ValueError, match="unsafe generated-file citation"):
+        await toolbox_tools._download_generated_files(
+            client, "https://project.example/toolboxes/kratos/versions/5/mcp?api-version=v1", result
+        )
+
+    client.stream.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_deletes_remote_file_when_download_exceeds_limit(monkeypatch):
+    methods = []
+
+    async def handler(request):
+        methods.append(request.method)
+        if request.method == "GET":
+            return toolbox_tools.httpx.Response(200, content=b"too large")
+        return toolbox_tools.httpx.Response(200)
+
+    monkeypatch.setattr(toolbox_tools, "_MAX_GENERATED_FILE_BYTES", 4)
+    monkeypatch.setattr(toolbox_tools, "uuid4", lambda: SimpleNamespace(hex="oversized"))
+    result = {
+        "content": [
+            {
+                "_meta": {
+                    "container_file_citations": [
+                        {"container_id": "container-1", "file_id": "file-1", "filename": "summary.csv"}
+                    ]
+                }
+            }
+        ]
+    }
+
+    async with toolbox_tools.httpx.AsyncClient(transport=toolbox_tools.httpx.MockTransport(handler)) as client:
+        with pytest.raises(ValueError, match="exceeds the 10 MiB limit"):
+            await toolbox_tools._download_generated_files(
+                client, "https://project.example/toolboxes/kratos/versions/5/mcp?api-version=v1", result
+            )
+
+    assert methods == ["GET", "DELETE"]
+    assert not Path("/tmp/toolbox-oversized-summary.csv").exists()
+
+
+def test_code_interpreter_normalizer_exposes_only_local_generated_file_metadata():
+    normalized = toolbox_tools._normalize_code_interpreter_result(
+        {
+            "content": [{"type": "text", "text": "Created summary.csv"}],
+            "_kratos_generated_files": [
+                {"filename": "summary.csv", "path": "/tmp/toolbox-id-summary.csv", "size": 19}
+            ],
+        }
+    )
+
+    assert normalized == {
+        "text": "Created summary.csv",
+        "generated_files": [{"filename": "summary.csv", "path": "/tmp/toolbox-id-summary.csv", "size": 19}],
         "billing": {"unit": "session", "quantity": 1},
     }
 
