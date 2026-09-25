@@ -44,6 +44,10 @@ template:
       value: graph-obo
     - name: TOOLBOX_ENABLED
       value: ${TOOLBOX_ENABLED=false}
+    - name: TOOLBOX_CODE_INTERPRETER_ENABLED
+      value: ${TOOLBOX_CODE_INTERPRETER_ENABLED=false}
+    - name: TOOLBOX_CODE_INTERPRETER_VERSION
+      value: ${TOOLBOX_CODE_INTERPRETER_VERSION=0}
     - name: TOOLBOX_NAME
       value: kratos-tools
 parameters:
