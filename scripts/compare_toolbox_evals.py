@@ -142,6 +142,7 @@ def web_search_contract_failures(run: dict[str, Any], expected_tool: str) -> lis
 
         prose = re.sub(r"https?://[^\s)>\]]+", "", item)
         prose = re.sub(r"\[[^\]]*\]\([^)]*\)", "", prose)
+        prose = re.sub(r"\b(?:[A-Za-z]\.){2,}", lambda match: match.group(0).replace(".", ""), prose)
         if len(re.findall(r"[.!?](?=\s|$)", prose)) != 1:
             failures.append(f"item {number} must contain one sentence")
     return failures

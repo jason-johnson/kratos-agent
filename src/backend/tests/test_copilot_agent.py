@@ -1,5 +1,6 @@
 """Tests for the Copilot SDK agent service."""
 
+import json
 import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -8,7 +9,7 @@ import pytest
 
 from app.config import Settings
 from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent
-from app.services.copilot_agent import CopilotAgent
+from app.services.copilot_agent import CopilotAgent, _limit_tool_event_output
 from app.services.skill_tools import ALL_TOOLS
 
 
@@ -82,6 +83,23 @@ def test_foundry_toolbox_prompt_guidance_is_disabled_with_toolbox(settings):
     agent = CopilotAgent(settings)
 
     assert agent._apply_toolbox_prompt("generic", "Base prompt") == "Base prompt"
+
+
+def test_tool_event_output_limit_preserves_structured_citations_and_billing():
+    value = {
+        "query": "latest AI trends",
+        "text": "Evidence sentence. " * 1_000,
+        "citations": [{"url": f"https://example.com/source-{index}"} for index in range(5)],
+        "billing": {"unit": "transaction", "quantity": 1},
+    }
+
+    output = _limit_tool_event_output(value, limit=1_000)
+    parsed = json.loads(output)
+
+    assert len(output) <= 1_000
+    assert parsed["text"].endswith("...[text truncated for tool-event storage]")
+    assert parsed["citations"] == value["citations"]
+    assert parsed["billing"] == value["billing"]
 
 
 def test_code_interpreter_pilot_uses_immutable_version_for_generic_only(settings):

@@ -255,6 +255,17 @@ def test_web_search_contract_rejects_non_concise_items() -> None:
     assert any("one sentence" in failure for failure in failures)
 
 
+def test_web_search_contract_does_not_count_dotted_abbreviation_as_another_sentence() -> None:
+    response, tool_output = _grounded_response()
+    response = response.replace(
+        "1. **Trend 1**: One concise description.",
+        "1. **Trend 1**: U.S. adoption has one concise description.",
+    )
+    run = _run(10_000, "web_search", response=response, tool_output=tool_output)
+
+    assert compare.web_search_contract_failures(run, "web_search") == []
+
+
 def test_web_search_contract_rejects_preamble_and_multiline_items() -> None:
     response, tool_output = _grounded_response()
     response = "Here are the results:\n" + response.replace(

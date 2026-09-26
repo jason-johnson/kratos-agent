@@ -133,6 +133,36 @@ def _extract_tool_value(obj) -> str:
     return text
 
 
+def _limit_tool_event_output(obj, limit: int = _TOOL_EVENT_OUTPUT_LIMIT) -> str:
+    text = _extract_tool_value(obj)
+    if len(text) <= limit:
+        return text
+
+    marker = "\n...[text truncated for tool-event storage]"
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return text[: max(0, limit - len(marker))] + marker
+
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("text"), str):
+        return text[: max(0, limit - len(marker))] + marker
+
+    original_text = parsed["text"]
+    low = 0
+    high = len(original_text)
+    best = ""
+    while low <= high:
+        midpoint = (low + high) // 2
+        candidate = {**parsed, "text": original_text[:midpoint] + marker}
+        rendered = json.dumps(candidate, indent=2, ensure_ascii=False)
+        if len(rendered) <= limit:
+            best = rendered
+            low = midpoint + 1
+        else:
+            high = midpoint - 1
+    return best or text[: max(0, limit - len(marker))] + marker
+
+
 def _extract_tool_billing(obj) -> dict[str, str | int] | None:
     if obj is None:
         return None
@@ -1270,7 +1300,7 @@ class CopilotAgent:
                                     ToolCallEvent(
                                         skillName=tool_name,
                                         status="completed" if success is not False else "failed",
-                                        output=_extract_tool_value(raw_output)[:_TOOL_EVENT_OUTPUT_LIMIT],
+                                        output=_limit_tool_event_output(raw_output),
                                         durationMs=duration_ms,
                                         source=self._resolve_skill_source(cid, tool_name),
                                         billing=_extract_tool_billing(raw_output),
