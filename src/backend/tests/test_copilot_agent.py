@@ -79,6 +79,34 @@ def test_foundry_toolbox_adds_generic_web_search_routing_guidance(settings, monk
     assert agent._apply_toolbox_prompt("finance-close", "Base prompt") == "Base prompt"
 
 
+def test_microsoft_learn_toolbox_pilot_replaces_direct_generic_mcp(settings, monkeypatch):
+    monkeypatch.setenv("TOOLBOX_KRATOS_TOOLS_MCP_ENDPOINT", "https://example.test/toolbox/mcp")
+    agent = CopilotAgent(settings.model_copy(update={"toolbox_enabled": True, "toolbox_learn_enabled": True}))
+    direct_servers = {"microsoft-learn": {"url": "https://learn.microsoft.com/api/mcp"}}
+
+    generic_names = {tool.name for tool in agent._apply_foundry_toolbox_tools("generic", ALL_TOOLS)}
+
+    assert {
+        "kratos-tools-microsoft_docs_search",
+        "kratos-tools-microsoft_code_sample_search",
+        "kratos-tools-microsoft_docs_fetch",
+    } <= generic_names
+    assert agent._apply_foundry_toolbox_mcp("generic", direct_servers) == {}
+    assert agent._apply_foundry_toolbox_mcp("finance-close", direct_servers) is direct_servers
+    prompt = agent._apply_toolbox_prompt("generic", "Base prompt")
+    assert "kratos-tools-microsoft_docs_search instead of Web Search" in prompt
+    assert "kratos-tools-microsoft_docs_fetch" in prompt
+    assert "kratos-tools-microsoft_code_sample_search" in prompt
+
+
+def test_microsoft_learn_toolbox_pilot_is_disabled_by_default(copilot_agent):
+    direct_servers = {"microsoft-learn": {"url": "https://learn.microsoft.com/api/mcp"}}
+
+    assert copilot_agent._apply_foundry_toolbox_mcp("generic", direct_servers) is direct_servers
+    generic_names = {tool.name for tool in copilot_agent._apply_foundry_toolbox_tools("generic", ALL_TOOLS)}
+    assert not any(name.startswith("kratos-tools-microsoft_") for name in generic_names)
+
+
 def test_foundry_toolbox_prompt_guidance_is_disabled_with_toolbox(settings):
     agent = CopilotAgent(settings)
 

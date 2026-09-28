@@ -36,7 +36,13 @@ from app.config import Settings
 from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UsageEvent, UserInputRequestEvent
 from app.observability import operation_duration_histogram, token_usage_histogram
 from app.services.skill_tools import ALL_TOOLS, _ctx_conversation_id, _ctx_eval_run_id, _ctx_use_case
-from app.services.toolbox_tools import create_toolbox_code_interpreter_tool, create_toolbox_web_search_tool
+from app.services.toolbox_tools import (
+    create_toolbox_code_interpreter_tool,
+    create_toolbox_microsoft_code_sample_search_tool,
+    create_toolbox_microsoft_docs_fetch_tool,
+    create_toolbox_microsoft_docs_search_tool,
+    create_toolbox_web_search_tool,
+)
 
 if TYPE_CHECKING:
     from app.services.cosmos_service import CosmosService
@@ -417,7 +423,21 @@ class CopilotAgent:
             tools.append(create_toolbox_web_search_tool(web_search_endpoint))
         if code_interpreter_endpoint:
             tools.append(create_toolbox_code_interpreter_tool(code_interpreter_endpoint))
+        if self.settings.toolbox_learn_enabled:
+            tools.extend(
+                (
+                    create_toolbox_microsoft_docs_search_tool(web_search_endpoint),
+                    create_toolbox_microsoft_code_sample_search_tool(web_search_endpoint),
+                    create_toolbox_microsoft_docs_fetch_tool(web_search_endpoint),
+                )
+            )
         return tools
+
+    def _apply_foundry_toolbox_mcp(self, use_case: str, mcp_servers: dict) -> dict:
+        """Remove the direct Learn MCP only while its Toolbox pilot is active."""
+        if use_case != DEFAULT_USE_CASE or not self.settings.toolbox_learn_enabled or not self._toolbox_endpoint():
+            return mcp_servers
+        return {name: server for name, server in mcp_servers.items() if name != "microsoft-learn"}
 
     async def _handle_mcp_auth_request(self, request: dict, _context: dict) -> dict:
         """Supply a renewable agent-identity token only to the trusted Toolbox."""
@@ -531,6 +551,15 @@ class CopilotAgent:
                 "narrate the search, announce progress, or add a preamble. When the user specifies an exact "
                 'response format or says "nothing else," begin directly with the requested content and follow '
                 "that format exactly."
+            )
+        if self.settings.toolbox_learn_enabled and self._toolbox_endpoint():
+            guidance.append(
+                "## Foundry Toolbox Microsoft Learn Pilot\n\n"
+                "For Microsoft product and Azure documentation, use "
+                "kratos-tools-microsoft_docs_search instead of Web Search. Fetch the highest-value result with "
+                "kratos-tools-microsoft_docs_fetch when full procedures or prerequisites are needed. Use "
+                "kratos-tools-microsoft_code_sample_search before providing Microsoft-specific code. Cite only "
+                "URLs returned in the tools' citations lists."
             )
         if self._toolbox_code_interpreter_endpoint():
             guidance.append(
@@ -910,6 +939,7 @@ class CopilotAgent:
 
             use_case = self._conversation_use_cases.get(conversation_id, DEFAULT_USE_CASE)
             enabled_tools = self._apply_foundry_toolbox_tools(use_case, enabled_tools)
+            mcp_servers = self._apply_foundry_toolbox_mcp(use_case, mcp_servers)
 
             # Inject the signed-in user's OBO tokens as Authorization headers on the
             # matching remote MCP servers (and auto-add the env-configured OBO server

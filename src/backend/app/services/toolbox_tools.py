@@ -38,6 +38,19 @@ class ToolboxCodeInterpreterParams(BaseModel):
     code: str = Field(description="Python code to execute in the managed sandbox")
 
 
+class ToolboxMicrosoftDocsSearchParams(BaseModel):
+    query: str = Field(description="Microsoft product or Azure documentation topic to search for")
+
+
+class ToolboxMicrosoftCodeSampleSearchParams(BaseModel):
+    query: str = Field(description="Microsoft SDK, API, or implementation topic to find code samples for")
+    language: str | None = Field(default=None, description="Optional programming language filter")
+
+
+class ToolboxMicrosoftDocsFetchParams(BaseModel):
+    url: str = Field(description="Microsoft Learn documentation page URL returned by documentation search")
+
+
 def _collect_urls(value: object) -> list[str]:
     urls: list[str] = []
     if isinstance(value, Mapping):
@@ -250,6 +263,41 @@ async def _call_toolbox_web_search(endpoint: str, search_query: str) -> dict:
     return normalized
 
 
+def _normalize_microsoft_learn_result(result: Mapping, source_url: str = "") -> dict:
+    text_parts: list[str] = []
+    citation_candidates = [source_url] if source_url else []
+    for item in result.get("content", []):
+        text = item.get("text")
+        if not isinstance(text, str):
+            text = (item.get("resource") or {}).get("text")
+        if isinstance(text, str) and text:
+            text_parts.append(text)
+            citation_candidates.extend(_URL_RE.findall(text))
+
+    text = "\n\n".join(text_parts)
+    if result.get("isError") or not text:
+        return {"error": text or "Microsoft Learn returned no documentation"}
+
+    citations = []
+    seen = set()
+    for candidate in citation_candidates:
+        parsed = urlparse(candidate)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or candidate in seen:
+            continue
+        seen.add(candidate)
+        citations.append({"url": candidate})
+    return {"text": text, "citations": citations, "grounded": bool(citations)}
+
+
+async def _call_toolbox_microsoft_learn(endpoint: str, tool_name: str, arguments: dict) -> dict:
+    try:
+        result = await _call_toolbox_tool(endpoint, f"learn_mcp___{tool_name}", arguments)
+    except Exception:
+        logger.exception("Toolbox Microsoft Learn %s failed", tool_name)
+        return {"error": "Toolbox Microsoft Learn request failed"}
+    return _normalize_microsoft_learn_result(result, str(arguments.get("url", "")))
+
+
 def _normalize_code_interpreter_result(result: Mapping) -> dict:
     text = "\n\n".join(
         item["text"]
@@ -297,6 +345,57 @@ def create_toolbox_web_search_tool(endpoint: str):
             return result
 
     return toolbox_web_search
+
+
+def create_toolbox_microsoft_docs_search_tool(endpoint: str):
+    """Create the Microsoft Learn documentation-search pilot tool."""
+
+    @define_tool(
+        name="kratos-tools-microsoft_docs_search",
+        description="Search current first-party Microsoft and Azure documentation through Microsoft Learn.",
+    )
+    async def toolbox_microsoft_docs_search(params: ToolboxMicrosoftDocsSearchParams) -> dict:
+        with tracer.start_as_current_span("skill.toolbox_microsoft_docs_search") as span:
+            _set_kratos_attrs(span)
+            return await _call_toolbox_microsoft_learn(endpoint, "microsoft_docs_search", {"query": params.query})
+
+    return toolbox_microsoft_docs_search
+
+
+def create_toolbox_microsoft_code_sample_search_tool(endpoint: str):
+    """Create the Microsoft Learn code-sample-search pilot tool."""
+
+    @define_tool(
+        name="kratos-tools-microsoft_code_sample_search",
+        description="Search current code samples in first-party Microsoft documentation.",
+    )
+    async def toolbox_microsoft_code_sample_search(params: ToolboxMicrosoftCodeSampleSearchParams) -> dict:
+        arguments = {"query": params.query}
+        if params.language:
+            arguments["language"] = params.language
+        with tracer.start_as_current_span("skill.toolbox_microsoft_code_sample_search") as span:
+            _set_kratos_attrs(span)
+            return await _call_toolbox_microsoft_learn(endpoint, "microsoft_code_sample_search", arguments)
+
+    return toolbox_microsoft_code_sample_search
+
+
+def create_toolbox_microsoft_docs_fetch_tool(endpoint: str):
+    """Create the Microsoft Learn documentation-fetch pilot tool."""
+
+    @define_tool(
+        name="kratos-tools-microsoft_docs_fetch",
+        description="Fetch a Microsoft Learn documentation page returned by documentation search.",
+    )
+    async def toolbox_microsoft_docs_fetch(params: ToolboxMicrosoftDocsFetchParams) -> dict:
+        parsed = urlparse(params.url)
+        if parsed.scheme != "https" or not parsed.hostname or not parsed.hostname.endswith(".microsoft.com"):
+            return {"error": "Only HTTPS pages on microsoft.com can be fetched"}
+        with tracer.start_as_current_span("skill.toolbox_microsoft_docs_fetch") as span:
+            _set_kratos_attrs(span)
+            return await _call_toolbox_microsoft_learn(endpoint, "microsoft_docs_fetch", {"url": params.url})
+
+    return toolbox_microsoft_docs_fetch
 
 
 def create_toolbox_code_interpreter_tool(endpoint: str):

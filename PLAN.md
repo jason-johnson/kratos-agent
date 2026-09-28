@@ -341,6 +341,28 @@ The first deployed cost-enabled observation sample measured five transactions an
 
 After the pilot succeeds, move stateless or agent-identity-based integrations that benefit from centralized reuse.
 
+### Inventory and First Candidate
+
+| Integration class | Current repository state | Decision |
+| --- | --- | --- |
+| Remote MCP | Microsoft Learn is the only committed non-user-specific remote MCP. It is anonymous, read-only, stateless, and scoped to the `generic` persona. | Pilot first through Toolbox. Keep the direct APM MCP declaration as the disabled/default rollback path. |
+| OpenAPI | No committed OpenAPI integration was found. | No migration candidate yet. Revisit when a stable shared API is added. |
+| Azure AI Search | `rag_search` and ingestion are application-owned and use an externally configured Search service. Search provisioning and data-plane RBAC are not committed, and callers can currently supply an arbitrary index name under the shared identity. | Defer until infrastructure, least-privilege RBAC, persona-specific index allowlists, and stronger eval coverage exist. |
+| Graph OBO MCP | Delegated per-user identity with a separate authorization boundary. | Excluded from Phase 4; evaluate only in the Phase 5 identity spike. |
+
+Microsoft Learn is declared as a no-auth `mcp` tool in `kratos-tools`, but application consumption remains disabled by default through `TOOLBOX_LEARN_ENABLED=false`. When enabled for the `generic` persona, Kratos removes the direct `microsoft-learn` MCP from that session and exposes typed bridges for documentation search, code-sample search, and page fetch. This avoids duplicate logical tools and preserves one-setting rollback without deleting or republishing Toolbox resources.
+
+Pilot gates:
+
+- [x] Inventory shared MCP, OpenAPI, Search, and OBO integrations.
+- [x] Select Microsoft Learn as the first migration candidate.
+- [x] Add declarative no-auth Toolbox configuration and disabled-by-default application routing.
+- [x] Preserve the direct MCP declaration as rollback.
+- [x] Add a Microsoft Learn-specific generic evaluation scenario.
+- [ ] Validate the new Toolbox version with raw `tools/list` and one synthetic `tools/call`.
+- [ ] Compare direct MCP and Toolbox application-level eval results.
+- [ ] Exercise rollback before promotion.
+
 Priority order:
 
 1. Non-user-specific remote MCP servers.

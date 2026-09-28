@@ -95,6 +95,41 @@ async def test_bridge_sends_documented_search_query(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_microsoft_learn_bridge_uses_prefixed_tool_name(monkeypatch):
+    call = AsyncMock(
+        return_value={
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Azure docs: https://learn.microsoft.com/azure/ai-services/",
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(toolbox_tools, "_call_toolbox_tool", call)
+
+    result = await toolbox_tools._call_toolbox_microsoft_learn(
+        "https://toolbox.example/mcp", "microsoft_docs_search", {"query": "Azure AI services"}
+    )
+
+    call.assert_awaited_once_with(
+        "https://toolbox.example/mcp",
+        "learn_mcp___microsoft_docs_search",
+        {"query": "Azure AI services"},
+    )
+    assert result["grounded"] is True
+    assert result["citations"] == [{"url": "https://learn.microsoft.com/azure/ai-services/"}]
+
+
+def test_microsoft_learn_normalizer_fails_closed_on_tool_error():
+    result = toolbox_tools._normalize_microsoft_learn_result(
+        {"content": [{"type": "text", "text": "upstream failed"}], "isError": True}
+    )
+
+    assert result == {"error": "upstream failed"}
+
+
+@pytest.mark.asyncio
 async def test_code_interpreter_bridge_sends_code_only(monkeypatch):
     credential = AsyncMock()
     credential.get_token.return_value = SimpleNamespace(token="-".join(("test", "token")))

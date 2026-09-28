@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # the rollback path. The pilot replaces web_search only for the generic persona.
     toolbox_enabled: bool = False
     toolbox_name: str = "kratos-tools"
+    toolbox_learn_enabled: bool = False
     toolbox_code_interpreter_enabled: bool = False
     toolbox_code_interpreter_version: str = ""
 
