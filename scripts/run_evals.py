@@ -28,6 +28,11 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")
 POLL_INTERVAL_S = 5
 POLL_TIMEOUT_S = 60 * 30
+_BINARY_EVALUATORS = frozenset({"TaskAdherence", "ToolCallSuccess", "ToolOutputUtilization"})
+_PROCESS_EVALUATOR_METRICS = {
+    "ToolCallSuccess": "tool_call_success",
+    "ToolOutputUtilization": "tool_output_utilization",
+}
 
 
 def _headers() -> dict[str, str]:
@@ -71,11 +76,14 @@ def poll(use_case: str, run_id: str) -> dict[str, Any]:
     raise TimeoutError(f"Run {run_id} did not finish within {POLL_TIMEOUT_S}s")
 
 
-def _score_value(score: Any) -> float | None:
+def _score_value(score: Any, metric_key: str | None = None) -> float | None:
     if isinstance(score, (int, float)) and not isinstance(score, bool):
         return float(score)
     if not isinstance(score, dict):
         return None
+    metric_value = score.get(metric_key) if metric_key else None
+    if isinstance(metric_value, (int, float)) and not isinstance(metric_value, bool):
+        return float(metric_value)
     for key, value in score.items():
         if (
             (key == "score" or key.endswith("_score"))
@@ -109,9 +117,9 @@ def print_summary(run: dict[str, Any]) -> None:
         scores = r.get("scores") or {}
         rendered_scores = []
         for name, score in scores.items():
-            value = _score_value(score)
+            value = _score_value(score, _PROCESS_EVALUATOR_METRICS.get(name))
             if value is not None:
-                maximum = 1 if name == "TaskAdherence" else 5
+                maximum = 1 if name in _BINARY_EVALUATORS else 5
                 rendered_scores.append(f"{name}={value:g}/{maximum}")
         duration = f"{float(r.get('duration_ms', 0)) / 1000:.1f}s"
         print(

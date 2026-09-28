@@ -185,6 +185,8 @@ class EvalStorage:
                     "TaskAdherence",
                     "IntentResolution",
                     "ToolCallAccuracy",
+                    "ToolCallSuccess",
+                    "ToolOutputUtilization",
                 ],
                 "judge_model_env": "EVAL_MODEL",
                 "judge_model_default": "gpt-4.1",

@@ -439,7 +439,15 @@ class EvalScenario(BaseModel):
         description="Tool names the agent is expected to call (without the mcp-tools- prefix)",
     )
     evaluators: list[str] = Field(
-        default_factory=lambda: ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"],
+        default_factory=lambda: [
+            "Relevance",
+            "Coherence",
+            "TaskAdherence",
+            "IntentResolution",
+            "ToolCallAccuracy",
+            "ToolCallSuccess",
+            "ToolOutputUtilization",
+        ],
         description="Evaluator names to apply",
     )
 

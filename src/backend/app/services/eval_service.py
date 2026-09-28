@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 _INTERNAL_TOOLS: frozenset[str] = frozenset({"report_intent", "skill", "sql", "ask_user"})
 _MCP_PREFIX = "mcp-tools-"
+_PROCESS_EVALUATORS: frozenset[str] = frozenset({"ToolCallSuccess", "ToolOutputUtilization"})
 
 # Use-case → industry canon mapping (FSI covers insurance/banking/wealth)
 _FSI_USE_CASES = {"insurance", "retail-banking", "wealth-management"}
@@ -107,7 +108,15 @@ def _build_generator_system_prompt(
                     "input_data": {},
                     "expected_behavior": "Plain-language expected behavior",
                     "expected_tool_calls": ["tool_name_without_mcp_prefix"],
-                    "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"],
+                    "evaluators": [
+                        "Relevance",
+                        "Coherence",
+                        "TaskAdherence",
+                        "IntentResolution",
+                        "ToolCallAccuracy",
+                        "ToolCallSuccess",
+                        "ToolOutputUtilization",
+                    ],
                 }
             ]
         },
@@ -141,7 +150,7 @@ Rules:
 - `category` must be one of: standard, edge_case, error_handling, boundary, compliance.
 - `input_message` must be a natural user message (1-3 sentences).
 - `expected_tool_calls` must NOT include the `mcp-tools-` prefix.
-- Include all five evaluator names in `evaluators`.
+- Include all seven evaluator names in `evaluators`.
 - Vary the categories; do not produce all `standard` scenarios.
 """
 
@@ -340,6 +349,37 @@ def _build_tool_definitions(
         }
         for t in filtered
     ]
+
+
+def _build_evaluator_kwargs(
+    eval_name: str,
+    query: str,
+    response: str,
+    tool_calls: list[dict[str, Any]],
+    tool_definitions: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Map a Kratos result to the input contract for one evaluator."""
+    kwargs: dict[str, Any] = {"query": query, "response": response}
+    if not tool_calls:
+        return None if eval_name in _PROCESS_EVALUATORS else kwargs
+
+    query_messages = [{"role": "user", "content": [{"type": "text", "text": query}]}]
+    conversation_response = _build_task_adherence_response(response, tool_calls)
+
+    if eval_name == "TaskAdherence":
+        return {"query": query_messages, "response": conversation_response}
+    if eval_name == "ToolCallAccuracy":
+        kwargs["tool_calls"] = tool_calls
+        kwargs["tool_definitions"] = tool_definitions
+    elif eval_name == "ToolCallSuccess":
+        return {"response": conversation_response, "tool_definitions": tool_definitions}
+    elif eval_name == "ToolOutputUtilization":
+        return {
+            "query": query_messages,
+            "response": conversation_response,
+            "tool_definitions": tool_definitions,
+        }
+    return kwargs
 
 
 def _evaluator_score_passed(score: dict[str, Any]) -> bool:
@@ -796,6 +836,7 @@ class EvalService:
         _apply_validate_model_config_patch()
         _apply_openai_max_tokens_patch()
         try:
+            import azure.ai.evaluation as azure_evaluation  # noqa: PLC0415
             from azure.ai.evaluation import (  # noqa: PLC0415
                 CoherenceEvaluator,
                 IntentResolutionEvaluator,
@@ -817,6 +858,11 @@ class EvalService:
             "Relevance": RelevanceEvaluator,
             "ToolCallAccuracy": ToolCallAccuracyEvaluator,
         }
+        preview_evaluator_classes = {
+            "ToolCallSuccess": getattr(azure_evaluation, "_ToolCallSuccessEvaluator", None),
+            "ToolOutputUtilization": getattr(azure_evaluation, "_ToolOutputUtilizationEvaluator", None),
+        }
+        evaluator_classes.update({name: cls for name, cls in preview_evaluator_classes.items() if cls is not None})
         evaluators: dict[str, Any] = {}
         for name, cls in evaluator_classes.items():
             try:
@@ -846,21 +892,15 @@ class EvalService:
             scores: dict[str, dict[str, Any]] = {}
             for eval_name, evaluator in evaluators.items():
                 try:
-                    kwargs: dict[str, Any] = {
-                        "query": eval_query,
-                        "response": result.response,
-                    }
-                    if eval_name == "TaskAdherence" and filtered_tool_calls:
-                        kwargs["query"] = [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": eval_query}],
-                            }
-                        ]
-                        kwargs["response"] = _build_task_adherence_response(result.response, filtered_tool_calls)
-                    if eval_name == "ToolCallAccuracy" and filtered_tool_calls:
-                        kwargs["tool_calls"] = filtered_tool_calls
-                        kwargs["tool_definitions"] = tool_defs
+                    kwargs = _build_evaluator_kwargs(
+                        eval_name,
+                        eval_query,
+                        result.response,
+                        filtered_tool_calls,
+                        tool_defs,
+                    )
+                    if kwargs is None:
+                        continue
                     # Run synchronous evaluator in executor to avoid blocking event loop
                     score_result = await asyncio.get_event_loop().run_in_executor(
                         None, lambda ev=evaluator, kw=kwargs: ev(**kw)
@@ -903,7 +943,7 @@ class EvalService:
         per_criteria: list[dict[str, Any]] = [{"criterion": k, **v} for k, v in criteria_totals.items()]
         run.foundry = FoundryEvalSummary(
             eval_id="",
-            eval_run_id="",
+            eval_run_id=run_id,
             run_status="completed",
             result_counts={"passed": passed_count, "failed": failed_count},
             per_testing_criteria_results=per_criteria,

@@ -22,6 +22,8 @@ def test_print_summary_renders_nested_evaluator_scores(capsys) -> None:
                     "duration_ms": 25685,
                     "scores": {
                         "TaskAdherence": {"task_adherence_score": 1.0},
+                        "ToolCallSuccess": {"tool_call_success": 1.0},
+                        "ToolOutputUtilization": {"tool_output_utilization": 1.0},
                         "Relevance": {"relevance_score": 4.0},
                     },
                 }
@@ -33,4 +35,6 @@ def test_print_summary_renders_nested_evaluator_scores(capsys) -> None:
     assert "web-search-ai-trends" in output
     assert "25.7s" in output
     assert "TaskAdherence=1/1" in output
+    assert "ToolCallSuccess=1/1" in output
+    assert "ToolOutputUtilization=1/1" in output
     assert "Relevance=4/5" in output

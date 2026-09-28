@@ -1,4 +1,5 @@
 from app.services.eval_service import (
+    _build_evaluator_kwargs,
     _build_task_adherence_response,
     _build_tool_definitions,
     _evaluator_score_passed,
@@ -72,6 +73,43 @@ def test_tool_definitions_include_required_id() -> None:
     assert definitions[0]["name"] == "mcp-tools-web-search"
     assert definitions[1]["id"] == "kratos-tools-web_search"
     assert definitions[1]["name"] == "kratos-tools-web_search"
+
+
+def test_builds_process_evaluator_inputs_from_normalised_conversation() -> None:
+    calls = _normalise_tool_calls(
+        [
+            {
+                "skillName": "kratos-tools-web_search",
+                "status": "completed",
+                "input": '{"query":"Foundry"}',
+                "output": "search result",
+            }
+        ]
+    )
+    definitions = _build_tool_definitions(["web-search"], calls)
+
+    success = _build_evaluator_kwargs("ToolCallSuccess", "question", "answer", calls, definitions)
+    utilization = _build_evaluator_kwargs("ToolOutputUtilization", "question", "answer", calls, definitions)
+
+    assert success is not None
+    assert set(success) == {"response", "tool_definitions"}
+    assert [message["role"] for message in success["response"]] == ["assistant", "tool", "assistant"]
+    assert success["tool_definitions"] == definitions
+    assert utilization is not None
+    assert utilization["query"] == [
+        {"role": "user", "content": [{"type": "text", "text": "question"}]}
+    ]
+    assert utilization["response"] == success["response"]
+    assert utilization["tool_definitions"] == definitions
+
+
+def test_skips_process_evaluators_when_no_tool_was_called() -> None:
+    assert _build_evaluator_kwargs("ToolCallSuccess", "question", "answer", [], []) is None
+    assert _build_evaluator_kwargs("ToolOutputUtilization", "question", "answer", [], []) is None
+    assert _build_evaluator_kwargs("Relevance", "question", "answer", [], []) == {
+        "query": "question",
+        "response": "answer",
+    }
 
 
 def test_evaluator_score_does_not_treat_errors_or_skipped_thresholds_as_passes() -> None:

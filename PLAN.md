@@ -60,7 +60,7 @@ Last updated: 2026-09-25
 
 ### Remaining Work, In Order
 
-1. Finish the reusable Foundry evaluation/process-evaluator path for each promoted capability.
+1. Finish the reusable Foundry evaluation path by submitting Foundry-mode results to the cloud evaluation service and persisting its report URL/evaluation ID. Enable Tool Selection, Tool Input Accuracy, and Task Navigation Efficiency when the installed SDK exposes supported implementations.
 2. Inventory and migrate eligible non-user-specific MCP, OpenAPI, and Azure AI Search integrations.
 3. Complete the Graph OBO identity and security spike; retain the custom path unless Foundry preserves the current user-isolation boundary.
 4. Make separate product decisions about the optional Responses protocol and specialist agents.
@@ -258,6 +258,8 @@ No-file pilot result on 2026-09-25:
 ## Phase 3: Foundry Evaluation Expansion (Web Search Complete; Reuse Pending)
 
 The repository already invokes the Hosted Agent and scores scenarios with `azure-ai-evaluation`. Extend this rather than replacing it.
+
+Current implementation status: `azure-ai-evaluation` 1.16.8 exposes experimental Tool Call Success and Tool Output Utilization evaluators, and both are now capability-detected, fed the normalized Kratos conversation/tool schema, included in new scenario defaults, and enforced in aggregate pass/fail results when tools are called. Their native SDK validators accept the generated payloads. Tool Selection, Tool Input Accuracy, and Task Navigation Efficiency are not exposed by this SDK version and are not emulated. Kratos persists its eval run ID in the Foundry summary as the existing `kratos.eval_run_id` trace correlation key. Cloud evaluation submission and report URLs remain pending; `report_url` stays empty rather than linking to a report that was never created.
 
 ### Evaluation Work
 
