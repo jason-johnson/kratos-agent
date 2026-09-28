@@ -14,6 +14,8 @@ import asyncio
 import json
 import logging
 import os
+import re
+import tempfile
 import time
 import uuid
 from datetime import UTC, datetime
@@ -380,6 +382,80 @@ def _build_evaluator_kwargs(
             "tool_definitions": tool_definitions,
         }
     return kwargs
+
+
+def _build_cloud_metric_values(result: ScenarioResult) -> dict[str, float]:
+    """Return non-sensitive numeric metrics for Foundry report publication."""
+    metrics = {
+        "duration_ms": float(result.duration_ms),
+        "invocation_passed": float(result.status != "error"),
+    }
+    criterion_passes: list[bool] = []
+    for name, score in result.scores.items():
+        metric_name = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+        passed = _evaluator_score_passed(score)
+        metrics[f"{metric_name}_passed"] = float(passed)
+        criterion_passes.append(passed)
+    metrics["scenario_passed"] = float(result.status != "error" and bool(criterion_passes) and all(criterion_passes))
+    return metrics
+
+
+def _return_precomputed_metrics(*, metrics: dict[str, float]) -> dict[str, float]:
+    """Custom SDK evaluator that republishes scores already computed by Kratos."""
+    return metrics
+
+
+def _publish_cloud_evaluation(
+    project_endpoint: str,
+    use_case: str,
+    run_id: str,
+    results: list[ScenarioResult],
+) -> dict[str, Any]:
+    """Publish precomputed metrics to Foundry without rerunning model evaluators."""
+    from azure.ai.evaluation import evaluate  # noqa: PLC0415
+
+    with tempfile.TemporaryDirectory(prefix="kratos-eval-") as directory:
+        data_path = Path(directory) / "metrics.jsonl"
+        rows = [
+            {"scenario": result.scenario, "metrics": _build_cloud_metric_values(result)}
+            for result in results
+        ]
+        data_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return dict(
+            evaluate(
+                data=data_path,
+                evaluators={"KratosScores": _return_precomputed_metrics},
+                evaluator_config={
+                    "KratosScores": {"column_mapping": {"metrics": "${data.metrics}"}},
+                },
+                evaluation_name=f"kratos-{use_case}-{run_id}",
+                azure_ai_project=project_endpoint,
+                tags={"kratos_eval_run_id": run_id, "use_case": use_case},
+            )
+        )
+
+
+async def _attach_cloud_evaluation(
+    settings: Settings,
+    use_case: str,
+    run_id: str,
+    results: list[ScenarioResult],
+    summary: FoundryEvalSummary,
+) -> None:
+    """Attach Foundry report metadata without affecting local scoring outcomes."""
+    project_endpoint = settings.eval_foundry_project_endpoint or settings.foundry_project_endpoint
+    if not project_endpoint:
+        return
+    try:
+        cloud_result = await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: _publish_cloud_evaluation(project_endpoint, use_case, run_id, results),
+        )
+        summary.report_url = str(cloud_result.get("studio_url") or "")
+        summary.cloud_eval_run_ids = list(cloud_result.get("oai_eval_run_ids") or [])
+    except Exception as exc:
+        logger.exception("[eval %s] cloud report publication failed", run_id)
+        summary.publication_error = f"Cloud report publication failed ({type(exc).__name__})"
 
 
 def _evaluator_score_passed(score: dict[str, Any]) -> bool:
@@ -950,6 +1026,7 @@ class EvalService:
             output_items=[],
             report_url="",
         )
+        await _attach_cloud_evaluation(self._settings, use_case, run_id, run.results, run.foundry)
         await self._storage.save_run(run)
 
     def _build_report(self, run: EvalRun, use_case: str) -> dict[str, Any]:

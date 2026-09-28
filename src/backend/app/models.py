@@ -521,6 +521,8 @@ class FoundryEvalSummary(BaseModel):
     per_testing_criteria_results: list[dict[str, Any]] = Field(default_factory=list)
     output_items: list[dict[str, Any]] = Field(default_factory=list)
     report_url: str = ""
+    cloud_eval_run_ids: list[dict[str, str]] = Field(default_factory=list)
+    publication_error: str = ""
 
 
 class EvalRun(BaseModel):

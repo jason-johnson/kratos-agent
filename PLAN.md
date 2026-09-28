@@ -60,7 +60,7 @@ Last updated: 2026-09-25
 
 ### Remaining Work, In Order
 
-1. Finish the reusable Foundry evaluation path by submitting Foundry-mode results to the cloud evaluation service and persisting its report URL/evaluation ID. Enable Tool Selection, Tool Input Accuracy, and Task Navigation Efficiency when the installed SDK exposes supported implementations.
+1. Enable Tool Selection, Tool Input Accuracy, and Task Navigation Efficiency when the installed SDK exposes supported implementations.
 2. Inventory and migrate eligible non-user-specific MCP, OpenAPI, and Azure AI Search integrations.
 3. Complete the Graph OBO identity and security spike; retain the custom path unless Foundry preserves the current user-isolation boundary.
 4. Make separate product decisions about the optional Responses protocol and specialist agents.
@@ -255,11 +255,11 @@ No-file pilot result on 2026-09-25:
 - Rolled back to active hosted-agent version 44 with the pilot disabled/version 0, confirmed the Toolbox default remained Web Search-only version 1, and drained two pilot-era warm sandboxes. A fresh rollback conversation made exactly one local interpreter call, zero managed calls, exposed no session billing, returned the expected result, and produced no errors.
 - Stop before production promotion: generated-file translation, Foundry-side cleanup, the Kratos download flow, and rollback are proven, but Toolbox's project-shared container context still fails Kratos's user-isolation requirement.
 
-## Phase 3: Foundry Evaluation Expansion (Web Search Complete; Reuse Pending)
+## Phase 3: Foundry Evaluation Expansion (Reusable Path Complete)
 
 The repository already invokes the Hosted Agent and scores scenarios with `azure-ai-evaluation`. Extend this rather than replacing it.
 
-Current implementation status: `azure-ai-evaluation` 1.16.8 exposes experimental Tool Call Success and Tool Output Utilization evaluators, and both are now capability-detected, fed the normalized Kratos conversation/tool schema, included in new scenario defaults, and enforced in aggregate pass/fail results when tools are called. Their native SDK validators accept the generated payloads. The backend deployment and one controlled generic Web Search run confirmed both process evaluators pass without errors, alongside passing Intent Resolution, Coherence, Relevance, and Tool Call Accuracy; Task Adherence alone failed, consistent with its documented exclusion from the Web Search release contract. Tool Selection, Tool Input Accuracy, and Task Navigation Efficiency are not exposed by this SDK version and are not emulated. Kratos persists its eval run ID in the Foundry summary as the existing `kratos.eval_run_id` trace correlation key, and the deployed run confirmed the correlation value matches. Cloud evaluation submission and report URLs remain pending; `report_url` stays empty rather than linking to a report that was never created.
+Current implementation status: `azure-ai-evaluation` 1.16.8 exposes experimental Tool Call Success and Tool Output Utilization evaluators, and both are now capability-detected, fed the normalized Kratos conversation/tool schema, included in new scenario defaults, and enforced in aggregate pass/fail results when tools are called. Their native SDK validators accept the generated payloads. The backend deployment and controlled generic Web Search runs confirmed both process evaluators pass without errors, alongside passing Intent Resolution, Coherence, Relevance, and Tool Call Accuracy; Task Adherence alone failed, consistent with its documented exclusion from the Web Search release contract. Tool Selection, Tool Input Accuracy, and Task Navigation Efficiency are not exposed by this SDK version and are not emulated. Kratos persists its eval run ID in the Foundry summary as the existing `kratos.eval_run_id` trace correlation key. It now publishes only precomputed scenario names, durations, and numeric pass/fail metrics through a custom evaluator, avoiding duplicate model evaluation and excluding query, response, and tool evidence. A deployed controlled run confirmed that Foundry accepted the publication and that Kratos persisted the returned report URL with no publication error. The custom evaluator path does not create Azure OpenAI grader run IDs, so `cloud_eval_run_ids` remains empty by design.
 
 ### Evaluation Work
 

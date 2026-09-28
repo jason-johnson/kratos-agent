@@ -1,9 +1,19 @@
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from app.models import FoundryEvalSummary, ScenarioResult
 from app.services.eval_service import (
+    _attach_cloud_evaluation,
+    _build_cloud_metric_values,
     _build_evaluator_kwargs,
     _build_task_adherence_response,
     _build_tool_definitions,
     _evaluator_score_passed,
     _normalise_tool_calls,
+    _publish_cloud_evaluation,
+    _return_precomputed_metrics,
 )
 
 
@@ -110,6 +120,114 @@ def test_skips_process_evaluators_when_no_tool_was_called() -> None:
         "query": "question",
         "response": "answer",
     }
+
+
+def test_builds_non_sensitive_cloud_metrics() -> None:
+    result = ScenarioResult(
+        scenario="web-search",
+        query="private query",
+        response="private response",
+        tool_calls=[{"output": "private tool output"}],
+        duration_ms=1234,
+        scores={
+            "ToolCallSuccess": {"tool_call_success_result": "pass"},
+            "Relevance": {"relevance_score": 2, "relevance_threshold": 3},
+        },
+    )
+
+    assert _build_cloud_metric_values(result) == {
+        "duration_ms": 1234.0,
+        "invocation_passed": 1.0,
+        "tool_call_success_passed": 1.0,
+        "relevance_passed": 0.0,
+        "scenario_passed": 0.0,
+    }
+
+
+def test_publishes_only_precomputed_metrics(monkeypatch) -> None:
+    captured = {}
+
+    def fake_evaluate(**kwargs):
+        rows = [json.loads(line) for line in kwargs["data"].read_text(encoding="utf-8").splitlines()]
+        captured.update(kwargs)
+        captured["rows"] = rows
+        return {"studio_url": "https://example.test/report", "oai_eval_run_ids": [{"eval_run_id": "cloud-run"}]}
+
+    monkeypatch.setattr("azure.ai.evaluation.evaluate", fake_evaluate)
+    result = ScenarioResult(
+        scenario="web-search",
+        query="private query",
+        response="private response",
+        tool_calls=[{"output": "private tool output"}],
+        duration_ms=1234,
+        scores={"ToolCallSuccess": {"tool_call_success_result": "pass"}},
+    )
+
+    published = _publish_cloud_evaluation("https://example.test/api/projects/test", "generic", "run-1", [result])
+
+    assert published["studio_url"] == "https://example.test/report"
+    assert captured["rows"] == [
+        {
+            "scenario": "web-search",
+            "metrics": {
+                "duration_ms": 1234.0,
+                "invocation_passed": 1.0,
+                "tool_call_success_passed": 1.0,
+                "scenario_passed": 1.0,
+            },
+        }
+    ]
+    assert captured["evaluators"] == {"KratosScores": _return_precomputed_metrics}
+    assert captured["azure_ai_project"] == "https://example.test/api/projects/test"
+
+
+@pytest.mark.asyncio
+async def test_attaches_cloud_report_metadata(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.eval_service._publish_cloud_evaluation",
+        lambda *_args: {
+            "studio_url": "https://example.test/report",
+            "oai_eval_run_ids": [{"eval_group_id": "group", "eval_run_id": "cloud-run"}],
+        },
+    )
+    settings = SimpleNamespace(eval_foundry_project_endpoint="project", foundry_project_endpoint="")
+    summary = FoundryEvalSummary()
+
+    await _attach_cloud_evaluation(settings, "generic", "run-1", [], summary)
+
+    assert summary.report_url == "https://example.test/report"
+    assert summary.cloud_eval_run_ids == [{"eval_group_id": "group", "eval_run_id": "cloud-run"}]
+    assert summary.publication_error == ""
+
+
+@pytest.mark.asyncio
+async def test_cloud_publication_failure_is_sanitized(monkeypatch) -> None:
+    def fail_with_sensitive_detail(*_args):
+        raise RuntimeError("request failed for https://private.example.test")
+
+    monkeypatch.setattr("app.services.eval_service._publish_cloud_evaluation", fail_with_sensitive_detail)
+    settings = SimpleNamespace(eval_foundry_project_endpoint="project", foundry_project_endpoint="")
+    summary = FoundryEvalSummary()
+
+    await _attach_cloud_evaluation(settings, "generic", "run-1", [], summary)
+
+    assert summary.report_url == ""
+    assert summary.publication_error == "Cloud report publication failed (RuntimeError)"
+    assert "private" not in summary.publication_error
+
+
+@pytest.mark.asyncio
+async def test_cloud_publication_is_skipped_without_project_endpoint(monkeypatch) -> None:
+    def unexpected_publication(*_args):
+        raise AssertionError("publication should be skipped")
+
+    monkeypatch.setattr("app.services.eval_service._publish_cloud_evaluation", unexpected_publication)
+    settings = SimpleNamespace(eval_foundry_project_endpoint="", foundry_project_endpoint="")
+    summary = FoundryEvalSummary()
+
+    await _attach_cloud_evaluation(settings, "generic", "run-1", [], summary)
+
+    assert summary == FoundryEvalSummary()
 
 
 def test_evaluator_score_does_not_treat_errors_or_skipped_thresholds_as_passes() -> None:

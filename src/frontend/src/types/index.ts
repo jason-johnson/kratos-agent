@@ -343,6 +343,8 @@ export interface FoundryEvalSummary {
   per_testing_criteria_results: Array<Record<string, unknown>>;
   output_items: Array<Record<string, unknown>>;
   report_url: string;
+  cloud_eval_run_ids: Array<Record<string, string>>;
+  publication_error: string;
 }
 
 export interface EvalRun {
