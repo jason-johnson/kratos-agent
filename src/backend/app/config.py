@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     toolbox_enabled: bool = False
     toolbox_name: str = "kratos-tools"
     toolbox_learn_enabled: bool = False
+    toolbox_learn_version: str = ""
     toolbox_code_interpreter_enabled: bool = False
     toolbox_code_interpreter_version: str = ""
 

@@ -407,11 +407,30 @@ class CopilotAgent:
             f"{version_label}/mcp?api-version=v1"
         )
 
+    def _toolbox_learn_endpoint(self) -> str:
+        """Return an immutable Toolbox endpoint only for an explicit Learn pilot version."""
+        version_label = self.settings.toolbox_learn_version
+        if (
+            not self.settings.toolbox_enabled
+            or not self.settings.toolbox_learn_enabled
+            or not self.settings.toolbox_name
+            or not re.fullmatch(r"[1-9][0-9]*", version_label)
+        ):
+            return ""
+        project_endpoint = self.settings.foundry_project_endpoint.rstrip("/")
+        if not project_endpoint:
+            return ""
+        return (
+            f"{project_endpoint}/toolboxes/{self.settings.toolbox_name}/versions/"
+            f"{version_label}/mcp?api-version=v1"
+        )
+
     def _apply_foundry_toolbox_tools(self, use_case: str, enabled_tools: list) -> list:
         """Replace opted-in local tools with application-owned Toolbox bridges."""
         web_search_endpoint = self._toolbox_endpoint()
+        learn_endpoint = self._toolbox_learn_endpoint()
         code_interpreter_endpoint = self._toolbox_code_interpreter_endpoint()
-        if use_case != DEFAULT_USE_CASE or not (web_search_endpoint or code_interpreter_endpoint):
+        if use_case != DEFAULT_USE_CASE or not (web_search_endpoint or learn_endpoint or code_interpreter_endpoint):
             return enabled_tools
         replaced_names = set()
         if web_search_endpoint:
@@ -423,19 +442,19 @@ class CopilotAgent:
             tools.append(create_toolbox_web_search_tool(web_search_endpoint))
         if code_interpreter_endpoint:
             tools.append(create_toolbox_code_interpreter_tool(code_interpreter_endpoint))
-        if self.settings.toolbox_learn_enabled:
+        if learn_endpoint:
             tools.extend(
                 (
-                    create_toolbox_microsoft_docs_search_tool(web_search_endpoint),
-                    create_toolbox_microsoft_code_sample_search_tool(web_search_endpoint),
-                    create_toolbox_microsoft_docs_fetch_tool(web_search_endpoint),
+                    create_toolbox_microsoft_docs_search_tool(learn_endpoint),
+                    create_toolbox_microsoft_code_sample_search_tool(learn_endpoint),
+                    create_toolbox_microsoft_docs_fetch_tool(learn_endpoint),
                 )
             )
         return tools
 
     def _apply_foundry_toolbox_mcp(self, use_case: str, mcp_servers: dict) -> dict:
         """Remove the direct Learn MCP only while its Toolbox pilot is active."""
-        if use_case != DEFAULT_USE_CASE or not self.settings.toolbox_learn_enabled or not self._toolbox_endpoint():
+        if use_case != DEFAULT_USE_CASE or not self._toolbox_learn_endpoint():
             return mcp_servers
         return {name: server for name, server in mcp_servers.items() if name != "microsoft-learn"}
 
@@ -552,7 +571,7 @@ class CopilotAgent:
                 'response format or says "nothing else," begin directly with the requested content and follow '
                 "that format exactly."
             )
-        if self.settings.toolbox_learn_enabled and self._toolbox_endpoint():
+        if self._toolbox_learn_endpoint():
             guidance.append(
                 "## Foundry Toolbox Microsoft Learn Pilot\n\n"
                 "For Microsoft product and Azure documentation, use "

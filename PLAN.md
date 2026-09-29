@@ -20,7 +20,7 @@ The target architecture keeps Kratos as a Foundry Hosted Agent and incrementally
 
 ## Implementation Status
 
-Last updated: 2026-09-25
+Last updated: 2026-09-29
 
 - [x] Confirmed Toolbox and Hosted Agent support in Sweden Central.
 - [x] Added declarative `kratos-tools` provisioning with managed Web Search.
@@ -350,7 +350,7 @@ After the pilot succeeds, move stateless or agent-identity-based integrations th
 | Azure AI Search | `rag_search` and ingestion are application-owned and use an externally configured Search service. Search provisioning and data-plane RBAC are not committed, and callers can currently supply an arbitrary index name under the shared identity. | Defer until infrastructure, least-privilege RBAC, persona-specific index allowlists, and stronger eval coverage exist. |
 | Graph OBO MCP | Delegated per-user identity with a separate authorization boundary. | Excluded from Phase 4; evaluate only in the Phase 5 identity spike. |
 
-Microsoft Learn is declared as a no-auth `mcp` tool in `kratos-tools`, but application consumption remains disabled by default through `TOOLBOX_LEARN_ENABLED=false`. When enabled for the `generic` persona, Kratos removes the direct `microsoft-learn` MCP from that session and exposes typed bridges for documentation search, code-sample search, and page fetch. This avoids duplicate logical tools and preserves one-setting rollback without deleting or republishing Toolbox resources.
+Microsoft Learn is declared as a no-auth `mcp` tool in `kratos-tools`, but application consumption remains disabled by default through `TOOLBOX_LEARN_ENABLED=false`. The pilot also requires an explicit immutable `TOOLBOX_LEARN_VERSION`; invalid or missing version labels leave the direct MCP path unchanged. When enabled for the `generic` persona, Kratos removes the direct `microsoft-learn` MCP from that session and exposes typed bridges for documentation search, code-sample search, and page fetch against the pinned version. This avoids duplicate logical tools, keeps Web Search on its independently promoted default version, and preserves one-setting rollback without deleting or republishing Toolbox resources.
 
 Pilot gates:
 
@@ -359,9 +359,16 @@ Pilot gates:
 - [x] Add declarative no-auth Toolbox configuration and disabled-by-default application routing.
 - [x] Preserve the direct MCP declaration as rollback.
 - [x] Add a Microsoft Learn-specific generic evaluation scenario.
-- [ ] Validate the new Toolbox version with raw `tools/list` and one synthetic `tools/call`.
+- [x] Validate the new Toolbox version with raw `tools/list` and one synthetic `tools/call`.
 - [ ] Compare direct MCP and Toolbox application-level eval results.
 - [ ] Exercise rollback before promotion.
+
+Raw candidate validation on 2026-09-29:
+
+- Declarative deployment created immutable Toolbox version 6 with `web_search` and `learn_mcp` while leaving the promoted default at Web Search-only version 1.
+- Version-specific `tools/list` exposed `learn_mcp___microsoft_docs_search`, `learn_mcp___microsoft_code_sample_search`, and `learn_mcp___microsoft_docs_fetch`.
+- A synthetic `microsoft_docs_search` call for Azure AI Foundry MCP authentication completed without an MCP error and returned nonempty documentation evidence containing Microsoft Learn URLs.
+- Application testing pins `TOOLBOX_LEARN_VERSION=6`; it does not require publishing version 6 or moving Web Search from default version 1.
 
 Priority order:
 
