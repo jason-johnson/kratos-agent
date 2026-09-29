@@ -360,8 +360,8 @@ Pilot gates:
 - [x] Preserve the direct MCP declaration as rollback.
 - [x] Add a Microsoft Learn-specific generic evaluation scenario.
 - [x] Validate the new Toolbox version with raw `tools/list` and one synthetic `tools/call`.
-- [ ] Compare direct MCP and Toolbox application-level eval results.
-- [ ] Exercise rollback before promotion.
+- [x] Compare direct MCP and Toolbox application-level eval results.
+- [x] Exercise rollback before promotion.
 
 Raw candidate validation on 2026-09-29:
 
@@ -369,6 +369,12 @@ Raw candidate validation on 2026-09-29:
 - Version-specific `tools/list` exposed `learn_mcp___microsoft_docs_search`, `learn_mcp___microsoft_code_sample_search`, and `learn_mcp___microsoft_docs_fetch`.
 - A synthetic `microsoft_docs_search` call for Azure AI Foundry MCP authentication completed without an MCP error and returned nonempty documentation evidence containing Microsoft Learn URLs.
 - Application testing pins `TOOLBOX_LEARN_VERSION=6`; it does not require publishing version 6 or moving Web Search from default version 1.
+
+Application comparison and rollback on 2026-09-29:
+
+- One Toolbox-routed run completed in 25.8 seconds using `kratos-tools-microsoft_docs_search` and `kratos-tools-microsoft_docs_fetch`; one direct-MCP run completed in 26.4 seconds using `microsoft-learn-microsoft_docs_search` and `microsoft-learn-microsoft_docs_fetch`.
+- The Toolbox/direct scores were Task Adherence 1/1, Intent Resolution 4/5 versus 5/5, Coherence 5/5, Relevance 5/5, Tool Call Accuracy 2/5, Tool Call Success 1/1, and Tool Output Utilization 1/1. The single paired sample shows no meaningful latency difference and no Toolbox-specific quality regression, but Tool Call Accuracy remains below a promotion-quality threshold on both routes.
+- Rollback deployed the hosted agent with `TOOLBOX_LEARN_ENABLED=false` and `TOOLBOX_LEARN_VERSION=0`. The first post-deploy invocation landed on a stale warm sandbox and still used the Toolbox bridge; the next fresh invocation used only the direct Microsoft Learn tools. Toolbox version 6 remains immutable and unpromoted, and the default remains Web Search-only version 1.
 
 Priority order:
 
