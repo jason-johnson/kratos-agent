@@ -47,6 +47,38 @@ def test_normalises_completed_kratos_tool_event_for_evaluators() -> None:
     ]
 
 
+def test_normalises_arguments_from_matching_started_events_in_order() -> None:
+    events = [
+        {
+            "skillName": "microsoft-learn-microsoft_docs_fetch",
+            "status": "started",
+            "input": '{"url":"https://learn.microsoft.com/first"}',
+        },
+        {
+            "skillName": "microsoft-learn-microsoft_docs_fetch",
+            "status": "completed",
+            "output": "first page",
+        },
+        {
+            "skillName": "microsoft-learn-microsoft_docs_fetch",
+            "status": "started",
+            "input": '{"url":"https://learn.microsoft.com/second"}',
+        },
+        {
+            "skillName": "microsoft-learn-microsoft_docs_fetch",
+            "status": "completed",
+            "output": "second page",
+        },
+    ]
+
+    calls = _normalise_tool_calls(events)
+
+    assert [call["arguments"] for call in calls] == [
+        {"url": "https://learn.microsoft.com/first"},
+        {"url": "https://learn.microsoft.com/second"},
+    ]
+
+
 def test_builds_task_adherence_conversation_with_tool_result() -> None:
     calls = _normalise_tool_calls(
         [

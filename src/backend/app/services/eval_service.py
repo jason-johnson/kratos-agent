@@ -268,15 +268,22 @@ def _extract_tool_calls(response: Any) -> list[dict[str, Any]]:
 def _normalise_tool_calls(tool_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Convert completed Kratos tool events to evaluator tool-call records."""
     calls: list[dict[str, Any]] = []
+    pending_arguments: dict[str, list[Any]] = {}
     for index, event in enumerate(tool_events):
-        if event.get("status") == "started":
-            continue
-
         name = str(event.get("name") or event.get("skillName") or "")
         if not name or name in _INTERNAL_TOOLS:
             continue
 
         raw_arguments = event.get("arguments", event.get("input", {}))
+        if event.get("status") == "started":
+            pending_arguments.setdefault(name, []).append(raw_arguments)
+            continue
+
+        pending = pending_arguments.get(name, [])
+        if not raw_arguments and pending:
+            raw_arguments = pending[0]
+        if pending:
+            pending.pop(0)
         if isinstance(raw_arguments, str):
             try:
                 arguments = json.loads(raw_arguments) if raw_arguments else {}
