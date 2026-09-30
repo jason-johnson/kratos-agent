@@ -39,7 +39,15 @@ def _required_app_id(value: str) -> str:
 def _required_web_url(value: str) -> tuple[str, str]:
     url = value.rstrip("/")
     parsed = urlparse(url)
-    if parsed.scheme != "https" or not parsed.hostname or parsed.path not in ("", "/"):
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.path not in ("", "/")
+        or parsed.query
+        or parsed.fragment
+    ):
         raise ValueError("The Teams tab web URL must be an HTTPS origin without a path")
     return url, parsed.hostname
 
@@ -77,11 +85,10 @@ def _icon_png(size: int, background: tuple[int, int, int, int]) -> bytes:
 
 def _manifest(app_id: str, web_url: str, hostname: str) -> dict[str, object]:
     return {
-        "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.20/MicrosoftTeams.schema.json",
-        "manifestVersion": "1.20",
+        "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.30/MicrosoftTeams.schema.json",
+        "manifestVersion": "1.30",
         "version": "1.0.0",
         "id": app_id,
-        "packageName": "com.microsoft.kratos.agent",
         "developer": {
             "name": "Kratos Agent",
             "websiteUrl": web_url,

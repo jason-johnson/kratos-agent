@@ -17,6 +17,6 @@
   },
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://login.microsoftonline.com https://*.azurecontainerapps.io https://*.azure-api.net https://*.cognitiveservices.azure.com; img-src 'self' https://*.azurecontainerapps.io https://*.azure-api.net data: blob:; frame-src 'self' https://login.microsoftonline.com https://*.azurecontainerapps.io https://*.azure-api.net; frame-ancestors 'self' https://teams.microsoft.com https://*.teams.microsoft.com https://microsoft365.com https://*.microsoft365.com https://*.cloud.microsoft https://*.office.com https://*.office365.com"
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://login.microsoftonline.com https://res.cdn.office.net https://*.azurecontainerapps.io https://*.azure-api.net https://*.cognitiveservices.azure.com; img-src 'self' https://*.azurecontainerapps.io https://*.azure-api.net data: blob:; frame-src 'self' https://login.microsoftonline.com https://*.azurecontainerapps.io https://*.azure-api.net; frame-ancestors 'self' https://teams.microsoft.com https://*.teams.microsoft.com https://microsoft365.com https://*.microsoft365.com https://*.cloud.microsoft https://*.office.com https://*.office365.com"
   }
 }

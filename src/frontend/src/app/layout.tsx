@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { TeamsBootstrap } from "@/components/TeamsBootstrap";
 
 export const metadata: Metadata = {
   title: "Kratos Agent",
@@ -19,6 +20,7 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
       </head>
       <body className="min-h-screen bg-surface antialiased font-sans transition-colors duration-200">
+        <TeamsBootstrap />
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

@@ -60,11 +60,12 @@ Last updated: 2026-09-30
 - [x] Web Search release observation: 3 of 3 consecutive five-run batches passed after the latest reset, with the first and last corrected batches more than 24 hours apart. Hosted-agent version 45 deployed abbreviation-aware sentence counting and structure-preserving tool-evidence truncation with managed Code Interpreter still disabled/version 0. After draining both stale warm sandboxes, corrected batch 1 passed 5/5 with a 23.3-second median and 27.1-second p95; batch 2 passed 5/5 with a 24.6-second median and 24.8-second p95; and the final clean batch passed 5/5 with a 23.7-second median and 28.6-second p95. Every batch used only `kratos-tools-web_search`, exposed five observable transactions and no unobservable managed calls, and cost an estimated $0.070 total/$0.014 per measured run. An interrupted warm-up and overlapping recovery evaluations before the final clean batch were excluded from release evidence. Toolbox remains enabled and the local fallback remains available pending a full release cycle without rollback.
 - [x] Corrected Copilot SDK tool-argument capture for evaluation and tracing. Production `tool.execution_start` events expose `arguments` and `tool_call_id`, while Kratos had read obsolete `input` and `call_id` fields. The corrected Hosted Agent was deployed with Microsoft Learn on the direct route; after draining the two-session warm pool, two fresh diagnostics recorded grounded search queries, fetch URLs, and local inspection arguments, passed every configured evaluator, and scored Tool Call Accuracy 5/5. Focused evaluator, agent-event, and comparison tests pass.
 - [x] Added a Microsoft Learn-specific guarded comparator that verifies the live Hosted Agent configuration before measuring, drains both warm sessions per route, requires the expected search and fetch tools with no opposite-route calls, enforces every configured evaluator, limits Toolbox p95 regression to 20%, and always restores direct MCP.
+- [x] Completed the corrected five-run Microsoft Learn comparison after the instrumentation fix. Direct passed 4/5 with a 20.9-second median and 24.2-second p95; Toolbox passed 3/5 with a 21.6-second median and 24.3-second p95. Both routes used only their expected tools and the Toolbox latency gate passed, but both missed the 100% quality requirement. Version 6 remains unpromoted, and the comparator restored and verified the live direct route.
 
 ### Remaining Work, In Order
 
-1. Complete the corrected five-run direct-versus-Toolbox Microsoft Learn comparison and promote immutable Toolbox version 6 only if every quality, routing, and latency gate passes.
-2. Publish the existing Kratos frontend as a Teams personal-tab demo, preserving the current Invocations/SSE experience, persona selection, files, and OBO behavior.
+1. Publish the existing Kratos frontend as a Teams personal-tab demo, preserving the current Invocations/SSE experience, persona selection, files, and OBO behavior.
+2. Inspect the failed Microsoft Learn evaluator records and repeat the promotion comparison only after a specific, evidence-backed quality improvement; keep immutable Toolbox version 6 unpromoted until every gate passes.
 3. Complete the Graph OBO identity and security spike; retain the custom path unless Foundry preserves the current user-isolation boundary.
 4. Enable Tool Selection, Tool Input Accuracy, and Task Navigation Efficiency when the installed SDK exposes supported implementations.
 5. Inventory and migrate additional eligible non-user-specific MCP, OpenAPI, and Azure AI Search integrations.
@@ -368,8 +369,8 @@ Pilot gates:
 - [x] Compare direct MCP and Toolbox application-level eval results.
 - [x] Exercise rollback before promotion.
 - [x] Correct SDK tool-argument capture and prove grounded evaluator inputs on fresh direct-route sessions.
-- [ ] Complete a corrected five-run comparison per route with 100% evaluator and route pass rates and no more than 20% Toolbox p95 regression.
-- [ ] If the corrected comparison passes, deploy `TOOLBOX_LEARN_ENABLED=true` with immutable version 6 and leave the direct MCP declaration available for rollback.
+- [x] Complete a corrected five-run comparison per route. Expected routing and the latency threshold passed, but direct quality passed 4/5 and Toolbox quality passed 3/5, below the required 100%.
+- [ ] Improve and rerun the quality comparison; only then deploy `TOOLBOX_LEARN_ENABLED=true` with immutable version 6, while leaving the direct MCP declaration available for rollback.
 
 Raw candidate validation on 2026-09-29:
 
@@ -389,7 +390,9 @@ Corrected evaluation state on 2026-09-30:
 - The first promotion-grade attempt was invalid because the azd controls said direct while the live Hosted Agent still routed Microsoft Learn through Toolbox after an interrupted earlier deployment. The comparator now verifies the live definition before any baseline measurement.
 - A subsequent valid comparison completed with direct at 2/5 and Toolbox at 3/5; Toolbox p95 was 26.8 seconds versus 37.8 seconds direct. Four Tool Call Accuracy failures were caused by empty persisted arguments, and one direct Tool Output Utilization failure identified unsupported response details. Version 6 was not promoted.
 - The empty arguments were an instrumentation defect, not missing model parameters or MCP failures: the installed Copilot SDK emits `arguments` on `tool.execution_start`, but Kratos read `input`. The corrected Hosted Agent now persists the actual search queries, fetch URLs, and inspection arguments.
-- After deployment and warm-pool drainage, two fresh direct-route diagnostics passed every configured evaluator with Tool Call Accuracy 5/5. A new paired five-run comparison is required before promotion because the earlier batch evaluated defective telemetry.
+- After deployment and warm-pool drainage, two fresh direct-route diagnostics passed every configured evaluator with Tool Call Accuracy 5/5.
+- The subsequent promotion-grade comparison used five fresh measured runs per route. Direct passed 4/5 with a 20.9-second median and 24.2-second p95; Toolbox passed 3/5 with a 21.6-second median and 24.3-second p95. Tool routing and the 20% latency threshold passed, but neither route met the 100% quality gate. The comparator restored the direct route (`TOOLBOX_LEARN_ENABLED=false`, version `0`) and live configuration verification confirmed it active. Version 6 remains immutable and unpromoted pending failure analysis and a justified quality change.
+- Persisted-run inspection found one genuine grounding failure in each route: both responses added unsupported guidance that a private virtual-network MCP server can use no authentication solely because network isolation protects it. The remaining Toolbox failure was Tool Call Accuracy 2/5, but its rationale also said the grounded search and fetch were relevant, sufficient, successful, and covered both requested authentication modes; it lowered the score for not fetching a second page even though the scenario requests the single highest-value page. Treat that result as evaluator inconsistency, not a routing defect. Before rerunning, prevent authentication claims inferred from network location and make the evaluator contract agree with the one-page fetch requirement.
 
 Priority order:
 
@@ -507,7 +510,7 @@ Acceptance criteria:
 3. [x] Run repeated paired baseline and Toolbox evaluations and promote Web Search on quality, reliability, and latency.
 4. [x] Complete the Web Search release observation period; per-run cost is observable and rollback/restoration have been exercised.
 5. [x] Evaluate one additional managed capability at a time, beginning with Code Interpreter; the evaluation completed, but promotion stopped because its project-shared container context does not meet the user-isolation requirement.
-6. [ ] Complete the corrected Microsoft Learn comparison and promote version 6 only if its capability-specific gates pass.
+6. [x] Complete the corrected Microsoft Learn comparison; version 6 was not promoted because direct passed 4/5 and Toolbox passed 3/5 despite passing routing and latency gates.
 7. [ ] Publish and validate the existing frontend as a Teams personal-tab demo.
 8. [ ] Decide separately whether native Responses-based Teams chat provides enough value to justify protocol and product-contract work.
 9. [ ] Expand to other selected personas and shared integrations only after capability-specific evaluations pass.
@@ -562,4 +565,4 @@ Code Interpreter is the next managed-tool migration because file transfer and ex
 - Do Responses protocol or specialist agents provide enough product value to justify their migration costs?
 - Which portable workflow should be the first Foundry Skills experiment after the other phases are complete?
 
-Current recommendation: complete the corrected Microsoft Learn comparison and promote version 6 only if it passes, then package the existing Kratos frontend as a Teams personal-tab demo. Keep Invocations and the custom SSE contract for that milestone; evaluate native Responses-based Teams chat separately after the demo proves product value. Use a self-contained, non-OBO workflow as the eventual Foundry Skills pilot.
+Current recommendation: keep Microsoft Learn on the direct route and version 6 unpromoted while its failed evaluator records are analyzed. Publish the existing Kratos frontend as a Teams personal-tab demo next. Keep Invocations and the custom SSE contract for that milestone; evaluate native Responses-based Teams chat separately after the demo proves product value. Use a self-contained, non-OBO workflow as the eventual Foundry Skills pilot.

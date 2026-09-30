@@ -2,6 +2,7 @@ import importlib.util
 import json
 import struct
 import sys
+import uuid
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -20,13 +21,14 @@ def _png_dimensions(content: bytes) -> tuple[int, int]:
 
 def test_builds_parameterized_teams_package(tmp_path: Path, monkeypatch) -> None:
     output = tmp_path / "kratos-teams-app.zip"
+    app_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, "kratos.example.invalid"))
     monkeypatch.setattr(
         sys,
         "argv",
         [
             str(SCRIPT_PATH),
             "--app-id",
-            "00000000-0000-4000-8000-000000000001",
+            app_id,
             "--web-url",
             "https://kratos.example.invalid",
             "--output",
@@ -39,7 +41,7 @@ def test_builds_parameterized_teams_package(tmp_path: Path, monkeypatch) -> None
     with ZipFile(output) as package:
         assert set(package.namelist()) == {"manifest.json", "color.png", "outline.png"}
         manifest = json.loads(package.read("manifest.json"))
-        assert manifest["id"] == "00000000-0000-4000-8000-000000000001"
+        assert manifest["id"] == app_id
         assert manifest["staticTabs"][0]["contentUrl"] == "https://kratos.example.invalid"
         assert manifest["validDomains"] == ["kratos.example.invalid"]
         assert _png_dimensions(package.read("color.png")) == (192, 192)
