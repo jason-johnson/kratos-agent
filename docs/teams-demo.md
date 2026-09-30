@@ -37,6 +37,38 @@ tracked files, pass `--web-url` explicitly or set `KRATOS_WEB_URL`.
 4. Verify persona selection, a streaming response, citations, and a generated-file download.
 5. Sign in to an OBO-enabled persona, complete one delegated action, sign out, and confirm another user cannot inherit that delegated context.
 
+## External-Tenant Operator Handoff
+
+When the target Teams tenant is available only through a dedicated Edge profile,
+the operator performs the Teams steps. The repository-side validation does not
+require access to that profile.
+
+Before switching profiles, regenerate `dist/kratos-teams-app.zip` from the
+selected azd environment and record its SHA-256 checksum:
+
+```bash
+python3 scripts/package_teams_app.py
+sha256sum dist/kratos-teams-app.zip
+```
+
+In the target tenant, validate in this order:
+
+1. Upload the ZIP and open the personal tab in Teams web, then Teams desktop.
+2. Without OBO sign-in, verify persona selection, streaming tool activity,
+   citations, the read-only confirmation decline, and the handover PDF download.
+3. Test OBO separately. The frontend authority and OBO app registrations belong
+   to the deployment Entra tenant. A user from another tenant must also be able
+   to authenticate in that deployment tenant, typically as a B2B guest, and any
+   required consent must already exist. Otherwise record OBO as a cross-tenant
+   identity prerequisite, not as a Teams package failure.
+4. With eligible test users, sign in as User A and invoke the profile tool. Sign
+   out, close the conversation, sign in as User B, and invoke it again. User B
+   must never receive User A's profile or delegated context.
+
+Record pass/fail separately for Teams web, Teams desktop, baseline tab behavior,
+OBO User A, OBO User B, and cross-user isolation. Do not commit screenshots,
+traces, the generated ZIP, tenant identifiers, or deployment endpoints.
+
 ## Demo Runbook
 
 Microsoft Learn is scoped to the `generic` persona, while the synthetic ticket

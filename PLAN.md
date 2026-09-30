@@ -454,8 +454,8 @@ Publish the existing Kratos frontend as a Teams personal app tab before attempti
 - [x] Deploy the frontend with restricted Teams/Microsoft 365 framing and required Microsoft CDN access.
 - [x] Validate manifest schema 1.30, package contents, frontend lint/build, focused package tests, deployed API smoke tests, and a live host-browser render with no console errors.
 - [x] Complete the scripted synthetic browser demo: grounded Learn research, ticket triage, interactive write cancellation with no mutation call, and a downloadable handover PDF.
-- [ ] Upload the generated package to the target tenant and validate Teams desktop and web.
-- [ ] Verify sign-out plus a second user cannot inherit delegated context.
+- [ ] Operator: upload the ready package in the external target tenant and validate Teams desktop and web.
+- [ ] Operator: verify deployment-tenant OBO eligibility, sign-out, and that a second user cannot inherit delegated context.
 
 ### Demo Exit Criteria
 
