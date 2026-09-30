@@ -1233,9 +1233,13 @@ class CopilotAgent:
                                 )
 
                                 # Create a child span nested under the invoke_agent span
-                                raw_input_str = str(getattr(event.data, "input", "") or "")
+                                raw_input = getattr(event.data, "arguments", None)
+                                if raw_input is None:
+                                    raw_input = getattr(event.data, "input", "")
+                                raw_input_str = _extract_tool_value(raw_input)
                                 tool_call_id = (
-                                    getattr(event.data, "call_id", None)
+                                    getattr(event.data, "tool_call_id", None)
+                                    or getattr(event.data, "call_id", None)
                                     or getattr(event.data, "id", None)
                                     or str(uuid.uuid4())[:12]
                                 )
@@ -1261,10 +1265,9 @@ class CopilotAgent:
                                 _tool_span_stack.append((tool_name, tool_span))
                                 # Emit descriptive thought (not just "Calling tool: X")
                                 display = pretty_tool_name(tool_name)
-                                raw_input = getattr(event.data, "input", None)
                                 detail = ""
                                 if raw_input:
-                                    input_str = str(raw_input)
+                                    input_str = raw_input_str
                                     # Try to extract a query or key param for context
                                     for key in ("query", "code", "prompt", "message", "text"):
                                         import re as _re
@@ -1284,7 +1287,7 @@ class CopilotAgent:
                                     ToolCallEvent(
                                         skillName=tool_name,
                                         status="started",
-                                        input=_extract_tool_value(getattr(event.data, "input", "")),
+                                        input=raw_input_str,
                                         source=self._resolve_skill_source(cid, tool_name),
                                     )
                                 )

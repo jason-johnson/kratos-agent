@@ -331,7 +331,8 @@ async def test_copilot_agent_run_streams_tool_events(copilot_agent):
         start_event = MagicMock()
         start_event.type.value = "tool.execution_start"
         start_event.data.tool_name = "web_search"
-        start_event.data.input = '{"query": "test"}'
+        start_event.data.arguments = {"query": "test"}
+        start_event.data.tool_call_id = "call-1"
         callback(start_event)
 
         # Tool end event
@@ -378,6 +379,7 @@ async def test_copilot_agent_run_streams_tool_events(copilot_agent):
     assert "Web Search" in events[0].content
     assert isinstance(events[1], ToolCallEvent)
     assert events[1].status == "started"
+    assert json.loads(events[1].input) == {"query": "test"}
     assert isinstance(events[2], ToolCallEvent)
     assert events[2].status == "completed"
     assert events[2].durationMs == 150

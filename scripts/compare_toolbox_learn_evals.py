@@ -83,11 +83,8 @@ def threshold_failures(
     return failures
 
 
-def _deploy(environment: str, enabled: bool, version: str) -> None:
+def _verify_deployment(environment: str, enabled: bool, version: str) -> None:
     enabled_value = str(enabled).lower()
-    subprocess.run(["azd", "env", "set", "TOOLBOX_LEARN_ENABLED", enabled_value], check=True)  # noqa: S603
-    subprocess.run(["azd", "env", "set", "TOOLBOX_LEARN_VERSION", version], check=True)  # noqa: S603
-    subprocess.run(["azd", "deploy", "kratos-agent", "--no-prompt"], check=True)  # noqa: S603
     definition = json.loads(
         compare._command("azd", "ai", "agent", "show", "-e", environment, "--output", "json")  # noqa: SLF001
     )
@@ -98,6 +95,14 @@ def _deploy(environment: str, enabled: bool, version: str) -> None:
         raise RuntimeError(
             "Hosted Agent did not become active with the requested Microsoft Learn Toolbox configuration"
         )
+
+
+def _deploy(environment: str, enabled: bool, version: str) -> None:
+    enabled_value = str(enabled).lower()
+    subprocess.run(["azd", "env", "set", "TOOLBOX_LEARN_ENABLED", enabled_value], check=True)  # noqa: S603
+    subprocess.run(["azd", "env", "set", "TOOLBOX_LEARN_VERSION", version], check=True)  # noqa: S603
+    subprocess.run(["azd", "deploy", "kratos-agent", "--no-prompt"], check=True)  # noqa: S603
+    _verify_deployment(environment, enabled, version)
 
 
 def _measure(label: str, count: int, drain_runs: int, use_case: str) -> list[dict[str, Any]]:
@@ -145,6 +150,7 @@ def main() -> int:
     )
     run_evals.BACKEND_URL = backend_url.rstrip("/")
     compare._verify_deployed_scenario(args.use_case, SCENARIO)  # noqa: SLF001
+    _verify_deployment(args.environment, False, "0")
 
     direct_runs = _measure("direct MCP", args.runs, args.drain_runs, args.use_case)
     try:

@@ -1,6 +1,9 @@
 import importlib.util
+import json
 import sys
 from pathlib import Path
+
+import pytest
 
 SCRIPT_PATH = Path(__file__).parents[3] / "scripts" / "compare_toolbox_learn_evals.py"
 sys.path.insert(0, str(SCRIPT_PATH.parent))
@@ -89,3 +92,19 @@ def test_measure_drains_requested_sessions_before_recording(monkeypatch) -> None
 
     assert len(evaluations) == 4
     assert [run["sequence"] for run in measured] == [3, 4]
+
+
+def test_rejects_live_agent_route_that_differs_from_baseline(monkeypatch) -> None:
+    definition = {
+        "status": "active",
+        "definition": {
+            "environment_variables": {
+                "TOOLBOX_LEARN_ENABLED": "true",
+                "TOOLBOX_LEARN_VERSION": "6",
+            }
+        },
+    }
+    monkeypatch.setattr(learn_compare.compare, "_command", lambda *args: json.dumps(definition))
+
+    with pytest.raises(RuntimeError, match="requested Microsoft Learn Toolbox configuration"):
+        learn_compare._verify_deployment("test", False, "0")
