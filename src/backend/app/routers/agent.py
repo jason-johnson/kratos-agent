@@ -257,6 +257,11 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                     proxy_done = event_data
                 elif event_name == "_gateway_session":
                     gateway_session_id = event_data.get("agentSessionId")
+                    if gateway_session_id:
+                        try:
+                            await cosmos.upsert_session_mapping(body.conversationId, gateway_session_id)
+                        except Exception:
+                            logger.warning("Failed to persist gateway session mapping (non-fatal)", exc_info=True)
 
             # Close any tool spans that never received a completion
             for _call_id, sp in list(open_tool_spans.items()):
@@ -268,10 +273,6 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
             # same hosted agent container (preserving CopilotClient state).
             if gateway_session_id:
                 logger.info("Gateway session for conversation=%s: %s", body.conversationId, gateway_session_id)
-                try:
-                    await cosmos.upsert_session_mapping(body.conversationId, gateway_session_id)
-                except Exception:
-                    logger.warning("Failed to persist gateway session mapping (non-fatal)", exc_info=True)
 
             # Persist assistant response with execution details
             full_response = "".join(assistant_content_parts)

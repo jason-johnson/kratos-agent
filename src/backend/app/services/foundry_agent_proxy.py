@@ -362,6 +362,8 @@ class FoundryAgentProxy:
 
                     # Capture the gateway session ID from response headers
                     gateway_session = resp.headers.get("x-agent-session-id")
+                    if gateway_session:
+                        yield {"event": "_gateway_session", "data": {"agentSessionId": gateway_session}}
 
                     # Parse SSE stream
                     buffer = ""
@@ -373,10 +375,6 @@ class FoundryAgentProxy:
                             parsed = self._parse_sse_block(event_block)
                             if parsed is not None:
                                 if parsed.get("_protocol_done"):
-                                    # Yield the gateway session ID before ending
-                                    # so the router can persist it for future calls.
-                                    if gateway_session:
-                                        yield {"event": "_gateway_session", "data": {"agentSessionId": gateway_session}}
                                     return
                                 # Hosted-agent diagnostic (keys only, no token
                                 # values) — log to backend telemetry and drop it
@@ -386,10 +384,6 @@ class FoundryAgentProxy:
                                     continue
                                 yield parsed
 
-                    # Fallback: if stream ends without a protocol done event,
-                    # still yield the gateway session.
-                    if gateway_session:
-                        yield {"event": "_gateway_session", "data": {"agentSessionId": gateway_session}}
                     return
 
         except aiohttp.ClientError:

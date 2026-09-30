@@ -31,6 +31,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [userInputPrompt, setUserInputPrompt] = useState<UserInputPrompt | null>(null);
   const [userInputAnswer, setUserInputAnswer] = useState("");
+  const [isSubmittingUserInput, setIsSubmittingUserInput] = useState(false);
   const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
   // True when an answer is being generated on the backend but is not being
   // streamed into this view (e.g. after navigating back to a conversation
@@ -316,7 +317,6 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
           }));
         }
         setIsStreaming(false);
-        setUserInputPrompt(null);
       },
       currentAttachments,
       conversation.useCase
@@ -373,14 +373,15 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
   };
 
   const handleUserInputSubmit = async (answer: string) => {
-    if (!userInputPrompt) return;
-    // In hosted-agent mode there is no side-channel to push an answer into a
-    // running Foundry invocation, so the answer is sent as a normal follow-up
-    // message. The backend reuses the persisted gateway session for this
-    // conversation, which resumes the same hosted-agent container.
-    setUserInputPrompt(null);
-    setUserInputAnswer("");
-    await handleSend(answer);
+    if (!userInputPrompt || isStreaming || isSubmittingUserInput) return;
+    setIsSubmittingUserInput(true);
+    try {
+      setUserInputPrompt(null);
+      setUserInputAnswer("");
+      await handleSend(answer);
+    } finally {
+      setIsSubmittingUserInput(false);
+    }
   };
 
   return (
@@ -476,7 +477,8 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
                     <button
                       key={choice}
                       onClick={() => handleUserInputSubmit(choice)}
-                      className="px-3.5 py-1.5 text-sm bg-surface text-text border border-border rounded-lg hover:bg-hover hover:border-ask transition-all"
+                      disabled={isStreaming || isSubmittingUserInput}
+                      className="px-3.5 py-1.5 text-sm bg-surface text-text border border-border rounded-lg hover:bg-hover hover:border-ask disabled:opacity-50 transition-all"
                     >
                       {choice}
                     </button>
@@ -489,6 +491,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
                     type="text"
                     value={userInputAnswer}
                     onChange={(e) => setUserInputAnswer(e.target.value)}
+                    disabled={isStreaming || isSubmittingUserInput}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && userInputAnswer.trim()) {
                         handleUserInputSubmit(userInputAnswer.trim());
@@ -499,7 +502,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
                   />
                   <button
                     onClick={() => handleUserInputSubmit(userInputAnswer.trim())}
-                    disabled={!userInputAnswer.trim()}
+                    disabled={!userInputAnswer.trim() || isStreaming || isSubmittingUserInput}
                     className="px-4 py-2 text-sm bg-ask text-accent-fg rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity font-medium"
                   >
                     Send

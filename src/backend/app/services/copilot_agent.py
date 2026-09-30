@@ -233,8 +233,6 @@ class CopilotAgent:
         # conv_id -> lock serialising SDK session acquisition / eviction.
         self._session_locks: dict[str, asyncio.Lock] = {}
         self._system_prompt: str = DEFAULT_SYSTEM_PROMPT
-        # Futures for resolving user input requests from the SDK
-        self._user_input_futures: dict[str, asyncio.Future] = {}
         self._queues: dict[str, asyncio.Queue] = {}
         self._tool_counters: dict[str, int] = {}
         self._registered_handlers: set[str] = set()
@@ -782,7 +780,6 @@ class CopilotAgent:
         self._registered_handlers.clear()
         self._queues.clear()
         self._tool_counters.clear()
-        self._user_input_futures.clear()
         if self._client:
             await self._client.stop()
         if self._credential:
@@ -808,7 +805,6 @@ class CopilotAgent:
         self._registered_handlers.clear()
         self._queues.clear()
         self._tool_counters.clear()
-        self._user_input_futures.clear()
         # Purge stale Cosmos session mappings so the next request doesn't attempt (and fail)
         # to resume disconnected sessions, which would log spurious warnings.
         if self._cosmos_service:
@@ -883,8 +879,7 @@ class CopilotAgent:
         return config
 
     async def _handle_user_input_request(self, request: dict, context: dict) -> dict:
-        """Called by the SDK when the agent uses ask_user. Pushes an event to the SSE
-        queue and awaits the user's response via an asyncio.Future."""
+        """Emit a prompt and defer its answer to the next hosted invocation."""
         conversation_id = context.get("session_id", "")
         # Find the matching conversation ID from our session map
         for cid, session in self._sessions.items():
@@ -893,8 +888,6 @@ class CopilotAgent:
                 break
 
         request_id = str(uuid.uuid4())
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
-        self._user_input_futures[request_id] = future
 
         # Push the request event to the SSE queue
         q = self._queues.get(conversation_id)
@@ -908,24 +901,17 @@ class CopilotAgent:
                 )
             )
 
-        # Wait for the user to respond (timeout 5 minutes)
-        try:
-            answer = await asyncio.wait_for(future, timeout=300.0)
-        except TimeoutError:
-            self._user_input_futures.pop(request_id, None)
-            return {"answer": "No response provided", "wasFreeform": True}
-        finally:
-            self._user_input_futures.pop(request_id, None)
-
-        return {"answer": answer, "wasFreeform": True}
-
-    def resolve_user_input(self, request_id: str, answer: str) -> bool:
-        """Resolve a pending user input request. Returns True if found."""
-        future = self._user_input_futures.get(request_id)
-        if future and not future.done():
-            future.set_result(answer)
-            return True
-        return False
+        # The Invocations gateway does not guarantee that a concurrent request
+        # for the same session reaches this Python process, so an in-memory
+        # Future cannot be resolved reliably. End this turn without mutation;
+        # the frontend submits the user's choice as the next sequential turn.
+        return {
+            "answer": (
+                "Confirmation is deferred to the next user turn. Do not perform "
+                "any write in this turn; end the turn now."
+            ),
+            "wasFreeform": True,
+        }
 
     def get_sdk_session_id(self, conversation_id: str) -> str | None:
         """Return the SDK session ID for a conversation, if one is cached."""

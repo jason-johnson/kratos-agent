@@ -1,5 +1,6 @@
 """Tests for the Copilot SDK agent service."""
 
+import asyncio
 import json
 import time
 from pathlib import Path
@@ -9,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.config import Settings
-from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent
+from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UserInputRequestEvent
 from app.services.copilot_agent import CopilotAgent, _limit_tool_event_output
 from app.services.skill_tools import ALL_TOOLS
 
@@ -32,6 +33,23 @@ def test_copilot_agent_init(copilot_agent, settings):
     assert copilot_agent.settings is settings
     assert copilot_agent._client is None
     assert copilot_agent._sessions == {}
+
+
+@pytest.mark.asyncio
+async def test_user_input_request_is_deferred_to_next_turn(copilot_agent):
+    copilot_agent._sessions["conversation-123"] = SimpleNamespace(session_id="sdk-session-123")
+    copilot_agent._queues["conversation-123"] = asyncio.Queue()
+
+    response = await copilot_agent._handle_user_input_request(
+        {"question": "Proceed?", "choices": ["yes", "no"], "allowFreeform": False},
+        {"session_id": "sdk-session-123"},
+    )
+
+    event = copilot_agent._queues["conversation-123"].get_nowait()
+    assert isinstance(event, UserInputRequestEvent)
+    assert event.question == "Proceed?"
+    assert event.choices == ["yes", "no"]
+    assert "Do not perform any write" in response["answer"]
 
 
 def test_foundry_toolbox_is_disabled_by_default(copilot_agent):

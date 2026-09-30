@@ -61,10 +61,11 @@ Last updated: 2026-09-30
 - [x] Corrected Copilot SDK tool-argument capture for evaluation and tracing. Production `tool.execution_start` events expose `arguments` and `tool_call_id`, while Kratos had read obsolete `input` and `call_id` fields. The corrected Hosted Agent was deployed with Microsoft Learn on the direct route; after draining the two-session warm pool, two fresh diagnostics recorded grounded search queries, fetch URLs, and local inspection arguments, passed every configured evaluator, and scored Tool Call Accuracy 5/5. Focused evaluator, agent-event, and comparison tests pass.
 - [x] Added a Microsoft Learn-specific guarded comparator that verifies the live Hosted Agent configuration before measuring, drains both warm sessions per route, requires the expected search and fetch tools with no opposite-route calls, enforces every configured evaluator, limits Toolbox p95 regression to 20%, and always restores direct MCP.
 - [x] Completed the corrected five-run Microsoft Learn comparison after the instrumentation fix. Direct passed 4/5 with a 20.9-second median and 24.2-second p95; Toolbox passed 3/5 with a 21.6-second median and 24.3-second p95. Both routes used only their expected tools and the Toolbox latency gate passed, but both missed the 100% quality requirement. Version 6 remains unpromoted, and the comparator restored and verified the live direct route.
+- [x] Implemented and deployed the Teams personal-tab foundation. The frontend lazily initializes TeamsJS 2.57.0 only when framed, the Static Web App CSP permits only Microsoft Teams/Microsoft 365 frame ancestors and the TeamsJS Microsoft CDN dependency, and ordinary browser use remains unchanged. A parameterized schema-1.30 package generator creates a stable environment-specific ZIP from gitignored azd values with validated 192px/32px icons. The generated manifest passes Microsoft's schema, the clean frontend build and focused package tests pass, all 15 deployed API smoke specs pass, and a host-browser check renders without console errors. Tenant installation, Teams desktop/web interaction, and two-user OBO isolation remain manual exit gates.
 
 ### Remaining Work, In Order
 
-1. Publish the existing Kratos frontend as a Teams personal-tab demo, preserving the current Invocations/SSE experience, persona selection, files, and OBO behavior.
+1. Install the generated Kratos personal-tab package in the target Teams tenant and validate desktop/web behavior, files, and two-user OBO isolation.
 2. Inspect the failed Microsoft Learn evaluator records and repeat the promotion comparison only after a specific, evidence-backed quality improvement; keep immutable Toolbox version 6 unpromoted until every gate passes.
 3. Complete the Graph OBO identity and security spike; retain the custom path unless Foundry preserves the current user-isolation boundary.
 4. Enable Tool Selection, Tool Input Accuracy, and Task Navigation Efficiency when the installed SDK exposes supported implementations.
@@ -443,8 +444,18 @@ Publish the existing Kratos frontend as a Teams personal app tab before attempti
 - Package the deployed Static Web App as a Teams personal tab using a parameterized Teams app manifest; never commit an environment-specific hostname or application ID.
 - Initialize the Teams JavaScript SDK in the frontend while retaining normal browser behavior outside Teams.
 - Preserve persona selection, streaming tool activity, citations, generated-file downloads, conversation state, and the existing Entra/OBO sign-in flow.
-- Use synthetic data and a focused IT Service Desk demonstration: investigate a user issue, consult Microsoft Learn, inspect a synthetic ticket, and produce a sourced response.
+- Use a two-act synthetic demonstration because Microsoft Learn is intentionally scoped to `generic` while the ticket tools are owned by `it-service-desk`: first perform grounded Microsoft Learn research, then switch personas to inspect and triage a synthetic ticket and generate a handover PDF.
 - Support Teams desktop and web for the first demo. Mobile and native chat are not release blockers for this milestone.
+
+### Teams Demo Status
+
+- [x] Add a parameterized Microsoft 365 app manifest and required icons without committing environment-specific values.
+- [x] Initialize TeamsJS in framed contexts while preserving ordinary browser behavior.
+- [x] Deploy the frontend with restricted Teams/Microsoft 365 framing and required Microsoft CDN access.
+- [x] Validate manifest schema 1.30, package contents, frontend lint/build, focused package tests, deployed API smoke tests, and a live host-browser render with no console errors.
+- [x] Complete the scripted synthetic browser demo: grounded Learn research, ticket triage, interactive write cancellation with no mutation call, and a downloadable handover PDF.
+- [ ] Upload the generated package to the target tenant and validate Teams desktop and web.
+- [ ] Verify sign-out plus a second user cannot inherit delegated context.
 
 ### Demo Exit Criteria
 
@@ -511,7 +522,7 @@ Acceptance criteria:
 4. [x] Complete the Web Search release observation period; per-run cost is observable and rollback/restoration have been exercised.
 5. [x] Evaluate one additional managed capability at a time, beginning with Code Interpreter; the evaluation completed, but promotion stopped because its project-shared container context does not meet the user-isolation requirement.
 6. [x] Complete the corrected Microsoft Learn comparison; version 6 was not promoted because direct passed 4/5 and Toolbox passed 3/5 despite passing routing and latency gates.
-7. [ ] Publish and validate the existing frontend as a Teams personal-tab demo.
+7. [ ] Complete tenant-side Teams installation and desktop/web/OBO validation; package generation, frontend integration, deployment, and non-Teams browser validation are complete.
 8. [ ] Decide separately whether native Responses-based Teams chat provides enough value to justify protocol and product-contract work.
 9. [ ] Expand to other selected personas and shared integrations only after capability-specific evaluations pass.
 10. [ ] Run the Foundry Skills experiment after the other planned migration and identity work.
