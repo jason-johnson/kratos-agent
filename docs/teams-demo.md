@@ -69,6 +69,24 @@ Record pass/fail separately for Teams web, Teams desktop, baseline tab behavior,
 OBO User A, OBO User B, and cross-user isolation. Do not commit screenshots,
 traces, the generated ZIP, tenant identifiers, or deployment endpoints.
 
+Paste the completed result block into the handoff conversation without adding
+user names, tenant IDs, URLs, or tokens:
+
+```text
+Package SHA-256: <checksum>
+Teams web install/open: PASS | FAIL | BLOCKED
+Teams desktop install/open: PASS | FAIL | BLOCKED
+Persona, streaming, and citations: PASS | FAIL | BLOCKED
+HITL decline with no write: PASS | FAIL | BLOCKED
+Handover PDF download: PASS | FAIL | BLOCKED
+OBO deployment-tenant eligibility: PASS | FAIL | BLOCKED
+OBO User A profile: PASS | FAIL | BLOCKED
+OBO sign-out: PASS | FAIL | BLOCKED
+OBO User B profile: PASS | FAIL | BLOCKED
+No cross-user context leakage: PASS | FAIL | BLOCKED
+Notes: <sanitized error text only>
+```
+
 ## Demo Runbook
 
 Microsoft Learn is scoped to the `generic` persona, while the synthetic ticket
