@@ -157,6 +157,20 @@ This single command:
 7. Configures all Managed Identity role assignments
 8. Outputs the public URL
 
+### Publish the Frontend in Microsoft Teams
+
+After deploying the web service, generate an environment-specific Teams
+personal-tab package without committing the app ID or deployment hostname:
+
+```bash
+azd env set TEAMS_APP_ID "$(python3 -c 'import uuid; print(uuid.uuid4())')"
+python3 scripts/package_teams_app.py
+```
+
+Upload `dist/kratos-teams-app.zip` as a custom Teams app. See
+[Microsoft Teams Personal-Tab Demo](docs/teams-demo.md) for prerequisites and
+the desktop/web validation checklist.
+
 ### Running Multiple Environments
 
 `azd` supports any number of side-by-side environments, so a throwaway experiment never has to share infrastructure with a live deployment. Each one lives in its own directory under `.azure/` (gitignored, so environments stay local and are never committed).
