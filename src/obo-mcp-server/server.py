@@ -14,19 +14,30 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import traceback
 
 from mcp.server.fastmcp import Context, FastMCP
-from starlette.requests import Request
-
 from obo import TokenValidationError, assert_auth_config_safe, validate_user_token
 from obo import get_my_profile as fetch_my_profile
+from starlette.requests import Request
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("obo-mcp-server")
 
+_BEARER_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
+
 PORT = int(os.environ.get("PORT", "8000"))
 
+# Container Apps ingress requires listening on every container interface.
 mcp = FastMCP(name="graph-obo", host="0.0.0.0", port=PORT)
+
+
+def _redact_sensitive_text(value, bearer: str = "") -> str:
+    text = str(value)
+    if bearer:
+        text = text.replace(bearer, "[REDACTED]")
+    return _BEARER_RE.sub("Bearer [REDACTED]", text)
 
 
 def _bearer_from_context(ctx: Context) -> str:
@@ -37,7 +48,9 @@ def _bearer_from_context(ctx: Context) -> str:
     """
     request: Request | None = getattr(ctx.request_context, "request", None)
     if request is None:
-        raise TokenValidationError("no HTTP request context (is this running over HTTP transport?)")
+        raise TokenValidationError(
+            "no HTTP request context (is this running over HTTP transport?)"
+        )
     auth = request.headers.get("authorization", "")
     if not auth.lower().startswith("bearer "):
         raise TokenValidationError("missing or malformed Authorization header")
@@ -52,6 +65,7 @@ def get_my_profile(ctx: Context) -> dict:
     email", "what's my job title", "show my profile". The profile is fetched
     live from Microsoft Graph on behalf of the signed-in user.
     """
+    token = ""
     try:
         token = _bearer_from_context(ctx)
         validate_user_token(token)  # rejects wrong audience / scope / tenant / expiry
@@ -67,13 +81,20 @@ def get_my_profile(ctx: Context) -> dict:
         return model_view
     except TokenValidationError as exc:
         # Do not leak the token; surface a clean, actionable error.
-        logger.warning("get_my_profile: token rejected: %s", exc)
-        return {"error": "unauthorized", "detail": str(exc)}
-    except Exception:  # noqa: BLE001 — surface OBO/Graph failures without leaking internals
+        safe_detail = _redact_sensitive_text(exc, token)
+        logger.warning("get_my_profile: token rejected: %s", safe_detail)
+        return {"error": "unauthorized", "detail": safe_detail}
+    except Exception as exc:  # noqa: BLE001 — surface OBO/Graph failures without leaking internals
         # Log full detail server-side; return an opaque message so library
         # internals (correlation ids, tenant info, token fragments) never reach
         # the model or end user.
-        logger.exception("get_my_profile: OBO/Graph call failed")
+        safe_traceback = _redact_sensitive_text(
+            "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+            token,
+        )
+        logger.error(
+            "get_my_profile: OBO/Graph call failed\n%s", safe_traceback.rstrip()
+        )
         return {"error": "obo_failed", "detail": "Graph on-behalf-of request failed"}
 
 

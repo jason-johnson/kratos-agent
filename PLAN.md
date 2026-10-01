@@ -66,6 +66,7 @@ Last updated: 2026-10-01
 - [x] Added direct Graph OBO JWT validation coverage using synthetic locally signed RSA tokens. Ten tests prove acceptance of a valid delegated token and rejection of missing, expired, wrong-audience, wrong-tenant, v1, missing-scope, app-only, and disallowed-caller tokens, plus refusal of `AUTH_DISABLED` in production. Both CI workflows now install the OBO service's pinned dependencies and run this standalone suite; existing backend tests continue to cover trusted header injection, confused-deputy protections, conversation isolation, token fingerprints, and identity-session lifecycle.
 - [x] Closed an OBO observability leak path in SDK-controlled failures. Conversation-aware redaction now removes delegated bearer values before SDK session errors, raised exceptions, MCP tool errors/output, unhandled-event diagnostics, span status/result attributes, logs, or SSE/evaluation events are emitted. Regression tests reproduce each error path with a synthetic marker and prove it never reaches client events or captured logs; all 41 Copilot agent and OBO tests pass with focused Ruff and mypy checks.
 - [x] Hardened the backend-to-Hosted-Agent OBO handoff against prompt-channel credential injection. Delegated tokens remain accepted only through the out-of-band `mcpAccessTokens` JSON field; a shared fail-closed parser now removes well-formed, case-variant, and dangling `<mcp_access_tokens>` blocks before model invocation or message-content tracing. The hosted handoff and Copilot OBO slices pass all 52 focused tests plus Ruff, format, mypy, and hosted entry-point compilation.
+- [x] Added direct OBO MCP server boundary coverage and closed its remaining exception-log leak. Tests prove bearer extraction occurs only from the HTTP transport header, raw profile-photo bytes never reach model output or logs, validation errors redact delegated credentials, and upstream Graph/OBO failures return an opaque response while retaining a sanitized server traceback. The standalone OBO suite now passes all 14 tests with focused Ruff and format checks.
 
 ### Remaining Work, In Order
 
@@ -438,6 +439,7 @@ Do not migrate the current Graph OBO MCP path as part of the initial Toolbox wor
 - [x] Automated conversation-isolation coverage prevents User A from inheriting User B's delegated context.
 - [x] Automated redaction coverage prevents delegated tokens from entering SDK error events, MCP tool output, logs, and application-created trace attributes.
 - [x] Prompt-channel injection coverage strips and ignores complete or malformed OBO token tags before model invocation and telemetry capture.
+- [x] OBO MCP transport coverage enforces header-only credential extraction, profile-data minimization, and redacted server failure handling.
 - [ ] Repeat two-user isolation against the deployed tenant and Teams personal tab.
 - [ ] Verify tokens never appear in deployed logs, traces, eval artifacts, or tool output.
 
