@@ -57,7 +57,7 @@ Last updated: 2026-10-01
 - [x] Added invocation-level Web Search billing telemetry to both local and Toolbox adapters. Successful calls record one billable `transaction` in structured tool-event metadata and OpenTelemetry, the traces API/UI exposes the billing dimensions, and the guarded comparison estimates cost from explicitly supplied rates while failing closed if any expected call is unmetered. Billing is carried separately from retained tool evidence because large evidence is truncated at 12,000 characters. The current public list price is $14 per 1,000 Web Search transactions as of 2026-09-25; rates remain command inputs because actual agreement pricing and future rates can differ.
 - [x] Deployed the structured billing meter and ran a cost-enabled five-sample comparison in `bankfdry`. All ten measured calls were observable: local and Toolbox each used five transactions, estimated at $0.070 total and $0.014 per run, so the cost-regression gate passed. Local passed 4/5 with a 29.0-second median and 35.6-second p95; Toolbox passed 4/5 with a 22.3-second median and 23.1-second p95. The local failure added a preamble and broke the exact five-item format; the Toolbox failure used one item-5 citation absent from tool evidence. All non-Task quality evaluators passed. The overall 100% quality gate therefore failed even though cost observability, equal estimated cost, and Toolbox latency passed. The comparison also exercised rollback by deploying and validating the local fallback, then restored and validated Toolbox. Toolbox remains enabled, the local fallback remains, and all 15 post-deploy API smoke tests passed.
 - [x] Added a non-disruptive Toolbox-only observation mode with explicit quality, p95, complete-metering, and cost-per-run limits. The gate canonicalizes scheme/host casing, trailing path slashes, and fragments while preserving query-string distinctions, so resource-equivalent citations do not produce false failures and genuinely unsupported sources still fail.
-- [x] Web Search release observation: 3 of 3 consecutive five-run batches passed after the latest reset, with the first and last corrected batches more than 24 hours apart. Hosted-agent version 45 deployed abbreviation-aware sentence counting and structure-preserving tool-evidence truncation with managed Code Interpreter still disabled/version 0. After draining both stale warm sandboxes, corrected batch 1 passed 5/5 with a 23.3-second median and 27.1-second p95; batch 2 passed 5/5 with a 24.6-second median and 24.8-second p95; and the final clean batch passed 5/5 with a 23.7-second median and 28.6-second p95. Every batch used only `kratos-tools-web_search`, exposed five observable transactions and no unobservable managed calls, and cost an estimated $0.070 total/$0.014 per measured run. An interrupted warm-up and overlapping recovery evaluations before the final clean batch were excluded from release evidence. Toolbox remains enabled and the local fallback remains available pending a full release cycle without rollback.
+- [x] Web Search release observation: 3 of 3 consecutive five-run batches passed after the latest reset, with the first and last corrected batches more than 24 hours apart. Hosted-agent version 45 deployed abbreviation-aware sentence counting and structure-preserving tool-evidence truncation with managed Code Interpreter still disabled/version 0. After draining both stale warm sandboxes, corrected batch 1 passed 5/5 with a 23.3-second median and 27.1-second p95; batch 2 passed 5/5 with a 24.6-second median and 24.8-second p95; and the final clean batch passed 5/5 with a 23.7-second median and 28.6-second p95. Every batch used only `kratos-tools-web_search`, exposed five observable transactions and no unobservable managed calls, and cost an estimated $0.070 total/$0.014 per measured run. An interrupted warm-up and overlapping recovery evaluations before the final clean batch were excluded from release evidence. The observation gate is complete; Toolbox remains enabled and the local fallback remains available through the first full release cycle.
 - [x] Corrected Copilot SDK tool-argument capture for evaluation and tracing. Production `tool.execution_start` events expose `arguments` and `tool_call_id`, while Kratos had read obsolete `input` and `call_id` fields. The corrected Hosted Agent was deployed with Microsoft Learn on the direct route; after draining the two-session warm pool, two fresh diagnostics recorded grounded search queries, fetch URLs, and local inspection arguments, passed every configured evaluator, and scored Tool Call Accuracy 5/5. Focused evaluator, agent-event, and comparison tests pass.
 - [x] Added a Microsoft Learn-specific guarded comparator that verifies the live Hosted Agent configuration before measuring, drains both warm sessions per route, requires the expected search and fetch tools with no opposite-route calls, enforces every configured evaluator, limits Toolbox p95 regression to 20%, and always restores direct MCP.
 - [x] Completed the corrected five-run Microsoft Learn comparison after the instrumentation fix. Direct passed 4/5 with a 20.9-second median and 24.2-second p95; Toolbox passed 3/5 with a 21.6-second median and 24.3-second p95. Both routes used only their expected tools and the Toolbox latency gate passed, but both missed the 100% quality requirement. Version 6 remains unpromoted, and the comparator restored and verified the live direct route.
@@ -68,15 +68,19 @@ Last updated: 2026-10-01
 - [x] Hardened the backend-to-Hosted-Agent OBO handoff against prompt-channel credential injection. Delegated tokens remain accepted only through the out-of-band `mcpAccessTokens` JSON field; a shared fail-closed parser now removes well-formed, case-variant, and dangling `<mcp_access_tokens>` blocks before model invocation or message-content tracing. The hosted handoff and Copilot OBO slices pass all 52 focused tests plus Ruff, format, mypy, and hosted entry-point compilation.
 - [x] Added direct OBO MCP server boundary coverage and closed its remaining exception-log leak. Tests prove bearer extraction occurs only from the HTTP transport header, raw profile-photo bytes never reach model output or logs, validation errors redact delegated credentials, and upstream Graph/OBO failures return an opaque response while retaining a sanitized server traceback. The standalone OBO suite now passes all 14 tests with focused Ruff and format checks.
 
-### Remaining Work, In Order
+### Mandatory Remaining Gates
 
-1. Install the generated Kratos personal-tab package in the target Teams tenant and validate desktop/web behavior, files, and two-user OBO isolation.
-2. Inspect the failed Microsoft Learn evaluator records and repeat the promotion comparison only after a specific, evidence-backed quality improvement; keep immutable Toolbox version 6 unpromoted until every gate passes.
-3. Complete live Graph OBO identity and security validation, including two-user tenant testing and token-leak inspection; retain the custom path unless Foundry preserves the current user-isolation boundary.
-4. Enable Tool Selection, Tool Input Accuracy, and Task Navigation Efficiency when the installed SDK exposes supported implementations.
-5. Inventory and migrate additional eligible non-user-specific MCP, OpenAPI, and Azure AI Search integrations.
-6. Make separate product decisions about a native Responses-based Teams channel and specialist agents.
-7. Experiment with portable Foundry Skills after the preceding work. Filesystem use alone is not a blocker; runtime dependencies and product contracts determine portability.
+1. Deploy the reviewed OBO hardening changes and run the API smoke suite against the target environment.
+2. Install the generated Kratos personal-tab package in the target Teams tenant and validate desktop/web behavior, sign-in, files, and sign-out.
+3. Complete two-user OBO isolation and deployed token-leak inspection across logs, traces, eval artifacts, and tool output.
+
+### Optional Follow-up
+
+1. Revisit Microsoft Learn Toolbox only when a tool-output, URL-normalization, or platform change provides a new evidence-backed hypothesis; keep immutable version 6 unpromoted and the direct route active meanwhile.
+2. Enable Tool Selection, Tool Input Accuracy, and Task Navigation Efficiency when the installed SDK exposes supported implementations.
+3. Inventory additional eligible non-user-specific MCP, OpenAPI, and Azure AI Search integrations.
+4. Make separate product decisions about native Responses-based Teams chat and specialist agents.
+5. Experiment with portable Foundry Skills after the migration and identity work. Filesystem use alone is not a blocker; runtime dependencies and product contracts determine portability.
 
 ## Current State
 
@@ -197,7 +201,7 @@ Toolbox remains additive during migration. A tool is removed from the local regi
 
 ## Phase 2: Pilot Managed Tools
 
-### 2A. Web Search (Promoted; Cost and Observation Pending)
+### 2A. Web Search (Promoted; Observation Complete)
 
 Move the current web-search capability to Toolbox first.
 
@@ -214,7 +218,7 @@ Acceptance criteria:
 - Quality and success rate meet or exceed the baseline.
 - Added latency and cost are measured and accepted.
 
-### 2B. Code Interpreter (Next Managed-Tool Migration)
+### 2B. Code Interpreter (Evaluated; Not Promoted)
 
 Evaluate Foundry-managed Code Interpreter against the current local Python subprocess.
 
@@ -376,7 +380,7 @@ Pilot gates:
 - [x] Exercise rollback before promotion.
 - [x] Correct SDK tool-argument capture and prove grounded evaluator inputs on fresh direct-route sessions.
 - [x] Complete a corrected five-run comparison per route. Expected routing and the latency threshold passed, but direct quality passed 4/5 and Toolbox quality passed 3/5, below the required 100%.
-- [ ] Improve and rerun the quality comparison; only then deploy `TOOLBOX_LEARN_ENABLED=true` with immutable version 6, while leaving the direct MCP declaration available for rollback.
+- [x] Complete the final corrected comparison and stop without promotion. Both routes passed 2/5, Toolbox failed the latency gate, the direct route was restored, and version 6 remains immutable and unpromoted until a new evidence-backed hypothesis exists.
 
 Raw candidate validation on 2026-09-29:
 
@@ -397,7 +401,7 @@ Corrected evaluation state on 2026-09-30:
 - A subsequent valid comparison completed with direct at 2/5 and Toolbox at 3/5; Toolbox p95 was 26.8 seconds versus 37.8 seconds direct. Four Tool Call Accuracy failures were caused by empty persisted arguments, and one direct Tool Output Utilization failure identified unsupported response details. Version 6 was not promoted.
 - The empty arguments were an instrumentation defect, not missing model parameters or MCP failures: the installed Copilot SDK emits `arguments` on `tool.execution_start`, but Kratos read `input`. The corrected Hosted Agent now persists the actual search queries, fetch URLs, and inspection arguments.
 - After deployment and warm-pool drainage, two fresh direct-route diagnostics passed every configured evaluator with Tool Call Accuracy 5/5.
-- The subsequent promotion-grade comparison used five fresh measured runs per route. Direct passed 4/5 with a 20.9-second median and 24.2-second p95; Toolbox passed 3/5 with a 21.6-second median and 24.3-second p95. Tool routing and the 20% latency threshold passed, but neither route met the 100% quality gate. The comparator restored the direct route (`TOOLBOX_LEARN_ENABLED=false`, version `0`) and live configuration verification confirmed it active. Version 6 remains immutable and unpromoted pending failure analysis and a justified quality change.
+- The subsequent promotion-grade comparison used five fresh measured runs per route. Direct passed 4/5 with a 20.9-second median and 24.2-second p95; Toolbox passed 3/5 with a 21.6-second median and 24.3-second p95. Tool routing and the 20% latency threshold passed, but neither route met the 100% quality gate. The comparator restored the direct route (`TOOLBOX_LEARN_ENABLED=false`, version `0`) and live configuration verification confirmed it active. This interim result triggered the inspection and corrected final comparison recorded below; it is not the current promotion decision.
 - Persisted-run inspection found one genuine grounding failure in each route: both responses added unsupported guidance that a private virtual-network MCP server can use no authentication solely because network isolation protects it. The remaining Toolbox failure was Tool Call Accuracy 2/5, but its rationale also said the grounded search and fetch were relevant, sufficient, successful, and covered both requested authentication modes; it lowered the score for not fetching a second page even though the scenario requests the single highest-value page. Treat that result as evaluator inconsistency, not a routing defect. Before rerunning, prevent authentication claims inferred from network location and make the evaluator contract agree with the one-page fetch requirement.
 - Follow-up inspection showed that the Learn page explicitly documents private servers that intentionally rely on network isolation without application authentication, so the scenario was corrected to avoid equating network placement with authentication while preserving that documented case. It now permits local inspection of oversized outputs and requires one search plus an unchanged selected-result URL for one fetch. The final comparison passed only 2/5 on each route: direct median/p95 was 16.0/16.9 seconds and Toolbox was 16.9/31.8 seconds. Failures remained around URL-anchor attribution, exact fetch selection, and unsupported narrowing of the fetched guidance; Toolbox also failed the 20% p95 gate. Stop tuning version 6, keep it unpromoted, and retain the verified direct route until a tool-output or URL-normalization change provides a new evidence-backed hypothesis.
 
@@ -531,7 +535,7 @@ Acceptance criteria:
 3. [x] Run repeated paired baseline and Toolbox evaluations and promote Web Search on quality, reliability, and latency.
 4. [x] Complete the Web Search release observation period; per-run cost is observable and rollback/restoration have been exercised.
 5. [x] Evaluate one additional managed capability at a time, beginning with Code Interpreter; the evaluation completed, but promotion stopped because its project-shared container context does not meet the user-isolation requirement.
-6. [x] Complete the corrected Microsoft Learn comparison; version 6 was not promoted because direct passed 4/5 and Toolbox passed 3/5 despite passing routing and latency gates.
+6. [x] Complete the final corrected Microsoft Learn comparison; version 6 was not promoted because both routes passed 2/5 and Toolbox also failed the latency gate. The direct route remains active.
 7. [ ] Complete tenant-side Teams installation and desktop/web/OBO validation; package generation, frontend integration, deployment, and non-Teams browser validation are complete.
 8. [ ] Decide separately whether native Responses-based Teams chat provides enough value to justify protocol and product-contract work.
 9. [ ] Expand to other selected personas and shared integrations only after capability-specific evaluations pass.
@@ -575,15 +579,15 @@ The first pull request should contain only the foundation needed to prove one ma
 - [x] Run the existing `web-search-ai-trends` scenario in both modes and record the comparison.
 - [x] Run backend tests/lint and the API-only deployed smoke suite.
 
-Code Interpreter is the next managed-tool migration because file transfer and execution semantics require separate validation. Foundry Skills remain later work.
+The first implementation slice is complete. Code Interpreter was subsequently evaluated and not promoted because its project-shared container context does not meet the user-isolation requirement. Foundry Skills remain optional later work.
 
 ## Remaining Decisions
 
 - Is application-observed transaction count multiplied by the current agreement rate sufficient for release gating, or is reconciliation with delayed Azure invoice data also required?
-- Does managed Code Interpreter preserve the existing generated-file download flow and approved package-source policy?
+- What platform isolation change would justify reconsidering managed Code Interpreter for multi-user workloads?
 - Which non-user-specific MCP, OpenAPI, and Azure AI Search integrations benefit from Foundry governance enough to migrate?
 - Can Foundry preserve the current Graph OBO user-isolation and token-handling boundary?
 - Do Responses protocol or specialist agents provide enough product value to justify their migration costs?
 - Which portable workflow should be the first Foundry Skills experiment after the other phases are complete?
 
-Current recommendation: keep Microsoft Learn on the direct route and version 6 unpromoted while its failed evaluator records are analyzed. Publish the existing Kratos frontend as a Teams personal-tab demo next. Keep Invocations and the custom SSE contract for that milestone; evaluate native Responses-based Teams chat separately after the demo proves product value. Use a self-contained, non-OBO workflow as the eventual Foundry Skills pilot.
+Current recommendation: review and deploy the OBO hardening changes, then complete the Teams personal-tab and two-user OBO validation in the target tenant. Keep Microsoft Learn on the direct route with version 6 unpromoted, and keep managed Code Interpreter disabled because its project-shared container context does not meet the user-isolation requirement. Keep Invocations and the custom SSE contract for this milestone; evaluate native Responses-based Teams chat separately after the tab demo proves product value. Use a self-contained, non-OBO workflow as the eventual Foundry Skills pilot.
