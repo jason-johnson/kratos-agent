@@ -67,12 +67,13 @@ Last updated: 2026-10-01
 - [x] Closed an OBO observability leak path in SDK-controlled failures. Conversation-aware redaction now removes delegated bearer values before SDK session errors, raised exceptions, MCP tool errors/output, unhandled-event diagnostics, span status/result attributes, logs, or SSE/evaluation events are emitted. Regression tests reproduce each error path with a synthetic marker and prove it never reaches client events or captured logs; all 41 Copilot agent and OBO tests pass with focused Ruff and mypy checks.
 - [x] Hardened the backend-to-Hosted-Agent OBO handoff against prompt-channel credential injection. Delegated tokens remain accepted only through the out-of-band `mcpAccessTokens` JSON field; a shared fail-closed parser now removes well-formed, case-variant, and dangling `<mcp_access_tokens>` blocks before model invocation or message-content tracing. The hosted handoff and Copilot OBO slices pass all 52 focused tests plus Ruff, format, mypy, and hosted entry-point compilation.
 - [x] Added direct OBO MCP server boundary coverage and closed its remaining exception-log leak. Tests prove bearer extraction occurs only from the HTTP transport header, raw profile-photo bytes never reach model output or logs, validation errors redact delegated credentials, and upstream Graph/OBO failures return an opaque response while retaining a sanitized server traceback. The standalone OBO suite now passes all 14 tests with focused Ruff and format checks.
+- [x] Deployed the reviewed OBO hardening to `bankfdry` and completed the post-deploy API-only smoke gate. All 15 health, configuration, scenario, chat, eval, trace, conversation, skills, and system-prompt checks passed.
 
 ### Mandatory Remaining Gates
 
-1. Deploy the reviewed OBO hardening changes and run the API smoke suite against the target environment.
-2. Install the generated Kratos personal-tab package in the target Teams tenant and validate desktop/web behavior, sign-in, files, and sign-out.
-3. Complete two-user OBO isolation and deployed token-leak inspection across logs, traces, eval artifacts, and tool output.
+1. [x] Deploy the reviewed OBO hardening changes and run the API smoke suite against the target environment.
+2. [ ] Install the generated Kratos personal-tab package in the target Teams tenant and validate desktop/web behavior, sign-in, files, and sign-out.
+3. [ ] Complete two-user OBO isolation and deployed token-leak inspection across logs, traces, eval artifacts, and tool output.
 
 ### Optional Follow-up
 
