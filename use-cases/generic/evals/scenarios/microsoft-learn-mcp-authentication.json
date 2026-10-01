@@ -2,9 +2,9 @@
   "name": "microsoft-learn-mcp-authentication",
   "category": "standard",
   "description": "First-party documentation research requiring Microsoft Learn search and a follow-up page fetch.",
-  "input_message": "Use Microsoft Learn documentation to explain when an Azure AI Foundry MCP tool should use no authentication versus project managed identity. Search the documentation, fetch the highest-value page for full context, and cite the Microsoft Learn pages you used.",
+  "input_message": "Use Microsoft Learn documentation to explain when an Azure AI Foundry MCP tool should use no authentication versus project managed identity. Run one documentation search and fetch the single highest-value result for full context. You may inspect saved tool output locally as needed; those inspections do not count as additional documentation searches or page fetches. Cite only Microsoft Learn URLs returned by the search or fetch.",
   "input_data": {},
-  "expected_behavior": "Calls Microsoft Learn documentation search and fetch, distinguishes public no-auth servers from app-only managed-identity servers, and supports the explanation only with Microsoft Learn citations returned by those tools.",
+  "expected_behavior": "Calls Microsoft Learn documentation search exactly once and fetch exactly once, distinguishes public no-auth servers from app-only managed-identity servers, never justifies no authentication from network isolation alone, permits local inspection of oversized tool output, and supports the explanation only with Microsoft Learn URLs returned by the search or fetch.",
   "expected_tool_calls": ["microsoft_docs_search", "microsoft_docs_fetch"],
   "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
 }

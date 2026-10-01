@@ -38,7 +38,16 @@ def learn_route_failures(
         return ["run did not contain one completed scenario result"]
 
     observed = compare._tool_names(run)  # noqa: SLF001
-    failures = [f"did not invoke {tool}" for tool in sorted(required_tools - observed)]
+    tool_counts: dict[str, int] = {}
+    for call in results[0].get("tool_calls") or []:
+        if call.get("status") == "completed" and call.get("skillName") != "skill":
+            name = str(call.get("skillName"))
+            tool_counts[name] = tool_counts.get(name, 0) + 1
+    failures = [
+        f"invoked {tool} {tool_counts.get(tool, 0)} times; expected exactly once"
+        for tool in sorted(required_tools)
+        if tool_counts.get(tool, 0) != 1
+    ]
     failures.extend(f"unexpectedly invoked {tool}" for tool in sorted(forbidden_tools & observed))
     scores = results[0].get("scores") or {}
     if not scores:

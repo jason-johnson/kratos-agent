@@ -61,9 +61,20 @@ def test_rejects_missing_fetch_opposite_route_and_failed_evaluator() -> None:
         run, learn_compare.TOOLBOX_TOOLS, learn_compare.DIRECT_TOOLS
     )
 
-    assert any("did not invoke kratos-tools-microsoft_docs_fetch" in failure for failure in failures)
+    assert any("invoked kratos-tools-microsoft_docs_fetch 0 times" in failure for failure in failures)
     assert any("unexpectedly invoked microsoft-learn-microsoft_docs_fetch" in failure for failure in failures)
     assert any("ToolCallAccuracy did not pass" in failure for failure in failures)
+
+
+def test_rejects_duplicate_learn_calls() -> None:
+    search, fetch = sorted(learn_compare.DIRECT_TOOLS)
+    run = _run(10_000, [search, search, fetch])
+
+    failures = learn_compare.learn_route_failures(
+        run, learn_compare.DIRECT_TOOLS, learn_compare.TOOLBOX_TOOLS
+    )
+
+    assert any(f"invoked {search} 2 times" in failure for failure in failures)
 
 
 def test_rejects_toolbox_latency_regression() -> None:
