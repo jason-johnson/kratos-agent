@@ -34,6 +34,14 @@ jobs:
       - name: Tests
         run: pytest tests/ -v --tb=short
 
+      - name: Install OBO security test dependencies
+        working-directory: src/obo-mcp-server
+        run: pip install -r requirements.txt "pytest>=8.0"
+
+      - name: OBO security tests
+        working-directory: src/obo-mcp-server
+        run: pytest tests/ -v --tb=short
+
   frontend-lint:
     runs-on: ubuntu-latest
     defaults:

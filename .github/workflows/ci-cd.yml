@@ -76,6 +76,14 @@ jobs:
         run: |
           pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
 
+      - name: Install OBO security test dependencies
+        working-directory: src/obo-mcp-server
+        run: pip install -r requirements.txt "pytest>=8.0"
+
+      - name: Run OBO security tests
+        working-directory: src/obo-mcp-server
+        run: pytest tests/ -v
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v7

@@ -21,7 +21,7 @@ The target architecture keeps Kratos as a Foundry Hosted Agent and incrementally
 
 ## Implementation Status
 
-Last updated: 2026-09-30
+Last updated: 2026-10-01
 
 - [x] Confirmed Toolbox and Hosted Agent support in Sweden Central.
 - [x] Added declarative `kratos-tools` provisioning with managed Web Search.
@@ -61,13 +61,15 @@ Last updated: 2026-09-30
 - [x] Corrected Copilot SDK tool-argument capture for evaluation and tracing. Production `tool.execution_start` events expose `arguments` and `tool_call_id`, while Kratos had read obsolete `input` and `call_id` fields. The corrected Hosted Agent was deployed with Microsoft Learn on the direct route; after draining the two-session warm pool, two fresh diagnostics recorded grounded search queries, fetch URLs, and local inspection arguments, passed every configured evaluator, and scored Tool Call Accuracy 5/5. Focused evaluator, agent-event, and comparison tests pass.
 - [x] Added a Microsoft Learn-specific guarded comparator that verifies the live Hosted Agent configuration before measuring, drains both warm sessions per route, requires the expected search and fetch tools with no opposite-route calls, enforces every configured evaluator, limits Toolbox p95 regression to 20%, and always restores direct MCP.
 - [x] Completed the corrected five-run Microsoft Learn comparison after the instrumentation fix. Direct passed 4/5 with a 20.9-second median and 24.2-second p95; Toolbox passed 3/5 with a 21.6-second median and 24.3-second p95. Both routes used only their expected tools and the Toolbox latency gate passed, but both missed the 100% quality requirement. Version 6 remains unpromoted, and the comparator restored and verified the live direct route.
+- [x] Corrected the Learn scenario contract after evaluator inspection: local inspection of oversized tool output is allowed, network isolation does not by itself determine authentication, and the selected search URL must be passed unchanged to fetch. The final five-run comparison still failed promotion. Direct passed 2/5 with a 16.0-second median and 16.9-second p95; Toolbox passed 2/5 with a 16.9-second median and 31.8-second p95. Remaining failures concerned URL-anchor attribution, exact fetch selection, and unsupported narrowing of no-auth guidance; Toolbox also exceeded the 20% latency limit. Version 6 remains unpromoted, and the live agent is active on the restored direct route (`false`/`0`).
 - [x] Implemented and deployed the Teams personal-tab foundation. The frontend lazily initializes TeamsJS 2.57.0 only when framed, the Static Web App CSP permits only Microsoft Teams/Microsoft 365 frame ancestors and the TeamsJS Microsoft CDN dependency, and ordinary browser use remains unchanged. A parameterized schema-1.30 package generator creates a stable environment-specific ZIP from gitignored azd values with validated 192px/32px icons. The generated manifest passes Microsoft's schema, the clean frontend build and focused package tests pass, all 15 deployed API smoke specs pass, and a host-browser check renders without console errors. Tenant installation, Teams desktop/web interaction, and two-user OBO isolation remain manual exit gates.
+- [x] Added direct Graph OBO JWT validation coverage using synthetic locally signed RSA tokens. Ten tests prove acceptance of a valid delegated token and rejection of missing, expired, wrong-audience, wrong-tenant, v1, missing-scope, app-only, and disallowed-caller tokens, plus refusal of `AUTH_DISABLED` in production. Both CI workflows now install the OBO service's pinned dependencies and run this standalone suite; existing backend tests continue to cover trusted header injection, confused-deputy protections, conversation isolation, token fingerprints, and identity-session lifecycle.
 
 ### Remaining Work, In Order
 
 1. Install the generated Kratos personal-tab package in the target Teams tenant and validate desktop/web behavior, files, and two-user OBO isolation.
 2. Inspect the failed Microsoft Learn evaluator records and repeat the promotion comparison only after a specific, evidence-backed quality improvement; keep immutable Toolbox version 6 unpromoted until every gate passes.
-3. Complete the Graph OBO identity and security spike; retain the custom path unless Foundry preserves the current user-isolation boundary.
+3. Complete live Graph OBO identity and security validation, including two-user tenant testing and token-leak inspection; retain the custom path unless Foundry preserves the current user-isolation boundary.
 4. Enable Tool Selection, Tool Input Accuracy, and Task Navigation Efficiency when the installed SDK exposes supported implementations.
 5. Inventory and migrate additional eligible non-user-specific MCP, OpenAPI, and Azure AI Search integrations.
 6. Make separate product decisions about a native Responses-based Teams channel and specialist agents.
@@ -394,6 +396,7 @@ Corrected evaluation state on 2026-09-30:
 - After deployment and warm-pool drainage, two fresh direct-route diagnostics passed every configured evaluator with Tool Call Accuracy 5/5.
 - The subsequent promotion-grade comparison used five fresh measured runs per route. Direct passed 4/5 with a 20.9-second median and 24.2-second p95; Toolbox passed 3/5 with a 21.6-second median and 24.3-second p95. Tool routing and the 20% latency threshold passed, but neither route met the 100% quality gate. The comparator restored the direct route (`TOOLBOX_LEARN_ENABLED=false`, version `0`) and live configuration verification confirmed it active. Version 6 remains immutable and unpromoted pending failure analysis and a justified quality change.
 - Persisted-run inspection found one genuine grounding failure in each route: both responses added unsupported guidance that a private virtual-network MCP server can use no authentication solely because network isolation protects it. The remaining Toolbox failure was Tool Call Accuracy 2/5, but its rationale also said the grounded search and fetch were relevant, sufficient, successful, and covered both requested authentication modes; it lowered the score for not fetching a second page even though the scenario requests the single highest-value page. Treat that result as evaluator inconsistency, not a routing defect. Before rerunning, prevent authentication claims inferred from network location and make the evaluator contract agree with the one-page fetch requirement.
+- Follow-up inspection showed that the Learn page explicitly documents private servers that intentionally rely on network isolation without application authentication, so the scenario was corrected to avoid equating network placement with authentication while preserving that documented case. It now permits local inspection of oversized outputs and requires one search plus an unchanged selected-result URL for one fetch. The final comparison passed only 2/5 on each route: direct median/p95 was 16.0/16.9 seconds and Toolbox was 16.9/31.8 seconds. Failures remained around URL-anchor attribution, exact fetch selection, and unsupported narrowing of the fetched guidance; Toolbox also failed the 20% p95 gate. Stop tuning version 6, keep it unpromoted, and retain the verified direct route until a tool-output or URL-normalization change provides a new evidence-backed hypothesis.
 
 Priority order:
 
@@ -426,12 +429,13 @@ Do not migrate the current Graph OBO MCP path as part of the initial Toolbox wor
 
 ### Required Security Tests
 
-- No-token and expired-token behavior.
-- Wrong audience and wrong tenant rejection.
-- Persona/tool allowlist enforcement.
-- Confused-deputy attempts using a similarly named MCP server.
-- User A cannot access User B's delegated context.
-- Tokens never appear in logs, traces, eval artifacts, or tool output.
+- [x] No-token and expired-token behavior.
+- [x] Wrong audience and wrong tenant rejection.
+- [x] Persona/tool allowlist enforcement.
+- [x] Confused-deputy attempts using a similarly named MCP server.
+- [x] Automated conversation-isolation coverage prevents User A from inheriting User B's delegated context.
+- [ ] Repeat two-user isolation against the deployed tenant and Teams personal tab.
+- [ ] Verify tokens never appear in deployed logs, traces, eval artifacts, or tool output.
 
 Only replace the custom OBO injection after these checks pass and the authorization boundary is at least as strong as the current implementation.
 
