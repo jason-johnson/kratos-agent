@@ -46,7 +46,7 @@ if "FOUNDRY_ENDPOINT" not in os.environ:
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from app.config import Settings, get_settings
-from app.hosted_agent_invoke import parse_invoke_payload
+from app.hosted_agent_invoke import parse_invoke_payload, strip_mcp_access_token_tags
 from app.models import (
     ContentEvent,
     DoneEvent,
@@ -501,26 +501,7 @@ async def handle_invoke(request: Request) -> Response:
             # so the proxy never emits one. The ENTIRE tag block is always removed
             # so nothing reaches the model even if some other caller injects it,
             # and any keys found are logged (for observability) but never honored.
-            def _consume_mcp_tag(m: "re.Match[str]") -> str:
-                payload = m.group(1)
-                try:
-                    parsed = json.loads(payload)
-                except (json.JSONDecodeError, ValueError):
-                    parsed = None
-                    logger.warning("Failed to parse <mcp_access_tokens> input tag")
-                if isinstance(parsed, dict):
-                    for k, v in parsed.items():
-                        if isinstance(v, str) and v:
-                            tag_token_keys.append(str(k))
-                return ""
-
-            message = re.sub(
-                r"<mcp_access_tokens>\s*(.*?)\s*</mcp_access_tokens>",
-                _consume_mcp_tag,
-                message,
-                flags=re.DOTALL,
-            )
-            tag_token_keys = sorted(set(tag_token_keys))
+            message, tag_token_keys = strip_mcp_access_token_tags(message)
 
             # Clean up leading/trailing whitespace from tag removal
             message = message.strip()

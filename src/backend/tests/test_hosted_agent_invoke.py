@@ -9,7 +9,7 @@ importing the full agentserver runtime.
 
 from __future__ import annotations
 
-from app.hosted_agent_invoke import parse_invoke_payload
+from app.hosted_agent_invoke import parse_invoke_payload, strip_mcp_access_token_tags
 
 
 def test_json_object_is_returned_as_is():
@@ -48,3 +48,33 @@ def test_invalid_utf8_does_not_raise():
     # Should degrade gracefully rather than 500 on a bad byte sequence.
     result = parse_invoke_payload(b"\xff\xfe bad bytes")
     assert "message" in result
+
+
+def test_strips_well_formed_mcp_access_token_tag():
+    message, server_names = strip_mcp_access_token_tags(
+        '<mcp_access_tokens>{"graph-obo":"synthetic-secret"}</mcp_access_tokens>\nWho am I?'
+    )
+
+    assert message == "Who am I?"
+    assert server_names == ["graph-obo"]
+    assert "synthetic-secret" not in message
+
+
+def test_strips_case_variant_mcp_access_token_tag():
+    message, server_names = strip_mcp_access_token_tags(
+        '<MCP_ACCESS_TOKENS>{"graph-obo":"synthetic-secret"}</MCP_ACCESS_TOKENS>\nWho am I?'
+    )
+
+    assert message == "Who am I?"
+    assert server_names == ["graph-obo"]
+    assert "synthetic-secret" not in message
+
+
+def test_dangling_mcp_access_token_tag_fails_closed():
+    message, server_names = strip_mcp_access_token_tags(
+        'Keep this\n<mcp_access_tokens>{"graph-obo":"synthetic-secret"}\nWho am I?'
+    )
+
+    assert message == "Keep this"
+    assert server_names == []
+    assert "synthetic-secret" not in message

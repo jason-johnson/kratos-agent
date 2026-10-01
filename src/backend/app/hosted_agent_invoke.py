@@ -18,7 +18,12 @@ unit-tested without importing the agentserver runtime.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
+
+_MCP_BLOCK_PATTERN = r"<mcp_access_tokens\b[^>]*>(.*?)(?:</mcp_access_tokens\s*>|$)"
+_MCP_ACCESS_TOKEN_BLOCK_RE = re.compile(_MCP_BLOCK_PATTERN, flags=re.IGNORECASE | re.DOTALL)
+_MCP_ACCESS_TOKEN_MARKER_RE = re.compile(r"<mcp_access_tokens\b", flags=re.IGNORECASE)
 
 
 def parse_invoke_payload(raw: bytes) -> dict[str, Any]:
@@ -47,3 +52,29 @@ def parse_invoke_payload(raw: bytes) -> dict[str, Any]:
 
     # Any other JSON scalar/array: treat the original text as the message.
     return {"message": text}
+
+
+def strip_mcp_access_token_tags(message: str) -> tuple[str, list[str]]:
+    """Remove prompt-embedded OBO token blocks and return keys for diagnostics.
+
+    Delegated tokens are accepted only through the invocation JSON body's
+    ``mcpAccessTokens`` field. Any prompt tag is ignored and removed. A dangling
+    opening marker consumes the rest of the message so malformed secret content
+    fails closed instead of reaching the model or message-content telemetry.
+    """
+    server_names: list[str] = []
+
+    def consume_block(match: re.Match[str]) -> str:
+        try:
+            parsed = json.loads(match.group(1))
+        except (json.JSONDecodeError, ValueError):
+            return ""
+        if isinstance(parsed, dict):
+            server_names.extend(str(key) for key, value in parsed.items() if isinstance(value, str) and value)
+        return ""
+
+    sanitized = _MCP_ACCESS_TOKEN_BLOCK_RE.sub(consume_block, message)
+    dangling_marker = _MCP_ACCESS_TOKEN_MARKER_RE.search(sanitized)
+    if dangling_marker:
+        sanitized = sanitized[: dangling_marker.start()]
+    return sanitized.strip(), sorted(set(server_names))
