@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import time
+import traceback
 import uuid
 from collections.abc import AsyncGenerator
 from importlib.metadata import version
@@ -51,6 +52,7 @@ logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
 _TOOL_EVENT_OUTPUT_LIMIT = 12_000
+_BEARER_TOKEN_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
 
 # Regex patterns for extracting actual skill name from the generic "skill" tool
 _SKILL_OUTPUT_RE = re.compile(r'Skill ["\']([^"\']+ )["\']')
@@ -101,6 +103,14 @@ def _resolve_skill_display_name(event_data, fallback: str = "skill") -> str:
 def pretty_tool_name(name: str) -> str:
     """Convert tool_name to 'Tool Name' for display."""
     return " ".join(w.capitalize() for w in name.replace("-", "_").split("_"))
+
+
+def _redact_sensitive_text(value, secrets=()) -> str:
+    text = str(value)
+    for secret in secrets:
+        if secret:
+            text = text.replace(str(secret), "[REDACTED]")
+    return _BEARER_TOKEN_RE.sub("Bearer [REDACTED]", text)
 
 
 def _extract_tool_value(obj) -> str:
@@ -373,6 +383,10 @@ class CopilotAgent:
             sorted(tokens.keys()),
         )
         return servers
+
+    def _redact_conversation_text(self, conversation_id: str, value) -> str:
+        tokens = (self._conversation_mcp_tokens.get(conversation_id) or {}).values()
+        return _redact_sensitive_text(value, tokens)
 
     def _toolbox_endpoint(self) -> str:
         """Return the consumer endpoint for the configured Foundry Toolbox."""
@@ -1302,15 +1316,17 @@ class CopilotAgent:
                                 )
                                 success = getattr(event.data, "success", None)
                                 error = getattr(event.data, "error", None)
+                                safe_error = self._redact_conversation_text(cid, error)
                                 logger.info(
                                     "Tool complete conversation=%s tool=%s success=%r duration_ms=%s error=%r",
                                     cid,
                                     tool_name,
                                     success,
                                     duration_ms,
-                                    error,
+                                    safe_error,
                                 )
                                 raw_output = getattr(event.data, "output", "") or getattr(event.data, "result", "")
+                                safe_output = self._redact_conversation_text(cid, _extract_tool_value(raw_output))
 
                                 # End the corresponding tool span
                                 tool_span = _tool_spans.pop(tool_name, None)
@@ -1320,14 +1336,13 @@ class CopilotAgent:
                                 if tool_span is not None:
                                     # Remove from stack by identity
                                     _tool_span_stack[:] = [(n, s) for n, s in _tool_span_stack if s is not tool_span]
-                                    output_str = str(raw_output)[:2000]
-                                    tool_span.set_attribute("gen_ai.tool.call.result", output_str)
+                                    tool_span.set_attribute("gen_ai.tool.call.result", safe_output[:2000])
                                     if error:
                                         tool_span.set_attribute(
                                             "error.type",
                                             type(error).__name__ if not isinstance(error, str) else "tool_error",
                                         )
-                                        tool_span.set_status(trace.StatusCode.ERROR, str(error))
+                                        tool_span.set_status(trace.StatusCode.ERROR, safe_error)
                                     elif success is False:
                                         tool_span.set_attribute("error.type", "tool_execution_failed")
                                         tool_span.set_status(trace.StatusCode.ERROR, "Tool execution failed")
@@ -1338,7 +1353,7 @@ class CopilotAgent:
                                     ToolCallEvent(
                                         skillName=tool_name,
                                         status="completed" if success is not False else "failed",
-                                        output=_limit_tool_event_output(raw_output),
+                                        output=_limit_tool_event_output(safe_output),
                                         durationMs=duration_ms,
                                         source=self._resolve_skill_source(cid, tool_name),
                                         billing=_extract_tool_billing(raw_output),
@@ -1376,14 +1391,17 @@ class CopilotAgent:
                                 _tool_span_stack.clear()
                                 _tool_spans.clear()
 
+                                safe_message = self._redact_conversation_text(
+                                    cid, getattr(event.data, "message", "Unknown error")
+                                )
                                 logger.error(
                                     "Session error conversation=%s message=%s",
                                     cid,
-                                    str(getattr(event.data, "message", "Unknown error")),
+                                    safe_message,
                                 )
                                 q.put_nowait(
                                     ErrorEvent(
-                                        message=str(getattr(event.data, "message", "Unknown error")),
+                                        message=safe_message,
                                         code="SDK_ERROR",
                                     )
                                 )
@@ -1396,15 +1414,22 @@ class CopilotAgent:
                                     etype,
                                     cid,
                                     {
-                                        a: repr(getattr(event.data, a, None))[:100]
+                                        a: self._redact_conversation_text(cid, repr(getattr(event.data, a, None)))[:100]
                                         for a in dir(event.data)
                                         if not a.startswith("_")
                                     }
                                     if event.data
                                     else "no_data",
                                 )
-                        except Exception:
-                            logger.exception("Error in session event handler conversation=%s", cid)
+                        except Exception as exc:
+                            safe_traceback = self._redact_conversation_text(
+                                cid, "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                            )
+                            logger.error(
+                                "Error in session event handler conversation=%s\n%s",
+                                cid,
+                                safe_traceback.rstrip(),
+                            )
 
                     session.on(on_event)
                     self._registered_handlers.add(conversation_id)
@@ -1489,10 +1514,19 @@ class CopilotAgent:
                 logger.warning("Agent timed out for conversation=%s", conversation_id)
                 yield ErrorEvent(message="Agent timed out waiting for response", code="TIMEOUT")
             except Exception as e:
+                safe_error = self._redact_conversation_text(conversation_id, e)
+                safe_traceback = self._redact_conversation_text(
+                    conversation_id, "".join(traceback.format_exception(type(e), e, e.__traceback__))
+                )
                 span.set_attribute("error.type", type(e).__name__)
-                span.set_status(trace.StatusCode.ERROR, str(e))
-                logger.exception("CopilotAgent failed for conversation=%s", conversation_id)
-                yield ErrorEvent(message=str(e), code="AGENT_ERROR")
+                span.set_status(trace.StatusCode.ERROR, safe_error)
+                logger.error(
+                    "CopilotAgent failed for conversation=%s error=%s\n%s",
+                    conversation_id,
+                    safe_error,
+                    safe_traceback.rstrip(),
+                )
+                yield ErrorEvent(message=safe_error, code="AGENT_ERROR")
                 # Drop the broken session so next turn gets a fresh one
                 self._sessions.pop(conversation_id, None)
                 self._registered_handlers.discard(conversation_id)

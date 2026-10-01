@@ -6,9 +6,12 @@ so the tool runs On-Behalf-Of the user. The token must never mutate the shared
 registry config and must only land on the matching server.
 """
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from app.config import Settings
+from app.models import ErrorEvent, ToolCallEvent
 from app.services.copilot_agent import CopilotAgent
 
 
@@ -276,3 +279,78 @@ async def test_non_identity_creates_and_persists(wired_agent):
     assert wired_agent._client.resumed == []
     assert len(wired_agent._client.created) == 1
     assert cosmos.upserts == [("conv-plain", session.session_id)]
+
+
+async def test_sdk_error_does_not_expose_obo_token(wired_agent, caplog):
+    opaque_value = "synthetic-obo-token-that-must-not-escape"
+    wired_agent.set_conversation_mcp_tokens("conv1", {"graph-obo": opaque_value})
+    session = AsyncMock()
+    wired_agent._client.create_session = AsyncMock(return_value=session)
+
+    def register_handler(callback):
+        event = MagicMock()
+        event.type.value = "session.error"
+        event.data.message = f"request failed with Authorization: Bearer {opaque_value}"
+        callback(event)
+
+    session.on = register_handler
+
+    events = [event async for event in wired_agent.run(message="Who am I?", conversation_id="conv1")]
+
+    assert len(events) == 1
+    assert isinstance(events[0], ErrorEvent)
+    assert opaque_value not in events[0].message
+    assert opaque_value not in caplog.text
+    assert "[REDACTED]" in events[0].message
+
+
+async def test_raised_sdk_exception_does_not_expose_obo_token(wired_agent, caplog):
+    opaque_value = "synthetic-obo-token-that-must-not-escape"
+    wired_agent.set_conversation_mcp_tokens("conv1", {"graph-obo": opaque_value})
+    wired_agent._client.create_session = AsyncMock(
+        side_effect=RuntimeError(f"connection failed with Authorization: Bearer {opaque_value}")
+    )
+
+    events = [event async for event in wired_agent.run(message="Who am I?", conversation_id="conv1")]
+
+    assert len(events) == 1
+    assert isinstance(events[0], ErrorEvent)
+    assert events[0].code == "AGENT_ERROR"
+    assert opaque_value not in events[0].message
+    assert opaque_value not in caplog.text
+    assert "[REDACTED]" in events[0].message
+
+
+async def test_tool_result_does_not_expose_obo_token(wired_agent, caplog):
+    opaque_value = "synthetic-obo-token-that-must-not-escape"
+    wired_agent.set_conversation_mcp_tokens("conv1", {"graph-obo": opaque_value})
+    session = AsyncMock()
+    wired_agent._client.create_session = AsyncMock(return_value=session)
+    callbacks = []
+
+    def register_handler(callback):
+        callbacks.append(callback)
+
+    async def send(*args, **kwargs):
+        completed = MagicMock()
+        completed.type.value = "tool.execution_complete"
+        completed.data.tool_name = "get_my_profile"
+        completed.data.success = False
+        completed.data.duration_ms = 1
+        completed.data.error = f"upstream rejected Bearer {opaque_value}"
+        completed.data.output = f"request Authorization token was {opaque_value}"
+        callbacks[0](completed)
+
+        idle = MagicMock()
+        idle.type.value = "session.idle"
+        callbacks[0](idle)
+
+    session.on = register_handler
+    session.send = send
+
+    events = [event async for event in wired_agent.run(message="Who am I?", conversation_id="conv1")]
+
+    tool_event = next(event for event in events if isinstance(event, ToolCallEvent))
+    assert opaque_value not in tool_event.output
+    assert opaque_value not in caplog.text
+    assert "[REDACTED]" in tool_event.output
