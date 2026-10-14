@@ -104,13 +104,32 @@ def pretty_tool_name(name: str) -> str:
     """Convert tool_name to 'Tool Name' for display."""
     return " ".join(w.capitalize() for w in name.replace("-", "_").split("_"))
 
-
 def _redact_sensitive_text(value, secrets=()) -> str:
     text = str(value)
     for secret in secrets:
         if secret:
             text = text.replace(str(secret), "[REDACTED]")
     return _BEARER_TOKEN_RE.sub("Bearer [REDACTED]", text)
+
+def _reasoning_tokens(data) -> int:
+    """Pull reasoning-token counts out of an SDK usage payload.
+
+    Chat Completions nests these under ``completion_tokens_details``; the
+    Responses API — which reasoning models require in order to use function
+    tools — uses ``output_tokens_details`` instead. Some payloads arrive as
+    plain dicts rather than objects, so probe both access styles.
+    """
+
+    def _get(src, key):
+        if src is None:
+            return None
+        return src.get(key) if isinstance(src, dict) else getattr(src, key, None)
+
+    for attr in ("completion_tokens_details", "output_tokens_details"):
+        tokens = int(_get(_get(data, attr), "reasoning_tokens") or 0)
+        if tokens:
+            return tokens
+    return int(_get(data, "reasoning_tokens") or 0)
 
 
 def _extract_tool_value(obj) -> str:
@@ -675,12 +694,9 @@ class CopilotAgent:
                 )
 
             # Cloud, or local opted-in to the APIM gateway: authenticate to the
-            # Azure endpoint. NOTE: the Copilot SDK's backing engine authenticates
-            # to the provider with its OWN ambient Azure credentials
-            # (DefaultAzureCredential): Managed Identity in the Foundry sandbox /
-            # Container App, an EnvironmentCredential service principal, or the az
-            # CLI locally. The token_provider we set here is best-effort and may be
-            # ignored by the engine — so a failure to pre-warm it is NOT fatal.
+            # Azure endpoint. The SDK expects a one-argument bearer-token callback,
+            # while azure-identity returns a zero-argument callback. Adapt the
+            # signatures so the runtime can request a fresh token for every call.
             #   * Cloud sandbox   → Managed Identity (with az-CLI fallback for dev).
             #   * Local + gateway → az CLI credential (operator is `az login`-ed),
             #     so LLM calls flow through the APIM gateway and are captured in
@@ -697,20 +713,24 @@ class CopilotAgent:
             else:
                 self._credential = ManagedIdentityCredential()
             scope = "https://cognitiveservices.azure.com/.default"
-            self._token_provider = get_bearer_token_provider(self._credential, scope)
+            azure_token_provider = get_bearer_token_provider(self._credential, scope)
+
+            async def copilot_token_provider(_args: dict) -> str:
+                return await azure_token_provider()
+
+            self._token_provider = copilot_token_provider
 
             # Pre-warm the token so a request doesn't pay first-token latency. This
-            # is best-effort: the engine has its own ambient credential, so a
-            # failure here is only a warning (e.g. local container without az CLI —
-            # the engine still authenticates via its ambient managed identity / SP).
+            # is best-effort because the SDK callback retries token acquisition when
+            # the first model request is sent.
             try:
                 t0 = time.monotonic()
                 await self._credential.get_token(scope)
                 logger.info("Token pre-warmed successfully in %.1fms", (time.monotonic() - t0) * 1000)
             except Exception:
                 logger.warning(
-                    "Token pre-warm failed (non-fatal — engine uses its own ambient credential). "
-                    "If LLM calls fail, ensure ambient Azure creds are available (Managed Identity, "
+                    "Token pre-warm failed (non-fatal — the provider callback will retry). "
+                    "If LLM calls fail, ensure Azure credentials are available (Managed Identity, "
                     "AZURE_CLIENT_ID/SECRET/TENANT_ID, or `az login`).",
                     exc_info=True,
                 )
@@ -848,8 +868,19 @@ class CopilotAgent:
         the ``GITHUB_TOKEN`` env var. Otherwise returns an Azure provider whose
         ``base_url`` fronts the LLM through the APIM AI gateway when
         ``llm_gateway_base_url`` is set (governance + the GenAI gateway log), or the
-        AI Services account directly. Both expose the same
-        ``/openai/deployments/<model>/chat/completions`` shape.
+        AI Services account directly.
+
+        ``base_url`` is the bare resource host — the ``azure`` provider builds the
+        API path itself, and omitting ``azure.api_version`` selects the versionless
+        GA route, so calls land on ``/openai/v1/responses``.
+
+        ``wire_api`` must be ``responses``. Reasoning models such as ``gpt-6-astra``
+        reject function tools on ``/chat/completions`` outright — "Function tools
+        with reasoning_effort are not supported ... use /v1/responses or set
+        reasoning_effort to 'none'" — and that holds even when the request omits
+        ``reasoning_effort``, because the deployment applies its own non-none
+        default. The Responses API is the only shape that keeps tool calling and
+        reasoning working together.
 
         Returns:
             A provider configuration dict for ``CopilotClient`` sessions when
@@ -860,12 +891,9 @@ class CopilotAgent:
         llm_base = (self.settings.llm_gateway_base_url or self.settings.foundry_endpoint).rstrip("/")
         return {
             "type": "azure",
-            "base_url": f"{llm_base}/openai/deployments/{self.settings.foundry_model_deployment}",
-            "token_provider": self._token_provider,
-            "wire_api": "completions",
-            "azure": {
-                "api_version": "2024-10-21",
-            },
+            "base_url": llm_base,
+            "bearer_token_provider": self._token_provider,
+            "wire_api": "responses",
         }
 
     def _build_session_config(
@@ -888,6 +916,8 @@ class CopilotAgent:
         provider = self._build_provider_config()
         if provider is not None:
             config["provider"] = provider
+        if self.settings.reasoning_effort:
+            config["reasoning_effort"] = self.settings.reasoning_effort
         if mcp_servers:
             config["mcp_servers"] = mcp_servers
         return config
@@ -1176,13 +1206,7 @@ class CopilotAgent:
                                 )
                                 total_t = int(getattr(data, "total_tokens", 0) or 0) or (prompt_t + completion_t)
 
-                                # Extract reasoning tokens from completion_tokens_details
-                                reasoning_t = 0
-                                details = getattr(data, "completion_tokens_details", None)
-                                if details:
-                                    reasoning_t = int(getattr(details, "reasoning_tokens", 0) or 0)
-                                if not reasoning_t:
-                                    reasoning_t = int(getattr(data, "reasoning_tokens", 0) or 0)
+                                reasoning_t = _reasoning_tokens(data)
 
                                 usage = self._usage.get(cid, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
                                 usage["prompt"] += prompt_t

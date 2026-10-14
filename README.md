@@ -108,6 +108,7 @@ The backend proxies all chat requests to the Foundry hosted agent via the Invoca
 | Hosted agent protocol | `azure-ai-agentserver-invocations` | ≥1.0.0b3 |
 | Database | Azure Cosmos DB (serverless) / SQLite (local) | — |
 | Blob storage | Azure Storage / Azurite (local) | — |
+| Knowledge retrieval | Bundled synthetic demo documents / optional Azure AI Search | — |
 | PDF rendering | Playwright Chromium | — |
 | Telemetry | OpenTelemetry + Azure Monitor Exporter | — |
 | Package manager | APM CLI (`apm-cli`) | ≥0.5.0 |
@@ -134,11 +135,65 @@ Azure services provisioned via `azd up`:
 
 ### Prerequisites
 
-- [Azure Developer CLI (azd)](https://learn.microsoft.com/azure/developer/azure-developer-cli/) ≥1.12
-- [Azure CLI](https://learn.microsoft.com/cli/azure/)
-- [Docker](https://www.docker.com/)
+- [Azure Developer CLI (azd)](https://learn.microsoft.com/azure/developer/azure-developer-cli/) **≥1.28** — `azure.yaml` uses `condition:`, which older versions silently ignore
+- The `azure.ai.agents` azd extension, at a version compatible with your `azd`. Check with `azd extension list --installed`: an `⚠ Incompatible` status means the hosted agent (`host: azure.ai.agent`) cannot deploy at all. Fix with `azd extension update --all`.
+
+  > Updating a single extension is often not enough: `azure.ai.agents` pins `azure.ai.connections`
+  > (`~1.0.0-beta.6` at the time of writing), and installing it against an older
+  > `azure.ai.connections` fails with `installed dependency ... does not satisfy constraint`.
+  > `azd extension update --all` keeps the set consistent.
+- [Azure CLI](https://learn.microsoft.com/cli/azure/) — sign in to **both**: `az login` *and* `azd auth login` (separate token caches)
 - [Node.js 20+](https://nodejs.org/)
 - [Python 3.11+](https://www.python.org/)
+- [Docker](https://www.docker.com/) — **not** required to deploy: all three images set `remoteBuild: true` and build in ACR. Only needed for the local docker-compose stack.
+
+#### Subscription prerequisites (checked automatically)
+
+The Container Apps environment joins a custom VNet, which requires the
+`Microsoft.Network/AllowBringYourOwnPublicIpAddress` feature and the
+`Microsoft.ContainerService` provider to be registered **on your subscription**. These are
+not enabled by default on every subscription, and this is a property of the subscription —
+not of your machine or OS.
+
+`hooks/check-azure-prereqs.sh` / `.ps1` runs at `preprovision` and handles this for you:
+it checks both, registers whatever is missing, waits for the feature to become active, and
+stops **before anything is provisioned** if it takes too long.
+
+Left unchecked, a missing feature surfaces ~15 minutes into `azd up` as a misleading
+`A resource with this name already exists or is in a conflicting state` (the real cause,
+`SubscriptionNotRegisteredForFeature`, is buried in the ARM deployment details) — and leaves
+a half-created Container Apps environment that must be deleted by hand before any retry can
+succeed.
+
+```bash
+KRATOS_PREREQ_TIMEOUT_MIN=45 azd up   # wait longer than the 15-minute default
+KRATOS_SKIP_PREREQ_CHECK=1 azd up     # skip the check entirely
+```
+
+If you lack permission to register features (Contributor or Owner is required), the hook
+prints the exact commands for an administrator to run.
+
+#### On Windows
+
+`azd up` is supported from **PowerShell 7** (`pwsh`) — every hook ships a `windows:` variant
+that runs `hooks/*.ps1`. Two things to know:
+
+- **PowerShell 7 is required**, not Windows PowerShell 5.1. Check with `pwsh --version`.
+- **No skills-upload menu.** The POSIX hook prompts for which use-cases to upload to blob
+  storage; the Windows one never prompts (it would block the deploy — see
+  [hooks/select-use-cases.ps1](hooks/select-use-cases.ps1)). It records "none", which costs
+  nothing: the backend seeds the same use-cases from its container image at startup. To
+  upload anyway:
+
+  ```powershell
+  $env:KRATOS_UPLOAD_USE_CASES = "all"   # or a comma-separated list
+  azd up
+  # ...or after the fact:
+  ./hooks/postdeploy.ps1
+  ```
+
+Cloning on Windows requires no special git settings — `.gitattributes` pins `*.sh` to LF, so
+the POSIX hooks survive a checkout even with `core.autocrlf=true`.
 
 ### Deploy to Azure
 
@@ -202,6 +257,37 @@ Per-environment settings are set with `azd env set` while that environment is ac
 `azd env set DEPLOY_OBO false` to skip the on-behalf-of stack in an experiment. Values set this way
 land in that environment's `.env` only, never in another's.
 
+#### Azure Monitor health model
+
+`infra/` can deploy an Azure Monitor health model (`Microsoft.CloudHealth/healthmodels`, preview) that
+models health as advisor (one entity per use case) → tool → downstream-service → Azure resource.
+
+The model is opt-in (`DEPLOY_HEALTH_MODEL=false` by default), because it is a preview,
+region-limited resource that needs the `Microsoft.CloudHealth` provider registered first — with
+it on by default, every `azd provision` on a subscription without that registration would fail.
+Complete the prerequisites below, then enable it:
+
+```bash
+azd env set DEPLOY_HEALTH_MODEL true
+```
+
+Prerequisites (one-time):
+
+```bash
+az provider register -n Microsoft.CloudHealth
+az extension add -n health-models
+```
+
+Region notes:
+
+- This is a preview resource and region-limited.
+- `healthModelLocation` defaults to `centralus`.
+- Supported regions are the ones returned by `az provider show -n Microsoft.CloudHealth`.
+- `eastus2` is not supported.
+- The health model can live in a different region than the monitored resources.
+
+`azd` and ARM deployments are incremental. On a fresh deployment with `DEPLOY_HEALTH_MODEL=false`, no health model is created. If a health model already exists, turning the flag off later does not delete it, and removing entities from topology input does not delete already-deployed entities. Delete the health model resource explicitly (or redeploy fresh) to reconcile.
+
 ### Register the Agent in Foundry (One-Time Manual Step)
 
 After `azd up`, register the agent in the Foundry portal so traces appear in the Operate tab:
@@ -228,6 +314,7 @@ SKIP_BROWSER=1 ./run.sh  # API-only, skips the Chromium download
 `run.sh` reads `AZURE_STATIC_WEB_APP_URL` and `AGENT_SERVICE_URL` from `azd env get-values`, so it always follows whichever environment is currently selected. Override with `KRATOS_FRONTEND_URL` / `KRATOS_BACKEND_URL` to point it elsewhere. It fails fast rather than falling back to a stale default.
 
 See [`.copilot/skills/e2e-smoke/SKILL.md`](./.copilot/skills/e2e-smoke/SKILL.md) for the spec catalogue, env-var reference, and tips for running just the API or just the UX project.
+See [`docs/runbooks/post-azd-setup-manual.md`](./docs/runbooks/post-azd-setup-manual.md) for the full post-`azd up` setup and verification checklist.
 
 ---
 
@@ -444,6 +531,12 @@ Kratos ships with four configurable agent personas, each with its own system pro
 | **HR Onboarding** | `use-cases/hr-onboarding/` | People-team co-pilot — drafts pre-hire records, briefs managers on their teams, approves PTO with explicit user confirmation on every write, against the in-repo `workday-mcp-server` mock |
 | **IT Service Desk L1** | `use-cases/it-service-desk/` | L1 support co-pilot — triages tickets, searches the KB, surfaces VIP queues, and resolves/reassigns tickets with explicit user confirmation on every write, against the in-repo `servicenow-mcp-server` mock |
 | **Clinician Visit Prep** | `use-cases/clinician-visit-prep/` | Outpatient-clinic co-pilot — daily schedule briefings, pre-visit summaries with derived clinical focus, lab trends, and med-problem reconciliation against the in-repo `epic-fhir-mcp-server` mock (FHIR R4 resources) |
+
+The insurance demo includes a small synthetic policy corpus under
+`use-cases/insurance/knowledge-base/`, so its policy-wording prompts work
+immediately after `azd up` without provisioning a paid search service. The
+`rag_search` tool uses Azure AI Search instead when `AZURE_AI_SEARCH_ENDPOINT`
+is configured, preserving the bring-your-own knowledge-base path.
 
 Each use case has:
 - `SYSTEM_PROMPT.md` — Agent persona and behavior instructions

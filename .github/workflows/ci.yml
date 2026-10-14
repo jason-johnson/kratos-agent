@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   backend-lint-test:
     runs-on: ubuntu-latest
@@ -13,9 +16,9 @@ jobs:
       run:
         working-directory: src/backend
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
 
@@ -48,9 +51,9 @@ jobs:
       run:
         working-directory: src/frontend
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "20"
           cache: npm
@@ -68,7 +71,42 @@ jobs:
   bicep-validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate Bicep
         run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
+  # The azd hooks exist twice — POSIX sh and Windows pwsh — and no other job
+  # runs either. This catches the two drifting apart before a real `azd up`
+  # does. shellcheck and pwsh ship on the ubuntu-latest image.
+  hooks-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Check hook structure
+        run: |
+          pip install --no-cache-dir pyyaml
+          python .github/scripts/check-hooks.py "$RUNNER_TEMP/hooks-inline"
+
+      - name: Shellcheck
+        run: shellcheck -S warning hooks/*.sh
+
+      - name: Parse PowerShell
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem hooks/*.ps1) + @(Get-ChildItem "$env:RUNNER_TEMP/hooks-inline/*.ps1")
+          $failed = $false
+          foreach ($f in $files) {
+            $tokens = $null; $errs = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$errs) | Out-Null
+            if ($errs) {
+              $failed = $true
+              foreach ($e in $errs) { Write-Host "::error file=$($f.Name),line=$($e.Extent.StartLineNumber)::$($e.Message)" }
+            } else { Write-Host "ok $($f.Name)" }
+          }
+          if ($failed) { exit 1 }

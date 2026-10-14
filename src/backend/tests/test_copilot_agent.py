@@ -11,7 +11,7 @@ import pytest
 
 from app.config import Settings
 from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UserInputRequestEvent
-from app.services.copilot_agent import CopilotAgent, _limit_tool_event_output
+from app.services.copilot_agent import CopilotAgent, _reasoning_tokens, _limit_tool_event_output
 from app.services.skill_tools import ALL_TOOLS
 
 
@@ -295,6 +295,35 @@ async def test_copilot_agent_start_stop(settings):
 
 
 @pytest.mark.asyncio
+async def test_cloud_provider_registers_refreshable_bearer_token(settings):
+    """The SDK must receive its supported callback key and callback signature."""
+    cloud_agent = CopilotAgent(settings.model_copy(update={"local_mode": False}))
+    mock_client = AsyncMock()
+    azure_token_provider = AsyncMock(return_value="test-value")
+
+    with (
+        patch("app.services.copilot_agent.CopilotClient", return_value=mock_client),
+        patch("app.services.copilot_agent.ManagedIdentityCredential", return_value=AsyncMock()),
+        patch("app.services.copilot_agent._HAS_CLI_CREDENTIAL", False),
+        patch(
+            "app.services.copilot_agent.get_bearer_token_provider",
+            return_value=azure_token_provider,
+        ) as provider_factory,
+    ):
+        await cloud_agent.start()
+
+    provider_factory.assert_called_once()
+    provider = cloud_agent._build_provider_config()
+
+    assert provider is not None
+    assert "token_provider" not in provider
+    assert provider["bearer_token_provider"] is cloud_agent._token_provider
+    result = await provider["bearer_token_provider"]({"provider_name": "default", "session_id": "test-session"})
+    assert result == "test-value"
+    azure_token_provider.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
 async def test_copilot_agent_run_streams_content(copilot_agent):
     """Test that run() yields ContentEvent from SDK assistant.message.delta events."""
     mock_session = AsyncMock()
@@ -554,3 +583,77 @@ async def test_copilot_agent_exception_drops_session(copilot_agent):
         assert events[0].code == "AGENT_ERROR"
         # Session should be dropped
         assert "conv-fail" not in copilot_agent._sessions
+
+
+def test_provider_config_uses_responses_wire_api(settings):
+    """Reasoning models reject function tools on /chat/completions.
+
+    gpt-6-astra returns 400 "Function tools with reasoning_effort are not
+    supported ... use /v1/responses" for ANY tool-bearing request, because the
+    deployment applies a non-none reasoning default. Pinning the Responses API
+    here is what keeps tool calling and reasoning working together, so guard it.
+    """
+    agent = CopilotAgent(settings.model_copy(update={"local_mode": False}))
+    provider = agent._build_provider_config()
+
+    assert provider is not None
+    assert provider["wire_api"] == "responses"
+    # Bare resource host: the azure provider appends the API path itself, and
+    # omitting azure.api_version selects the versionless /openai/v1/ route.
+    assert provider["base_url"] == "https://test.services.ai.azure.com"
+    assert "azure" not in provider
+
+
+def test_provider_config_prefers_gateway_and_strips_trailing_slash(settings):
+    """The APIM gateway host wins over the Foundry endpoint when configured."""
+    agent = CopilotAgent(
+        settings.model_copy(update={"local_mode": False, "llm_gateway_base_url": "https://apim.example.net/"})
+    )
+    provider = agent._build_provider_config()
+
+    assert provider is not None
+    assert provider["base_url"] == "https://apim.example.net"
+
+
+def test_session_config_carries_reasoning_effort(settings):
+    """reasoning_effort is passed through to the SDK session."""
+    agent = CopilotAgent(settings.model_copy(update={"reasoning_effort": "medium"}))
+    config = agent._build_session_config(enabled_tools=[], skill_dirs=[], system_prompt="be helpful")
+
+    assert config["reasoning_effort"] == "medium"
+
+
+def test_session_config_omits_empty_reasoning_effort(settings):
+    """An empty setting means "inherit the deployment default" — send nothing."""
+    agent = CopilotAgent(settings.model_copy(update={"reasoning_effort": ""}))
+    config = agent._build_session_config(enabled_tools=[], skill_dirs=[], system_prompt="be helpful")
+
+    assert "reasoning_effort" not in config
+
+
+class _Usage:
+    """Stand-in for an SDK usage payload exposing attributes."""
+
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        # Responses API nests reasoning under output_tokens_details.
+        ({"output_tokens_details": {"reasoning_tokens": 12}}, 12),
+        (_Usage(output_tokens_details=_Usage(reasoning_tokens=7)), 7),
+        # Chat Completions uses completion_tokens_details.
+        (_Usage(completion_tokens_details=_Usage(reasoning_tokens=5)), 5),
+        # Flat fallback.
+        ({"reasoning_tokens": 3}, 3),
+        # Nothing to report.
+        ({}, 0),
+        ({"output_tokens_details": {"reasoning_tokens": 0}}, 0),
+        (_Usage(completion_tokens_details=None, output_tokens_details=None), 0),
+    ],
+)
+def test_reasoning_tokens_handles_both_wire_shapes(payload, expected):
+    """Switching to the Responses API moved reasoning tokens to a new field."""
+    assert _reasoning_tokens(payload) == expected
