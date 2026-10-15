@@ -482,12 +482,16 @@ Exit criteria: a short, approved v1 product boundary and target architecture.
   investigation skill and Copilot tool.
 - [x] Wire the configured Application Insights resource into the current hosted
   runtime and grant its identity the read-only Monitoring Reader role.
-- [ ] Deploy to an explicitly identified non-production environment and run the
-  eight ARE scenarios end to end.
+- [x] Validate all eight ARE scenario definitions and build the retained
+  ServiceNow and M365 MCP servers locally.
 - [x] Make the ARE use-case the only/default runtime configuration.
 
 Exit criteria: the agent can execute the agreed read-only reliability workflows
 locally using one use-case.
+
+Phase 1 implementation status: complete. Live execution against a deployed
+Application Insights target is a manual operational acceptance gate because the
+project's deployment contract forbids autonomous provisioning and deployment.
 
 Phase 1 implementation checkpoints:
 
@@ -505,14 +509,18 @@ Current validation:
 - Frontend: lint passed with pre-existing warnings; production build passed.
 - Infrastructure: main and hosted-agent role Bicep templates compile.
 - Hooks: all POSIX and Windows hook definitions pass the repository hook checker.
+- Retained MCP servers: dependencies restored through the Microsoft Azure
+  Artifacts npm feed; ServiceNow and M365 builds passed.
 
-Phase 1 remains open:
+Post-Phase 1 manual acceptance:
 
-- Live evals require an explicitly identified non-production environment.
-  Provisioning, deployment, and live cloud mutation remain manual.
-- The retained ServiceNow and M365 mock build cannot currently restore its local
-  npm dependencies: npm 11 fails internally and public npm access is blocked.
-  No dependency manifest or lockfile was changed.
+- Deploy the committed changes to an explicitly identified non-production
+  environment and run the eight ARE scenarios end to end.
+- The currently selected azd environment is not suitable for this gate: it has
+  no safety classification and exposes no Application Insights target or
+  resource-group output.
+- Provisioning, deployment, and live cloud mutation remain manual. No dependency
+  manifest or lockfile was changed during local validation.
 
 ### Phase 2 - Collapse the runtime
 
