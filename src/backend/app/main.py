@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.constants import PRIMARY_USE_CASE
 from app.observability import instrument_fastapi_app, setup_telemetry
 from app.routers import (
     admin_analysis,
@@ -49,7 +50,11 @@ logging.getLogger("azure.identity").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
-async def _apm_startup_sync(apm_service: ApmService, use_cases_root: str) -> tuple[int, int]:
+async def _apm_startup_sync(
+    apm_service: ApmService,
+    use_cases_root: str,
+    use_cases: set[str] | None = None,
+) -> tuple[int, int]:
     """Run ``apm install`` for each local use-case that needs syncing.
 
     Returns a ``(synced, total)`` tuple where ``total`` is the number of
@@ -68,6 +73,8 @@ async def _apm_startup_sync(apm_service: ApmService, use_cases_root: str) -> tup
         if not entry.is_dir():
             continue
         use_case = entry.name
+        if use_cases is not None and use_case not in use_cases:
+            continue
         total += 1
         try:
             if not await apm_service.needs_sync(use_case):
@@ -136,7 +143,11 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     # Run APM startup sync for each local use-case directory so that
     # apm_modules/ is materialised before the skill registries load.
     if settings.apm_enabled and settings.apm_startup_sync:
-        synced, total = await _apm_startup_sync(apm_service, settings.apm_use_cases_root)
+        synced, total = await _apm_startup_sync(
+            apm_service,
+            settings.apm_use_cases_root,
+            {PRIMARY_USE_CASE},
+        )
         logger.info("APM startup sync complete: %d/%d use-cases synced", synced, total)
 
     # Load all use-case registries from blob storage
@@ -145,22 +156,19 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("Blob storage is not configured — no skills will be available")
     else:
         try:
-            # In local/dev mode Azurite starts empty — seed use-case folders
-            # from the repository so all personas show up in the UI.
-            seeded = await blob_skill_service.seed_from_local()
+            # Seed only the supported ARE use-case. Legacy persona blobs may
+            # remain for rollback but are not loaded into the runtime.
+            seeded = await blob_skill_service.seed_from_local({PRIMARY_USE_CASE})
             if seeded:
                 logger.info("Seeded %d use-case(s) into blob: %s", len(seeded), seeded)
-            use_case_names = await blob_skill_service.list_use_cases()
-            for uc_name in use_case_names:
-                registry = SkillRegistry()
-                await registry.load(uc_name, blob_skill_service, apm_service=apm_service)
-                registries[uc_name] = registry
+            registry = SkillRegistry()
+            await registry.load(PRIMARY_USE_CASE, blob_skill_service, apm_service=apm_service)
+            registries[PRIMARY_USE_CASE] = registry
         except Exception:
             logger.exception("Failed to load use-cases from blob storage")
 
     application.state.registries = registries
-    # Keep backward compat: skill_registry points to "generic"
-    application.state.skill_registry = registries.get("generic", SkillRegistry())
+    application.state.skill_registry = registries.get(PRIMARY_USE_CASE, SkillRegistry())
     logger.info("Loaded %d use-cases: %s", len(registries), list(registries.keys()))
 
     # Initialize Foundry hosted agent proxy (Copilot SDK runs in the hosted agent only)

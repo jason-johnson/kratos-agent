@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.auth import require_authenticated_user
+from app.constants import PRIMARY_USE_CASE
 from app.models import SkillCreate, SkillFile, SkillFileList, SkillFileUpsert, SkillList, SkillResponse, SkillUpdate
 from app.services.skill_registry import SkillMetadata, SkillRegistry
 
@@ -54,7 +55,7 @@ def _to_response(skill: SkillMetadata) -> SkillResponse:
 
 
 @router.get("", response_model=SkillList)
-async def list_skills(request: Request, use_case: str = Query("generic")) -> SkillList:
+async def list_skills(request: Request, use_case: str = Query(PRIMARY_USE_CASE)) -> SkillList:
     """List all registered skills for a use-case."""
     registry = _get_registry(request, use_case)
     skills = sorted(registry.skills.values(), key=lambda s: s.name)
@@ -62,7 +63,11 @@ async def list_skills(request: Request, use_case: str = Query("generic")) -> Ski
 
 
 @router.get("/{skill_name}", response_model=SkillResponse)
-async def get_skill(skill_name: str, request: Request, use_case: str = Query("generic")) -> SkillResponse:
+async def get_skill(
+    skill_name: str,
+    request: Request,
+    use_case: str = Query(PRIMARY_USE_CASE),
+) -> SkillResponse:
     """Get a single skill by name."""
     registry = _get_registry(request, use_case)
     skill = registry.get_skill(skill_name)
@@ -72,7 +77,11 @@ async def get_skill(skill_name: str, request: Request, use_case: str = Query("ge
 
 
 @router.post("", response_model=SkillResponse, status_code=201)
-async def create_skill(body: SkillCreate, request: Request, use_case: str = Query("generic")) -> SkillResponse:
+async def create_skill(
+    body: SkillCreate,
+    request: Request,
+    use_case: str = Query(PRIMARY_USE_CASE),
+) -> SkillResponse:
     """Create a new skill definition."""
     registry = _get_registry(request, use_case)
 
@@ -94,7 +103,10 @@ async def create_skill(body: SkillCreate, request: Request, use_case: str = Quer
 
 @router.patch("/{skill_name}", response_model=SkillResponse)
 async def update_skill(
-    skill_name: str, body: SkillUpdate, request: Request, use_case: str = Query("generic")
+    skill_name: str,
+    body: SkillUpdate,
+    request: Request,
+    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> SkillResponse:
     """Update an existing skill (partial update)."""
     registry = _get_registry(request, use_case)
@@ -113,7 +125,11 @@ async def update_skill(
 
 
 @router.delete("/{skill_name}", status_code=204)
-async def delete_skill(skill_name: str, request: Request, use_case: str = Query("generic")) -> None:
+async def delete_skill(
+    skill_name: str,
+    request: Request,
+    use_case: str = Query(PRIMARY_USE_CASE),
+) -> None:
     """Delete a skill definition."""
     registry = _get_registry(request, use_case)
 
@@ -136,7 +152,11 @@ def _validate_file_path(file_path: str) -> None:
 
 
 @router.get("/{skill_name}/files", response_model=SkillFileList)
-async def list_skill_files(skill_name: str, request: Request, use_case: str = Query("generic")) -> SkillFileList:
+async def list_skill_files(
+    skill_name: str,
+    request: Request,
+    use_case: str = Query(PRIMARY_USE_CASE),
+) -> SkillFileList:
     """List all non-SKILL.md files for a skill, including their content."""
     registry = _get_registry(request, use_case)
     skill = registry.get_skill(skill_name)
@@ -164,7 +184,7 @@ async def upsert_skill_file(
     file_path: str,
     body: SkillFileUpsert,
     request: Request,
-    use_case: str = Query("generic"),
+    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> None:
     """Upload or update a file within a skill folder."""
     _validate_file_path(file_path)
@@ -181,7 +201,7 @@ async def delete_skill_file(
     skill_name: str,
     file_path: str,
     request: Request,
-    use_case: str = Query("generic"),
+    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> None:
     """Delete a file from a skill folder."""
     _validate_file_path(file_path)

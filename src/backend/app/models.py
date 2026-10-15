@@ -4,7 +4,16 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.constants import PRIMARY_USE_CASE
+
+
+def _validate_primary_use_case(value: str) -> str:
+    if value != PRIMARY_USE_CASE:
+        raise ValueError(f"Only the '{PRIMARY_USE_CASE}' use-case is supported")
+    return value
+
 
 # ─── Enums ───
 
@@ -26,7 +35,9 @@ class ConversationStatus(str, Enum):
 
 class ConversationCreate(BaseModel):
     title: str = "New Conversation"
-    useCase: str = "generic"
+    useCase: str = PRIMARY_USE_CASE
+
+    _single_use_case = field_validator("useCase")(_validate_primary_use_case)
 
 
 class ConversationUpdate(BaseModel):
@@ -37,7 +48,7 @@ class Conversation(BaseModel):
     id: str
     userId: str
     title: str
-    useCase: str = "generic"
+    useCase: str = PRIMARY_USE_CASE
     status: ConversationStatus = ConversationStatus.ACTIVE
     createdAt: datetime
     updatedAt: datetime
@@ -96,7 +107,7 @@ Attachment = FileAttachment | DirectoryAttachment | SelectionAttachment
 class AgentRequest(BaseModel):
     conversationId: str
     message: str
-    useCase: str = "generic"
+    useCase: str = PRIMARY_USE_CASE
     attachments: list[Attachment] = Field(default_factory=list)
     # Per-MCP-server user access tokens, keyed by MCP server name
     # (e.g. {"graph-obo": "<entra access token>"}). Sent by the frontend after
@@ -104,6 +115,8 @@ class AgentRequest(BaseModel):
     # token as the Authorization header on the matching remote MCP server so the
     # tool runs On-Behalf-Of the signed-in user. Never logged in clear text.
     mcpAccessTokens: dict[str, str] = Field(default_factory=dict)
+
+    _single_use_case = field_validator("useCase")(_validate_primary_use_case)
 
 
 class ToolCallEvent(BaseModel):
@@ -202,7 +215,9 @@ class CopilotStudioRequest(BaseModel):
         default="",
         description="Optional conversation ID to continue a multi-turn session. Leave empty to start a new conversation.",
     )
-    useCase: str = Field(default="generic", description="Use-case identifier")
+    useCase: str = Field(default=PRIMARY_USE_CASE, description="Use-case identifier")
+
+    _single_use_case = field_validator("useCase")(_validate_primary_use_case)
 
 
 class CopilotStudioResponse(BaseModel):

@@ -46,6 +46,7 @@ if "FOUNDRY_ENDPOINT" not in os.environ:
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from app.config import Settings, get_settings
+from app.constants import PRIMARY_USE_CASE
 from app.hosted_agent_invoke import parse_invoke_payload
 from app.models import (
     ContentEvent,
@@ -156,7 +157,7 @@ async def _startup() -> None:
     if blob_service.is_available:
         t0 = _time.monotonic()
         try:
-            seeded = await blob_service.seed_from_local()
+            seeded = await blob_service.seed_from_local({PRIMARY_USE_CASE})
             if seeded:
                 logger.info("Seeded %d use-case(s) into blob", len(seeded))
         except Exception:
@@ -182,6 +183,8 @@ async def _ensure_registry(use_case: str) -> None:
     repeat requests for the same use-case load it only once. Falls back to the
     baked-in local ``use-cases/`` directory when blob is unavailable.
     """
+    if use_case != PRIMARY_USE_CASE:
+        raise ValueError(f"Unsupported use-case: {use_case}")
     if use_case in _registries:
         return
 
@@ -460,7 +463,7 @@ async def handle_invoke(request: Request) -> Response:
             raise ValueError('missing or empty "message" (or "input") field')
 
         conversation_id = data.get("conversationId", str(uuid.uuid4()))
-        use_case = data.get("useCase", "generic")
+        use_case = data.get("useCase", PRIMARY_USE_CASE)
 
         # Per-MCP-server user tokens for On-Behalf-Of (kept out of the message
         # text so they are never visible to the model). Coerce to a clean
@@ -481,7 +484,7 @@ async def handle_invoke(request: Request) -> Response:
             # Parse <use_case> tag (fallback when gateway strips useCase field)
             uc_match = re.search(r"<use_case>\s*(\S+?)\s*</use_case>", message)
             if uc_match:
-                if use_case == "generic":
+                if use_case == PRIMARY_USE_CASE:
                     use_case = uc_match.group(1)
                     logger.info("Parsed useCase='%s' from input tag (gateway fallback)", use_case)
                 message = message[:uc_match.start()] + message[uc_match.end():]
@@ -524,6 +527,12 @@ async def handle_invoke(request: Request) -> Response:
 
             # Clean up leading/trailing whitespace from tag removal
             message = message.strip()
+
+        if use_case != PRIMARY_USE_CASE:
+            return JSONResponse(
+                {"error": f"Only the '{PRIMARY_USE_CASE}' use-case is supported"},
+                status_code=400,
+            )
 
         logger.info(
             "handle_invoke: useCase=%s conversation=%s registries=%s message_len=%d "

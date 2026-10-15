@@ -10,6 +10,7 @@ import { Conversation, UseCase, Skill } from "@/types";
 import { listUseCases, listConversations, createConversation, deleteConversation, listSkills, importPersona } from "@/lib/api";
 import { loadRuntimeConfig } from "@/lib/config";
 import { readEmbedParams, takeImportManifest, settlePersonaUrl, type EmbedParams } from "@/lib/embed";
+import { PRIMARY_USE_CASE, PRIMARY_USE_CASE_FALLBACK } from "@/lib/useCase";
 import { useTheme, THEMES, type ThemeName, type Mode } from "@/components/ThemeProvider";
 
 type ImportStatus = "idle" | "importing" | "error" | "done";
@@ -25,7 +26,7 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [useCases, setUseCases] = useState<UseCase[]>([]);
-  const [selectedUseCase, setSelectedUseCase] = useState<string>("generic");
+  const [selectedUseCase, setSelectedUseCase] = useState<string>(PRIMARY_USE_CASE);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -60,7 +61,7 @@ export default function Home() {
         }
       })
       .catch(() => {
-        setUseCases([{ name: "generic", displayName: "Generic Assistant", description: "", skillCount: 0, sampleQuestions: [] }]);
+        setUseCases([PRIMARY_USE_CASE_FALLBACK]);
       });
 
     // Load existing conversations from Cosmos so the sidebar persists across reloads
@@ -145,7 +146,7 @@ export default function Home() {
 
   const handleSelectConversation = (conv: Conversation) => {
     setActiveConversation(conv);
-    setSelectedUseCase(conv.useCase || "generic");
+    setSelectedUseCase(PRIMARY_USE_CASE);
     setPendingMessage(null);
     setSidebarOpen(false);
   };

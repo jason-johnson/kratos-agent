@@ -1,5 +1,6 @@
 import { getApiUrl, getAuthConfig } from "@/lib/config";
 import { getMcpAccessToken } from "@/lib/auth";
+import { PRIMARY_USE_CASE } from "@/lib/useCase";
 import type {
   Attachment,
   EvalScenario,
@@ -108,7 +109,7 @@ export async function streamAgentChat(
  */
 export async function createConversation(
   title: string = "New Conversation",
-  useCase: string = "generic"
+  useCase: string = PRIMARY_USE_CASE
 ): Promise<{ id: string; title: string; useCase: string }> {
   const response = await fetch(`${getApiUrl()}/api/conversations`, {
     method: "POST",
@@ -279,20 +280,20 @@ export async function importPersona(
 
 import type { Skill, SkillCreate, SkillUpdate } from "@/types";
 
-export async function listSkills(useCase: string = "generic"): Promise<Skill[]> {
+export async function listSkills(useCase: string = PRIMARY_USE_CASE): Promise<Skill[]> {
   const response = await fetch(`${getApiUrl()}/api/admin/skills?use_case=${encodeURIComponent(useCase)}`);
   if (!response.ok) throw new Error(`Failed to list skills: ${response.status}`);
   const data = await response.json();
   return data.skills;
 }
 
-export async function getSkill(name: string, useCase: string = "generic"): Promise<Skill> {
+export async function getSkill(name: string, useCase: string = PRIMARY_USE_CASE): Promise<Skill> {
   const response = await fetch(`${getApiUrl()}/api/admin/skills/${encodeURIComponent(name)}?use_case=${encodeURIComponent(useCase)}`);
   if (!response.ok) throw new Error(`Failed to get skill: ${response.status}`);
   return response.json();
 }
 
-export async function createSkill(skill: SkillCreate, useCase: string = "generic"): Promise<Skill> {
+export async function createSkill(skill: SkillCreate, useCase: string = PRIMARY_USE_CASE): Promise<Skill> {
   const response = await fetch(`${getApiUrl()}/api/admin/skills?use_case=${encodeURIComponent(useCase)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -305,7 +306,11 @@ export async function createSkill(skill: SkillCreate, useCase: string = "generic
   return response.json();
 }
 
-export async function updateSkill(name: string, updates: SkillUpdate, useCase: string = "generic"): Promise<Skill> {
+export async function updateSkill(
+  name: string,
+  updates: SkillUpdate,
+  useCase: string = PRIMARY_USE_CASE
+): Promise<Skill> {
   const response = await fetch(`${getApiUrl()}/api/admin/skills/${encodeURIComponent(name)}?use_case=${encodeURIComponent(useCase)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -318,7 +323,7 @@ export async function updateSkill(name: string, updates: SkillUpdate, useCase: s
   return response.json();
 }
 
-export async function deleteSkill(name: string, useCase: string = "generic"): Promise<void> {
+export async function deleteSkill(name: string, useCase: string = PRIMARY_USE_CASE): Promise<void> {
   const response = await fetch(`${getApiUrl()}/api/admin/skills/${encodeURIComponent(name)}?use_case=${encodeURIComponent(useCase)}`, {
     method: "DELETE",
   });
@@ -332,7 +337,10 @@ export async function deleteSkill(name: string, useCase: string = "generic"): Pr
 
 import type { SkillFile } from "@/types";
 
-export async function listSkillFiles(skillName: string, useCase: string = "generic"): Promise<{ files: SkillFile[] }> {
+export async function listSkillFiles(
+  skillName: string,
+  useCase: string = PRIMARY_USE_CASE
+): Promise<{ files: SkillFile[] }> {
   const response = await fetch(
     `${getApiUrl()}/api/admin/skills/${encodeURIComponent(skillName)}/files?use_case=${encodeURIComponent(useCase)}`
   );
@@ -344,7 +352,7 @@ export async function upsertSkillFile(
   skillName: string,
   filePath: string,
   content: string,
-  useCase: string = "generic"
+  useCase: string = PRIMARY_USE_CASE
 ): Promise<void> {
   const response = await fetch(
     `${getApiUrl()}/api/admin/skills/${encodeURIComponent(skillName)}/files/${filePath}?use_case=${encodeURIComponent(useCase)}`,
@@ -363,7 +371,7 @@ export async function upsertSkillFile(
 export async function deleteSkillFile(
   skillName: string,
   filePath: string,
-  useCase: string = "generic"
+  useCase: string = PRIMARY_USE_CASE
 ): Promise<void> {
   const response = await fetch(
     `${getApiUrl()}/api/admin/skills/${encodeURIComponent(skillName)}/files/${filePath}?use_case=${encodeURIComponent(useCase)}`,
@@ -439,7 +447,7 @@ export async function updateMCPConfig(useCase: string, servers: MCPConfig["serve
 import type { AnalysisResult } from "@/types";
 
 export async function analyzeConsistency(
-  useCase: string = "generic",
+  useCase: string = PRIMARY_USE_CASE,
   includeDisabled: boolean = true
 ): Promise<AnalysisResult> {
   const response = await fetch(
@@ -596,7 +604,7 @@ export async function updateApm(
 
 export async function applyAnalysisFix(
   issue: AnalysisIssue,
-  useCase: string = "generic"
+  useCase: string = PRIMARY_USE_CASE
 ): Promise<ApplyFixResult> {
   const response = await fetch(
     `${getApiUrl()}/api/admin/analysis/apply-fix?use_case=${encodeURIComponent(useCase)}`,

@@ -10,6 +10,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.auth import require_authenticated_user
+from app.constants import PRIMARY_USE_CASE
 from app.models import SystemPromptResponse, SystemPromptUpdate
 from app.services.copilot_agent import DEFAULT_SYSTEM_PROMPT
 from app.services.skill_registry import SkillRegistry
@@ -29,7 +30,10 @@ def _get_registry(request: Request, use_case: str) -> SkillRegistry:
 
 
 @router.get("", response_model=SystemPromptResponse)
-async def get_system_prompt(request: Request, use_case: str = Query("generic")) -> SystemPromptResponse:
+async def get_system_prompt(
+    request: Request,
+    use_case: str = Query(PRIMARY_USE_CASE),
+) -> SystemPromptResponse:
     """Return the system prompt for a use-case."""
     registry = _get_registry(request, use_case)
     if registry.system_prompt:
@@ -39,7 +43,9 @@ async def get_system_prompt(request: Request, use_case: str = Query("generic")) 
 
 @router.put("", response_model=SystemPromptResponse)
 async def update_system_prompt(
-    body: SystemPromptUpdate, request: Request, use_case: str = Query("generic")
+    body: SystemPromptUpdate,
+    request: Request,
+    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> SystemPromptResponse:
     """Update the system prompt for a use-case. Persists to Blob Storage / local disk."""
     registry = _get_registry(request, use_case)
@@ -63,7 +69,7 @@ async def update_system_prompt(
 
 
 @router.delete("", status_code=204)
-async def reset_system_prompt(request: Request, use_case: str = Query("generic")) -> None:
+async def reset_system_prompt(request: Request, use_case: str = Query(PRIMARY_USE_CASE)) -> None:
     """Reset the system prompt by re-syncing from blob storage."""
     registry = _get_registry(request, use_case)
 

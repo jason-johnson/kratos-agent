@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from app.constants import PRIMARY_USE_CASE
+
 if TYPE_CHECKING:
     from app.services.apm_service import ApmService
     from app.services.blob_skill_service import BlobSkillService
@@ -90,7 +92,7 @@ class SkillRegistry:
     Each use-case gets its own SkillRegistry loaded from blob or local disk.
     """
 
-    use_case: str = "generic"
+    use_case: str = PRIMARY_USE_CASE
     system_prompt: str = ""
     skills: dict[str, SkillMetadata] = field(default_factory=dict)
     mcp_servers: dict = field(default_factory=dict)

@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app.auth import require_authenticated_user
+from app.constants import PRIMARY_USE_CASE
 from app.services.skill_registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
@@ -197,7 +198,7 @@ def _build_analysis_content(registry: SkillRegistry, include_disabled: bool) -> 
 async def analyze_consistency(
     request: Request,
     body: AnalysisRequest | None = None,
-    use_case: str = Query("generic"),
+    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> AnalysisResponse:
     """Analyze a use-case's system prompt and skills for inconsistencies."""
     t0 = time.monotonic()
@@ -294,7 +295,7 @@ def _reset_sessions(request: Request) -> None:
 async def apply_fix(
     request: Request,
     body: ApplyFixRequest,
-    use_case: str = Query("generic"),
+    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> ApplyFixResponse:
     """Apply an AI-generated fix for a specific consistency issue."""
     registry = _get_registry(request, use_case)

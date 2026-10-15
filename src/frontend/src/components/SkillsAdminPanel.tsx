@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt, listSkillFiles, upsertSkillFile, deleteSkillFile, getMCPConfig, updateMCPConfig, analyzeConsistency, applyAnalysisFix, exportUseCase } from "@/lib/api";
+import { PRIMARY_USE_CASE } from "@/lib/useCase";
 import type { AnalysisResult, AnalysisIssue, ApplyFixResult, MCPConfig, Skill, SkillFile, UseCase } from "@/types";
 import { useTheme } from "./ThemeProvider";
 import { ApmAdminPanel } from "./ApmAdminPanel";
@@ -18,7 +19,12 @@ interface Props {
   onSelectUseCase?: (name: string) => void;
 }
 
-export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], onSelectUseCase }: Props) {
+export function SkillsAdminPanel({
+  onClose,
+  useCase = PRIMARY_USE_CASE,
+  useCases = [],
+  onSelectUseCase,
+}: Props) {
   const [tab, setTab] = useState<Tab>("skills");
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(false);

@@ -33,6 +33,7 @@ from opentelemetry import context as otel_context
 from opentelemetry import trace
 
 from app.config import Settings
+from app.constants import PRIMARY_USE_CASE
 from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UsageEvent, UserInputRequestEvent
 from app.observability import operation_duration_histogram, token_usage_histogram
 from app.services.skill_tools import ALL_TOOLS, _ctx_conversation_id, _ctx_eval_run_id, _ctx_use_case
@@ -165,8 +166,8 @@ If a required Python library is not installed, install it first with pip before 
 
 DEFAULT_SYSTEM_PROMPT = SYSTEM_PROMPT
 
-# Default use-case when none is specified
-DEFAULT_USE_CASE = "generic"
+# Default and only supported use-case.
+DEFAULT_USE_CASE = PRIMARY_USE_CASE
 
 
 class CopilotAgent:
@@ -240,7 +241,7 @@ class CopilotAgent:
         self._model_response_start: dict[str, float] = {}
 
     def set_skill_registry(self, registry: object) -> None:
-        """Inject a single skill registry (backward compat — uses 'generic')."""
+        """Inject the single Agent Reliability Engineer skill registry."""
         self._registries = {DEFAULT_USE_CASE: registry}
         self._queues: dict[str, asyncio.Queue] = {}
         self._tool_counters: dict[str, int] = {}

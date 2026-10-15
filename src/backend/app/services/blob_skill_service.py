@@ -162,13 +162,13 @@ class BlobSkillService:
                 names.add(parts[0])
         return sorted(names)
 
-    async def seed_from_local(self) -> list[str]:
-        """Upload each local use-case folder to blob if it isn't already present.
+    async def seed_from_local(self, use_cases: set[str] | None = None) -> list[str]:
+        """Upload selected local use-case folders to blob if they are missing.
 
         Used in local/dev mode where Azurite starts empty but the repository
-        ships several use-case directories under ``use-cases/``. Only folders
-        that contain a ``SYSTEM_PROMPT.md`` are considered. Returns the list of
-        use-case names that were newly seeded.
+        ships use-case directories under ``use-cases/``. When ``use_cases`` is
+        provided, all other folders are ignored. Only folders containing a
+        ``SYSTEM_PROMPT.md`` are considered. Returns names newly seeded.
         """
         if not self._container_client or not self.local_base_dir.is_dir():
             return []
@@ -177,6 +177,8 @@ class BlobSkillService:
         # APM-materialised output must never leak into blob.
         _skip_dir_parts = {"apm_modules", ".github", "__pycache__", ".pytest_cache", "results"}
         for uc_dir in sorted(self.local_base_dir.iterdir()):
+            if use_cases is not None and uc_dir.name not in use_cases:
+                continue
             if not uc_dir.is_dir() or uc_dir.name in existing:
                 continue
             if not (uc_dir / "SYSTEM_PROMPT.md").is_file():
