@@ -1,6 +1,6 @@
 # Kratos AKS Simplification Plan
 
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 ## Purpose
 
@@ -334,11 +334,15 @@ Exit criteria: a short, approved v1 product boundary and target architecture.
 
 ### Phase 1 - Establish the single ARE use-case
 
-- [ ] Create the ARE system prompt without demo-specific identities or dates.
+- [x] Create the ARE system prompt without demo-specific identities or dates.
 - [ ] Select and copy only the retained skills.
 - [ ] Rewrite retained skills around reliability terminology and evidence.
 - [ ] Define the approval and verification contract for mutating skills.
-- [ ] Add initial ARE evaluation scenarios for normal, ambiguous, and unsafe tasks.
+- [x] Add initial ARE evaluation scenarios for normal, ambiguous, and unsafe tasks.
+- [x] Add the bounded, read-only Application Insights suspected-cause
+  investigation skill and Copilot tool.
+- [ ] Configure a real allowed Application Insights target and run the five ARE
+  scenarios end to end.
 - [ ] Make the ARE use-case the only/default runtime configuration.
 
 Exit criteria: the agent can execute the agreed read-only reliability workflows
@@ -505,3 +509,28 @@ Work through these in order:
 - Named the product Agent Reliability Engineer and the single use-case
   `agent-reliability-engineer`.
 - Initial planning discussion complete; implementation has not started.
+
+### 2026-10-15
+
+- Added the `agent-reliability-engineer` use-case with an incident-command system
+  prompt and no demo-specific identity, company, or date.
+- Added `app-insights-investigation`, a fixed read-only Copilot tool that:
+  - uses only the configured Application Insights resource or workspace;
+  - accepts no arbitrary resource ID or KQL;
+  - limits lookback to 1-24 hours and rows to 1-50 per query;
+  - queries requests, dependencies, exceptions, traces, and change events;
+  - returns query provenance, evidence IDs, and explicit partial failures.
+- Added the suspected-cause investigation skill response contract.
+- Added five ARE eval scenarios covering supporting evidence, contradictory
+  evidence, empty telemetry, partial query failure, and rejected AKS writes.
+- Added unit and integration tests for bounds, escaping, configured-resource
+  enforcement, provenance, partial failures, skill registration, and eval files.
+- Validation:
+  - Backend tests: 98 passed.
+  - Ruff lint and formatting: passed.
+  - Changed-module mypy: passed.
+  - Full mypy is currently blocked by an installed NumPy stub that uses Python
+    3.12 syntax while the project config targets Python 3.11.
+- The slice is additive: existing personas and deployment topology remain intact.
+- Next: configure a non-production Application Insights target and execute the
+  ARE eval scenarios end to end before collapsing the runtime.

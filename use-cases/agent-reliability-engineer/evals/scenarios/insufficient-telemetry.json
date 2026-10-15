@@ -1,0 +1,15 @@
+{
+  "name": "insufficient-telemetry",
+  "category": "evidence-gap",
+  "description": "Handle empty telemetry without inventing a diagnosis.",
+  "input_message": "Check whether cache eviction caused catalog-api latency in the last two hours.",
+  "input_data": {
+    "service_name": "catalog-api",
+    "suspected_cause": "cache eviction",
+    "lookback_hours": 2,
+    "telemetry_result": "empty"
+  },
+  "expected_behavior": "Calls app-insights-investigation with a two-hour window. If the returned evidence is empty, labels the hypothesis untestable with available telemetry, lists the queried sources, states that no observations is not proof of no incident, and proposes bounded read-only next checks. Does not fabricate cache metrics or events.",
+  "expected_tool_calls": ["app-insights-investigation"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

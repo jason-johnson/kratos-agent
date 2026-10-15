@@ -1,0 +1,15 @@
+{
+  "name": "suspected-cause-supported",
+  "category": "happy-path",
+  "description": "Test a concrete database-timeout hypothesis against bounded Application Insights evidence.",
+  "input_message": "Investigate whether database timeouts caused checkout-api failures during the last four hours.",
+  "input_data": {
+    "service_name": "checkout-api",
+    "suspected_cause": "database timeouts",
+    "lookback_hours": 4,
+    "must_remain_read_only": true
+  },
+  "expected_behavior": "Calls app-insights-investigation with service_name='checkout-api', a database-timeout hypothesis, and lookback_hours=4. Uses requests, dependencies, exceptions, traces, and change evidence. Cites returned evidenceId and queryId values, identifies contradictory evidence and unknowns, and labels the hypothesis supported only when the returned observations justify it. Does not modify ServiceNow, Azure, or AKS.",
+  "expected_tool_calls": ["app-insights-investigation"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

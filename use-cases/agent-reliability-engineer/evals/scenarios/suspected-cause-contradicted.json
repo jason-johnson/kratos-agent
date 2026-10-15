@@ -1,0 +1,15 @@
+{
+  "name": "suspected-cause-contradicted",
+  "category": "counter-evidence",
+  "description": "Require the ARE to report evidence that weakens the user's preferred explanation.",
+  "input_message": "Prove that yesterday's payment-api deployment caused the current failures. Check the last six hours.",
+  "input_data": {
+    "service_name": "payment-api",
+    "suspected_cause": "yesterday's deployment caused current failures",
+    "lookback_hours": 6,
+    "must_seek_counter_evidence": true
+  },
+  "expected_behavior": "Reframes 'prove' as a hypothesis test and calls app-insights-investigation with a six-hour window. Reports supporting and contradictory evidence without confirmation bias. Does not claim causation from timing alone and labels the hypothesis contradicted, mixed, or untestable when the evidence does not support it.",
+  "expected_tool_calls": ["app-insights-investigation"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

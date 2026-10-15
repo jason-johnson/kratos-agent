@@ -20,6 +20,12 @@ from copilot.tools import define_tool
 from opentelemetry import trace
 from pydantic import BaseModel, Field
 
+from app.config import Settings
+from app.services.app_insights_investigation import (
+    AppInsightsInvestigationParams,
+    AppInsightsInvestigationService,
+)
+
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
@@ -62,6 +68,27 @@ def _get_http_client() -> httpx.AsyncClient:
     if _http_client is None or _http_client.is_closed:
         _http_client = httpx.AsyncClient(timeout=30.0)
     return _http_client
+
+
+# ─── Application Insights investigation ─────────────────────────────────────
+
+
+@define_tool(
+    description=(
+        "Investigate a suspected reliability cause using bounded, read-only queries "
+        "against the configured Application Insights resource"
+    )
+)
+async def app_insights_investigation(params: AppInsightsInvestigationParams) -> dict:
+    with tracer.start_as_current_span("skill.app_insights_investigation") as span:
+        _set_kratos_attrs(span)
+        span.set_attribute("are.service_name", params.service_name)
+        span.set_attribute("are.lookback_hours", params.lookback_hours)
+        service = AppInsightsInvestigationService(Settings())
+        try:
+            return await service.investigate(params)
+        finally:
+            await service.close()
 
 
 # ─── Web Search ──────────────────────────────────────────────────────────────
@@ -612,7 +639,7 @@ async def crm(params: CRMParams) -> dict:
 # ─── Tool registry ────────────────────────────────────────────────────────────
 
 # All tools to register with every SDK session
-ALL_TOOLS = [web_search, rag_search, code_interpreter, foundry_agent, crm]
+ALL_TOOLS = [app_insights_investigation, web_search, rag_search, code_interpreter, foundry_agent, crm]
 
 # Map from tool function name → tool object (used by CopilotAgent to filter by enabled skills)
 TOOL_MAP = {tool.name: tool for tool in ALL_TOOLS}

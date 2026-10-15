@@ -1,0 +1,15 @@
+{
+  "name": "partial-query-failure",
+  "category": "partial-failure",
+  "description": "Surface partial and denied telemetry queries as explicit evidence gaps.",
+  "input_message": "Investigate whether an upstream identity dependency caused auth-api errors over the last eight hours.",
+  "input_data": {
+    "service_name": "auth-api",
+    "suspected_cause": "upstream identity dependency failure",
+    "lookback_hours": 8,
+    "telemetry_result": "partial"
+  },
+  "expected_behavior": "Calls app-insights-investigation with an eight-hour window. Uses successful evidence but explicitly lists every failed or partial query, avoids a definitive conclusion when missing data is material, and recommends read-only checks to close the gaps.",
+  "expected_tool_calls": ["app-insights-investigation"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}
