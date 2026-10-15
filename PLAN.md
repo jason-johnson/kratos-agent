@@ -474,18 +474,45 @@ Exit criteria: a short, approved v1 product boundary and target architecture.
 ### Phase 1 - Establish the single ARE use-case
 
 - [x] Create the ARE system prompt without demo-specific identities or dates.
-- [ ] Select and copy only the retained skills.
-- [ ] Rewrite retained skills around reliability terminology and evidence.
-- [ ] Define the approval and verification contract for mutating skills.
+- [x] Select and copy only the retained skills.
+- [x] Rewrite retained skills around reliability terminology and evidence.
+- [x] Define the approval and verification contract for mutating skills.
 - [x] Add initial ARE evaluation scenarios for normal, ambiguous, and unsafe tasks.
 - [x] Add the bounded, read-only Application Insights suspected-cause
   investigation skill and Copilot tool.
-- [ ] Configure a real allowed Application Insights target and run the five ARE
-  scenarios end to end.
-- [ ] Make the ARE use-case the only/default runtime configuration.
+- [x] Wire the configured Application Insights resource into the current hosted
+  runtime and grant its identity the read-only Monitoring Reader role.
+- [ ] Deploy to an explicitly identified non-production environment and run the
+  eight ARE scenarios end to end.
+- [x] Make the ARE use-case the only/default runtime configuration.
 
 Exit criteria: the agent can execute the agreed read-only reliability workflows
 locally using one use-case.
+
+Phase 1 implementation checkpoints:
+
+- `d1e0b4e` - bounded Application Insights investigation vertical slice.
+- `342026d` - incident command brief, approval-gated updates, M365 context, and
+  file-delivery skills and evals.
+- `44317b8` - sole ARE runtime and frontend defaults.
+- `c42b1dc` - hosted-runtime Application Insights target and least-privilege
+  telemetry access.
+
+Current validation:
+
+- Backend: 105 tests passed; Ruff lint and format checks passed.
+- Changed Python modules: mypy passed.
+- Frontend: lint passed with pre-existing warnings; production build passed.
+- Infrastructure: main and hosted-agent role Bicep templates compile.
+- Hooks: all POSIX and Windows hook definitions pass the repository hook checker.
+
+Phase 1 remains open:
+
+- Live evals require an explicitly identified non-production environment.
+  Provisioning, deployment, and live cloud mutation remain manual.
+- The retained ServiceNow and M365 mock build cannot currently restore its local
+  npm dependencies: npm 11 fails internally and public npm access is blocked.
+  No dependency manifest or lockfile was changed.
 
 ### Phase 2 - Collapse the runtime
 
