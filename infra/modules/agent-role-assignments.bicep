@@ -32,12 +32,16 @@ param keyVaultName string
 @description('Storage Account name for skills blob storage')
 param storageAccountName string
 
+@description('Application Insights resource name for read-only incident evidence queries')
+param appInsightsName string
+
 // ─── Built-in role definition IDs (stable across all tenants) ───
 var cognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd' // model inference
 var cognitiveServicesUser = 'a97b65f3-24c7-4388-baec-2e87135dc908'       // Foundry agent runtime plane
 var storageBlobDataReader = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'       // read skills from blob (read-only = least privilege)
 var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'         // read skill secrets
 var cosmosDbDataContributor = '00000000-0000-0000-0000-000000000002'     // conversation persistence (data plane; no read-only built-in suffices for writes)
+var monitoringReader = '43d0d8ad-25c7-4714-9337-8ba259a9fe05'            // read Application Insights telemetry
 
 // ─── Existing resources ───
 resource aiServices 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
@@ -54,6 +58,10 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
 
 resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-preview' existing = {
   name: cosmosDbAccountName
+}
+
+resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
+  name: appInsightsName
 }
 
 // ─── Agent identity → Microsoft Foundry (model inference) ───
@@ -108,5 +116,16 @@ resource agentCosmosData 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignmen
     roleDefinitionId: '${cosmosDb.id}/sqlRoleDefinitions/${cosmosDbDataContributor}'
     principalId: pid
     scope: cosmosDb.id
+  }
+}]
+
+// ─── Agent identity → Application Insights (read-only incident evidence) ───
+resource agentAppInsightsReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for pid in agentPrincipalIds: {
+  name: guid(appInsights.id, pid, monitoringReader)
+  scope: appInsights
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', monitoringReader)
+    principalId: pid
+    principalType: 'ServicePrincipal'
   }
 }]

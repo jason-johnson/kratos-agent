@@ -2,9 +2,9 @@
 
 name: kratos-agent
 description: >
-  Kratos — enterprise AI assistant powered by GitHub Copilot SDK.
-  Multi-use-case agent with dynamic skills loaded from Azure Blob Storage,
-  Cosmos DB conversation persistence, and OpenTelemetry observability.
+  Agent Reliability Engineer powered by GitHub Copilot SDK.
+  Single-use-case incident command agent with dynamic skills loaded from Azure
+  Blob Storage, Cosmos DB persistence, and OpenTelemetry observability.
 kind: hosted
 protocols:
   - protocol: invocations
@@ -33,6 +33,8 @@ environment_variables:
     value: ${AZURE_BLOB_STORAGE_ENDPOINT}
   - name: BLOB_SKILLS_CONTAINER
     value: skills
+  - name: APPLICATION_INSIGHTS_RESOURCE_ID
+    value: ${APPLICATION_INSIGHTS_RESOURCE_ID}
   # Local fallback path for use-case manifests (Dockerfile copies to /app/use-cases)
   - name: APM_USE_CASES_ROOT
     value: /app/use-cases

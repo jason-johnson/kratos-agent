@@ -39,6 +39,7 @@ PROJECT_ID="${AZURE_AI_PROJECT_ID:-}"            # .../accounts/<account>/projec
 COSMOS_ENDPOINT="${AZURE_COSMOS_DB_ENDPOINT:-}"  # https://<account>.documents.azure.com:443/
 STORAGE_ACCOUNT="${AZURE_BLOB_STORAGE_ACCOUNT_NAME:-}"
 KEY_VAULT_URI="${AZURE_KEY_VAULT_URI:-}"          # https://<vault>.vault.azure.net/
+APP_INSIGHTS_ID="${APPLICATION_INSIGHTS_RESOURCE_ID:-}"
 
 if [ -z "$PROJECT_ID" ] || [ -z "$SUBSCRIPTION_ID" ] || [ -z "$RESOURCE_GROUP" ]; then
   echo "⚠️  AZURE_AI_PROJECT_ID / AZURE_SUBSCRIPTION_ID / AZURE_RESOURCE_GROUP not set."
@@ -58,6 +59,7 @@ FOUNDRY_ACCOUNT="$(printf '%s' "$PROJECT_ID" | sed -nE 's#.*/accounts/([^/]+)/pr
 FOUNDRY_PROJECT="$(printf '%s' "$PROJECT_ID" | sed -nE 's#.*/projects/([^/]+).*#\1#p')"
 COSMOS_NAME="$(host_of "$COSMOS_ENDPOINT" | cut -d. -f1)"
 KEY_VAULT_NAME="$(host_of "$KEY_VAULT_URI" | cut -d. -f1)"
+APP_INSIGHTS_NAME="$(printf '%s' "$APP_INSIGHTS_ID" | sed -nE 's#.*/components/([^/]+).*#\1#p')"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
@@ -68,7 +70,7 @@ echo "  Foundry project : ${FOUNDRY_PROJECT}"
 echo "  Subscription    : ${SUBSCRIPTION_ID}"
 
 if [ -z "$FOUNDRY_ACCOUNT" ] || [ -z "$FOUNDRY_PROJECT" ] || [ -z "$COSMOS_NAME" ] \
-   || [ -z "$KEY_VAULT_NAME" ] || [ -z "$STORAGE_ACCOUNT" ]; then
+   || [ -z "$KEY_VAULT_NAME" ] || [ -z "$STORAGE_ACCOUNT" ] || [ -z "$APP_INSIGHTS_NAME" ]; then
   echo "⚠️  Could not derive all resource names from the azd environment. Skipping."
   exit 0
 fi
@@ -182,6 +184,7 @@ if az deployment group create \
         aiServicesName="$FOUNDRY_ACCOUNT" \
         keyVaultName="$KEY_VAULT_NAME" \
         storageAccountName="$STORAGE_ACCOUNT" \
+        appInsightsName="$APP_INSIGHTS_NAME" \
     --only-show-errors >/dev/null 2>"$DEPLOY_ERR"; then
   echo "   ✅ Hosted-agent role assignments applied."
   echo "      Data-plane role propagation can take a few minutes before the"

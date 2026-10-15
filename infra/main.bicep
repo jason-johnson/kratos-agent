@@ -372,6 +372,7 @@ output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.outputs.logi
 output AZURE_COSMOS_DB_ENDPOINT string = cosmosDb.outputs.endpoint
 output AZURE_KEY_VAULT_URI string = keyVault.outputs.uri
 output AZURE_APP_INSIGHTS_CONNECTION_STRING string = appInsights.outputs.connectionString
+output APPLICATION_INSIGHTS_RESOURCE_ID string = appInsights.outputs.id
 output AZURE_STATIC_WEB_APP_URL string = staticWebApp.outputs.url
 output AGENT_SERVICE_DIRECT_URL string = agentService.outputs.url
 output AGENT_SERVICE_URL string = agentService.outputs.url

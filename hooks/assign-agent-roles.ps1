@@ -50,6 +50,7 @@ $ProjectId      = $env:AZURE_AI_PROJECT_ID           # .../accounts/<account>/pr
 $CosmosEndpoint = $env:AZURE_COSMOS_DB_ENDPOINT      # https://<account>.documents.azure.com:443/
 $StorageAccount = $env:AZURE_BLOB_STORAGE_ACCOUNT_NAME
 $KeyVaultUri    = $env:AZURE_KEY_VAULT_URI           # https://<vault>.vault.azure.net/
+$AppInsightsId  = $env:APPLICATION_INSIGHTS_RESOURCE_ID
 
 if (-not $ProjectId -or -not $SubscriptionId -or -not $ResourceGroup) {
     Write-Host 'WARNING: AZURE_AI_PROJECT_ID / AZURE_SUBSCRIPTION_ID / AZURE_RESOURCE_GROUP not set.'
@@ -73,6 +74,7 @@ $FoundryAccount = if ($ProjectId -match '/accounts/([^/]+)/projects/') { $Matche
 $FoundryProject = if ($ProjectId -match '/projects/([^/]+)') { $Matches[1] } else { '' }
 $CosmosName     = (Get-HostName $CosmosEndpoint) -split '\.' | Select-Object -First 1
 $KeyVaultName   = (Get-HostName $KeyVaultUri) -split '\.' | Select-Object -First 1
+$AppInsightsName = if ($AppInsightsId -match '/components/([^/]+)') { $Matches[1] } else { '' }
 
 Write-Host ''
 Write-Host '=============================================================='
@@ -83,7 +85,7 @@ Write-Host "  Foundry project : $FoundryProject"
 Write-Host "  Subscription    : $SubscriptionId"
 
 if (-not $FoundryAccount -or -not $FoundryProject -or -not $CosmosName `
-    -or -not $KeyVaultName -or -not $StorageAccount) {
+    -or -not $KeyVaultName -or -not $StorageAccount -or -not $AppInsightsName) {
     Write-Host 'WARNING: Could not derive all resource names from the azd environment. Skipping.'
     exit 0
 }
@@ -202,6 +204,7 @@ $ParamDoc = [ordered]@{
         aiServicesName      = @{ value = $FoundryAccount }
         keyVaultName        = @{ value = $KeyVaultName }
         storageAccountName  = @{ value = $StorageAccount }
+        appInsightsName     = @{ value = $AppInsightsName }
     }
 }
 
