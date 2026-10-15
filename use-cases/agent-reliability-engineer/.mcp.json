@@ -1,1 +1,14 @@
-{}
+{
+  "servicenow": {
+    "type": "local",
+    "command": "servicenow-mcp-server",
+    "args": [],
+    "tools": ["*"]
+  },
+  "m365-graph": {
+    "type": "local",
+    "command": "m365-graph-mcp-server",
+    "args": [],
+    "tools": ["*"]
+  }
+}

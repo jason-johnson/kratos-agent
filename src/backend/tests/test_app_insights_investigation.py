@@ -186,7 +186,14 @@ async def test_are_use_case_resolves_to_registered_investigation_tool():
     )
 
     assert registry.system_prompt
-    assert registry.get_enabled_tool_names() == {"app_insights_investigation"}
+    assert registry.get_enabled_tool_names() == {
+        "app_insights_investigation",
+        "file_sharing",
+        "incident_command_brief",
+        "incident_updates",
+        "m365_incident_context",
+    }
+    assert set(registry.mcp_servers) == {"servicenow", "m365-graph"}
     assert "app_insights_investigation" in TOOL_MAP
 
 
@@ -195,7 +202,27 @@ def test_are_eval_scenarios_are_valid_and_use_investigation_skill():
     scenario_dir = repository_root / "use-cases" / "agent-reliability-engineer" / "evals" / "scenarios"
     scenarios = [json.loads(path.read_text()) for path in sorted(scenario_dir.glob("*.json"))]
 
-    assert len(scenarios) == 5
+    assert len(scenarios) == 8
     assert all(scenario["input_message"] for scenario in scenarios)
     assert all(scenario["expected_behavior"] for scenario in scenarios)
-    assert all("app-insights-investigation" in scenario["expected_tool_calls"] for scenario in scenarios)
+    assert all(scenario["expected_tool_calls"] for scenario in scenarios)
+
+
+def test_are_prompt_and_update_skill_define_exact_write_gate():
+    repository_root = Path(__file__).resolve().parents[3]
+    use_case_root = repository_root / "use-cases" / "agent-reliability-engineer"
+    prompt = (use_case_root / "SYSTEM_PROMPT.md").read_text()
+    update_skill = (use_case_root / "skills" / "incident-updates" / "SKILL.md").read_text()
+    normalized_prompt = " ".join(prompt.split())
+
+    for phrase in (
+        "Present one exact proposed write",
+        "Approval is valid only for that exact proposal",
+        "Execute exactly one approved write",
+        "Re-read the target and verify",
+    ):
+        assert phrase in normalized_prompt
+
+    assert "Any edit to target, fields, wording, visibility, or" in update_skill
+    assert "Sending it is a separate write" in update_skill
+    assert "`verified`, `unverified`, or `failed`" in update_skill
