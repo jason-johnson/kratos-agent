@@ -92,6 +92,9 @@ This is the lean default to validate together.
 7. **Blob-backed live skills:** retain Blob Storage and the existing skills admin
    experience so authorized users can update skills without rebuilding the image.
    Keep checked-in ARE skills as the seed and recovery baseline.
+8. **Foundry external-agent registration:** register the AKS-hosted runtime for
+   Foundry observability and evaluation, while AKS remains responsible for
+   invocation, scaling, identity, networking, and availability.
 
 This removes the backend-to-hosted-agent proxy, hosted-agent session mapping,
 warm-pool maintenance, persona lazy loading, and multi-persona routing. Blob
@@ -144,6 +147,22 @@ autonomous operator:
 Deep cluster administration remains useful context, but is not the product's
 primary workflow.
 
+### Top three v1 workflows
+
+1. **Investigate suspected causes** using bounded, read-only Application Insights
+   logs and traces, with supporting evidence, counter-evidence, unknowns, and
+   query provenance.
+2. **Maintain a live evidence-backed incident command brief** containing impact,
+   timeline, hypotheses, decisions, owners, actions, unresolved questions, and
+   stale or contradictory information.
+3. **Draft and post approved incident updates** to ServiceNow and the retained
+   Microsoft 365 channels. The agent must show exact wording, audience,
+   visibility, and target before each write.
+
+These workflows define v1 scope and acceptance. Responder coordination, handover
+PDFs, and post-incident reviews may support them but must not delay the three
+release-defining workflows.
+
 ### Incident system of record
 
 ServiceNow is the first source of truth for incident state, ownership, and
@@ -178,6 +197,18 @@ The v1 agent should use them to:
 Access should use AKS Workload Identity and least-privilege Azure RBAC. Queries
 must be bounded by allowed subscriptions, resource groups, workspaces,
 applications, time windows, and result limits.
+
+### Application observability backend
+
+The ARE application exports its own logs, metrics, traces, model operations, and
+tool activity through OpenTelemetry to **Azure Monitor, Application Insights, and
+Log Analytics**. The trace exploration UI remains the product-facing diagnostic
+surface.
+
+The application telemetry workspace must be distinguishable from incident
+evidence targets. The agent may query only explicitly allowlisted evidence
+resources; it must not infer that its own telemetry resource is the incident
+target.
 
 ### First implementation slice
 
@@ -284,51 +315,159 @@ Each capability should be a focused skill over a narrow, permissioned MCP tool
 surface. The plan should not expose unrestricted shell, Kubernetes, or cloud
 administration as a single general-purpose tool.
 
-## Proposed scope reductions
+## Binding scope and deletion contract
 
-### Remove
+Autopilot must follow this disposition. "Remove" means remove only after the
+replacement phase passes its exit criteria; never delete a working path before
+its replacement is verified.
 
-- All use-cases except the selected ARE use-case after useful skills are migrated.
-- Persona selector, curated/all filtering, and persona-specific conversation views.
-- Persona import and export.
-- Foundry hosted-agent deployment and Invocations proxy.
-- Hosted-agent warm pool and gateway session pinning.
-- Multi-use-case registry maps and use-case request routing.
-- Demo-specific fictional identities, dates, companies, records, and assumptions.
-- Mock MCP packages not used by the ARE.
-- PDF rendering and Playwright if no retained skill requires them.
-- OBO MCP infrastructure if Microsoft Graph access is not retained.
-- Bing Search if web search is not retained.
-- Azure health-model resources unless they are intentionally part of the ARE's
-  observability integration.
-- APM package administration if skills are release-managed with the application.
+### Keep and adapt
 
-### Keep initially
+- Foundry model hosting and the model deployment used by the Copilot SDK.
+- Foundry external-agent registration for observability and evaluation. This is
+  a preview integration, so registration failure must not break AKS invocation;
+  direct OpenTelemetry export remains authoritative.
+- FastAPI API, SSE event contract, Copilot SDK loop, event translation, and file
+  streaming.
+- One `agent-reliability-engineer` prompt, registry, skill tree, and eval set.
+- Blob-backed live skill administration plus a checked-in seed/recovery copy.
+- Cosmos DB conversation and shared runtime persistence for v1.
+- Azure Monitor, Application Insights, Log Analytics, OpenTelemetry, trace
+  exploration, and evaluation interfaces.
+- Azure AI Search for runbooks and operational knowledge.
+- Microsoft Graph OBO as a separately secured AKS MCP service.
+- ServiceNow integration, replacing mock-backed behavior with a production
+  contract while retaining synthetic fixtures for tests.
+- Downloadable evidence bundles, incident PDFs, and the Playwright dependency
+  required to render them.
+- Current frontend behavior except controls tied exclusively to multiple personas.
+- ACR, Key Vault, the VNet/private networking foundation, and required managed
+  identities/RBAC.
+- Focused MCP support and synthetic fixtures required by retained ARE workflows.
 
-- FastAPI API and SSE event contract.
-- Copilot SDK agent loop and event translation.
-- Conversation persistence, subject to the persistence decision below.
-- Skill registry, simplified to one skill root.
-- MCP support.
-- OpenTelemetry instrumentation.
-- Current frontend chat and conversation history, with single-agent branding.
-- ACR for image storage.
-- Key Vault integration.
+### Remove after replacement verification
+
+- Every use-case except `agent-reliability-engineer`, after retained skills and
+  eval coverage have migrated.
+- Persona selection/filtering, persona-specific conversation views, persona
+  import/export, and their API routes, templates, tests, and image content.
+- Foundry-managed hosted-agent deployment, hosted-agent source image and
+  manifests, Invocations proxy, warm pool, gateway session pinning, and
+  multi-use-case lazy loading/routing.
+- Azure Container Apps workloads and Container Apps environment after equivalent
+  AKS workloads pass smoke and rollback tests.
+- Azure Static Web Apps after the AKS frontend route passes functional, TLS, and
+  rollback tests.
+- APM package installation and APM administration. Blob-backed ARE skill
+  administration is the supported runtime mutation path.
+- Bing Search and the general web-search skill; they are not required by the
+  three v1 workflows.
+- Azure health-model resources; Azure Monitor and Application Insights are the
+  selected evidence and observability path.
+- Workday, VIP-specific behavior, demo identities/dates/companies, unrelated
+  report templates, and unrelated mock MCP packages.
+- Unused Azure resources, role assignments, configuration, hooks, CI jobs,
+  documentation, and dependencies made obsolete by the removals above.
+
+### Defer; do not implement in v1
+
+- Azure or AKS mutation/remediation tools.
+- Autonomous ServiceNow writes or reusable/broad approvals.
+- A persistence migration away from Cosmos DB.
+- A second observability stack such as Prometheus/Grafana.
+- Multi-persona support, imported personas, or arbitrary external skills.
+- Employee/HR enrichment through Workday.
+- General internet search.
+- Post-incident review automation beyond artifacts naturally produced by the
+  three v1 workflows.
+
+## Autopilot execution contract
+
+### Execution order
+
+- Execute phases in numeric order. A later phase may be explored, but must not be
+  implemented until every prerequisite phase exit criterion is met.
+- Work in one coherent vertical slice at a time. Each slice must include code,
+  tests/evals, configuration, and directly related documentation.
+- Update this plan at the start and end of every slice, including validation
+  results and unresolved blockers.
+- Preserve the existing working path until its replacement passes the relevant
+  contract and rollback checks.
+- Follow the binding keep/remove/defer disposition above. Do not reinterpret
+  scope based on convenience.
+
+### Required validation before phase completion
+
+- Run the smallest focused tests while iterating, then the complete affected
+  backend or frontend validation suite before marking a phase complete.
+- Run agent evals for behavior changes. New tools require happy-path,
+  counter-evidence, empty/partial-data, denied-permission, and unsafe-request
+  coverage where applicable.
+- Run static validation for Kubernetes, Bicep, workflow, and hook changes using
+  repository-standard tools.
+- Verify secrets, endpoints, tenant/subscription/resource identifiers, and
+  private package-feed URLs are absent from the diff.
+- Confirm existing user-visible behavior intentionally retained by this plan
+  still works.
+- Record any unavailable live-environment validation as a blocker rather than
+  treating a mock or unit test as equivalent.
+
+### Mandatory stop conditions
+
+Autopilot must stop and request a decision when:
+
+- A change would expand v1 write authority beyond explicitly approved ServiceNow
+  updates.
+- A required integration contract, authentication method, target resource
+  allowlist, or authorization model is unspecified.
+- Validation requires production access, production mutation, provisioning,
+  deployment, or resource destruction.
+- A migration would lose or reinterpret existing Cosmos, Blob, or ServiceNow
+  data.
+- A security boundary would be weakened, broad cloud/Kubernetes permissions
+  would be introduced, or secrets would need to be stored in code/configuration.
+- The external-agent registration preview conflicts with AKS availability or
+  invocation. AKS invocation and direct OpenTelemetry export take precedence.
+- Existing unrelated worktree changes conflict with files needed for the slice.
+- Tests expose a pre-existing failure that prevents proving the slice's outcome.
+- The implementation would add a new managed service, runtime, package manager,
+  deployment platform, or user-facing capability not confirmed in Phase 0.
+
+### Cloud and deployment boundary
+
+- Deployment remains manual. Autopilot may author and validate deployment
+  artifacts, but must not run `azd deploy`, provision AKS/Azure resources, modify
+  a live cluster, or destroy old resources.
+- Live smoke tests may run only after a user identifies a non-production target
+  and explicitly authorizes that validation.
+- Phase 6 may remove obsolete source and templates after replacement validation,
+  but live Azure resource deletion remains a separate manual operation.
+
+### Completion and handoff format
+
+At the end of each phase, record:
+
+- completed scope and intentionally deferred scope;
+- files and runtime surfaces changed;
+- tests, evals, lint, type checks, build, and manifest validation performed;
+- live checks still required;
+- migration and rollback notes;
+- the exact next ready phase or a blocking decision.
 
 ## Delivery phases
 
-### Phase 0 - Product and architecture decisions
+### Phase 0 - Product and architecture decisions (complete)
 
 - [x] Record the initial goals and current-state findings.
 - [x] Confirm the single use-case name and user-facing product name.
-- [ ] Confirm the first target users and their top three workflows.
+- [x] Confirm the first target users and their top three workflows.
 - [x] Define read-only and mutating integrations for the first release.
 - [x] Decide whether the first release needs the existing frontend.
 - [x] Decide persistence and skill distribution.
-- [ ] Decide the observability backend.
+- [x] Decide the observability backend.
 - [x] Decide whether any existing persona import/export, OBO, or report feature
   stays.
-- [ ] Agree on an explicit deletion list.
+- [x] Agree on an explicit deletion list.
 
 Exit criteria: a short, approved v1 product boundary and target architecture.
 
@@ -377,11 +516,18 @@ Exit criteria: no user-visible or API-level multi-persona concepts remain.
 
 ### Phase 4 - Add production reliability integrations
 
-- [ ] Implement read-only Kubernetes inspection.
-- [ ] Implement the selected telemetry queries.
-- [ ] Implement deployment/change correlation.
-- [ ] Implement incident and on-call integration.
-- [ ] Add narrowly scoped mutating operations only after read workflows are solid.
+- [ ] Replace the ServiceNow mock path with the production major-incident read
+  contract.
+- [ ] Implement exact-draft, explicitly approved ServiceNow updates with
+  idempotency, audit receipts, and verification.
+- [ ] Implement allowlisted Azure Monitor/Application Insights evidence queries
+  and deployment/change correlation.
+- [ ] Implement the live command brief model: impact, timeline, hypotheses,
+  decisions, owners, actions, questions, and staleness.
+- [ ] Implement delegated Microsoft Graph email, calendar, presence, and Teams
+  workflows through the OBO MCP service.
+- [ ] Add read-only Kubernetes inspection only where it supports the three v1
+  workflows; do not add remediation tools.
 - [ ] Enforce authorization, target scoping, approvals, audit, and verification.
 - [ ] Add failure, timeout, partial-data, and stale-data handling.
 
@@ -453,6 +599,9 @@ deployment path.
 | D-021 | Keep downloadable files and PDF incident reports | Confirmed | Retain file streaming and Playwright, but remove non-incident report templates. |
 | D-022 | Remove persona import and export | Confirmed | The product has one managed ARE use-case; remove exporter/importer APIs, UI, tests, templates, and image content. |
 | D-023 | First vertical slice is suspected-cause investigation in Application Insights | Confirmed | Use bounded logs and traces to produce ranked, cited findings before adding write workflows. |
+| D-024 | V1 workflows are investigation, live command brief, and approved incident updates | Confirmed | These three workflows define release scope and acceptance. |
+| D-025 | Use Azure Monitor, Application Insights, and Log Analytics for application observability | Confirmed | Export via OpenTelemetry and retain trace exploration. |
+| D-026 | Run the Copilot SDK in the AKS agent/API service and register it as a Foundry external agent | Confirmed | Foundry retains model hosting, observability, and evaluation; AKS owns invocation and runtime operations. |
 
 ## Risks and mitigations
 
@@ -534,3 +683,14 @@ Work through these in order:
 - The slice is additive: existing personas and deployment topology remain intact.
 - Next: configure a non-production Application Insights target and execute the
   ARE eval scenarios end to end before collapsing the runtime.
+- Confirmed the three v1 workflows: suspected-cause investigation, a live
+  evidence-backed command brief, and approved incident updates.
+- Selected Azure Monitor, Application Insights, and Log Analytics via
+  OpenTelemetry for the ARE application's own observability.
+- Confirmed that the Copilot SDK runs in the AKS agent/API service, Foundry keeps
+  model hosting, and the AKS runtime is registered as an external agent for
+  observability and evaluation.
+- Finalized the binding keep/remove/defer contract.
+- Added autonomous execution order, validation gates, mandatory stop conditions,
+  manual cloud/deployment boundaries, and phase handoff requirements.
+- Phase 0 complete.
