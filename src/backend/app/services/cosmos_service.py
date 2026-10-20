@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
+from azure.core import MatchConditions
 from azure.core.exceptions import ClientAuthenticationError, ServiceRequestError
 from azure.cosmos.aio import CosmosClient
 from azure.cosmos.exceptions import CosmosHttpResponseError
@@ -373,6 +374,50 @@ class CosmosService:
             await self._settings_container.create_item(setting)
         except CosmosHttpResponseError as exc:
             if exc.status_code == 409:
+                return False
+            raise
+        return True
+
+    async def replace_setting_if_revision(self, setting: dict, expected_revision: int) -> bool:
+        """Replace a setting only when its current application revision matches."""
+        setting_id = setting["id"]
+        setting = {**setting, "category": "system"}
+        if self._using_sqlite():
+            assert self._sqlite_db is not None
+            await self._sqlite_db.execute("BEGIN IMMEDIATE")
+            try:
+                existing = await self._sqlite_read("settings", setting_id, "system")
+                if existing is None or int(existing.get("revision", -1)) != expected_revision:
+                    await self._sqlite_db.rollback()
+                    return False
+                await self._sqlite_db.execute(
+                    "UPDATE settings SET data = ? WHERE id = ? AND partition_key = ?",
+                    (json.dumps(setting), setting_id, "system"),
+                )
+                await self._sqlite_db.commit()
+                return True
+            except Exception:
+                await self._sqlite_db.rollback()
+                raise
+        if not self._settings_container:
+            raise RuntimeError("Shared settings persistence is unavailable")
+        try:
+            current = await self._settings_container.read_item(item=setting_id, partition_key="system")
+        except CosmosHttpResponseError as exc:
+            if exc.status_code == 404:
+                return False
+            raise
+        if int(current.get("revision", -1)) != expected_revision:
+            return False
+        try:
+            await self._settings_container.replace_item(
+                item=setting_id,
+                body=setting,
+                etag=current.get("_etag"),
+                match_condition=MatchConditions.IfNotModified,
+            )
+        except CosmosHttpResponseError as exc:
+            if exc.status_code == 412:
                 return False
             raise
         return True

@@ -13,6 +13,12 @@ from app.services.app_insights_investigation import (
     AppInsightsInvestigationParams,
     AppInsightsInvestigationService,
 )
+from app.services.incident_command_brief import (
+    IncidentBriefGetParams,
+    IncidentBriefUpdateParams,
+    brief_document,
+    with_staleness,
+)
 from app.services.servicenow_incidents import (
     ServiceNowClient,
     ServiceNowExecuteUpdateParams,
@@ -265,18 +271,74 @@ async def servicenow_execute_update(params: ServiceNowExecuteUpdateParams) -> di
         await client.close()
 
 
+@define_tool(
+    description=(
+        "Load the latest persisted incident command brief with revision and per-source staleness. "
+        "Returns revision 0 when no brief exists."
+    )
+)
+async def incident_brief_get(params: IncidentBriefGetParams) -> dict:
+    if _tool_cosmos_service is None:
+        return {"status": "error", "code": "persistence_unavailable"}
+    document = await _tool_cosmos_service.get_setting(f"incident-brief:{params.incident_number}")
+    if document is None:
+        return {
+            "status": "not_found",
+            "incidentNumber": params.incident_number,
+            "revision": 0,
+            "instruction": "Collect authoritative evidence before creating revision 1.",
+        }
+    return {"status": "success", **with_staleness(document)}
+
+
+@define_tool(
+    description=(
+        "Create or replace a persisted incident command brief using optimistic revision control. "
+        "Every timeline/decision claim requires source references and completed actions require verification evidence."
+    )
+)
+async def incident_brief_update(params: IncidentBriefUpdateParams) -> dict:
+    if _tool_cosmos_service is None:
+        return {"status": "error", "code": "persistence_unavailable"}
+    conversation_id = _ctx_conversation_id.get()
+    next_revision = params.expected_revision + 1
+    document = brief_document(
+        params.brief,
+        revision=next_revision,
+        conversation_id=conversation_id,
+    )
+    if params.expected_revision == 0:
+        saved = await _tool_cosmos_service.create_setting_once(document)
+    else:
+        saved = await _tool_cosmos_service.replace_setting_if_revision(document, params.expected_revision)
+    if not saved:
+        current = await _tool_cosmos_service.get_setting(document["id"])
+        return {
+            "status": "conflict",
+            "code": "brief_revision_changed",
+            "expectedRevision": params.expected_revision,
+            "currentRevision": current.get("revision") if current else None,
+            "instruction": "Reload the brief, merge against current evidence, and retry with its revision.",
+        }
+    return {"status": "saved", **with_staleness(document)}
+
+
 ALL_TOOLS = [
     app_insights_investigation,
     servicenow_get_major_incident,
     servicenow_list_incident_updates,
     servicenow_prepare_update,
     servicenow_execute_update,
+    incident_brief_get,
+    incident_brief_update,
 ]
 TOOL_SKILL_MAP = {
     "servicenow_get_major_incident": "incident_updates",
     "servicenow_list_incident_updates": "incident_updates",
     "servicenow_prepare_update": "incident_updates",
     "servicenow_execute_update": "incident_updates",
+    "incident_brief_get": "incident_command_brief",
+    "incident_brief_update": "incident_command_brief",
 }
 TOOL_MAP = {tool.name: tool for tool in ALL_TOOLS}
 

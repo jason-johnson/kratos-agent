@@ -12,13 +12,17 @@ handoff.
 
 ## Evidence collection
 
-1. Fetch the incident with `servicenow_get_major_incident`.
-2. Fetch chronological notes with `servicenow_list_incident_updates`.
-3. Use `app-insights-investigation` when a technical hypothesis, affected service,
+1. Load the current persisted brief with `incident_brief_get`; keep its revision.
+2. Fetch the incident with `servicenow_get_major_incident`.
+3. Fetch chronological notes with `servicenow_list_incident_updates`.
+4. Use `app-insights-investigation` when a technical hypothesis, affected service,
    and bounded time window are available.
-4. Use **m365-incident-context** only when responder availability or existing
+5. Use **m365-incident-context** only when responder availability or existing
    communications are relevant.
-5. Treat every failed, partial, denied, empty, or stale result as a named gap.
+6. Treat every failed, partial, denied, empty, or stale result as a named gap.
+7. Save the refreshed brief with `incident_brief_update` and the loaded
+   `expected_revision`. On a conflict, reload and merge; never overwrite a newer
+   revision blindly.
 
 ServiceNow is authoritative for declared incident state and ownership. Telemetry
 is authoritative for its observations. Highlight disagreement; do not silently
@@ -68,3 +72,5 @@ choose one source.
 - Never invent owners, decisions, action status, due times, or impact.
 - Mark an action complete only when verification evidence is present.
 - Do not mutate any system while building or refreshing the brief.
+- Persist source snapshots with observation time and staleness threshold. Call
+  out stale or partial sources in the response.
