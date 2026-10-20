@@ -13,33 +13,13 @@ services:
       retries: 10
       start_period: 5s
 
-  # Entra-protected OBO MCP server. Locally it authenticates ITSELF with a client
-  # secret (OBO_CLIENT_SECRET) instead of the cloud's secret-less managed-identity
-  # federated credential — same app registration, same real Entra OBO -> Graph
-  # exchange. Inbound user-token validation (audience/scope/tenant/client) is
-  # identical to production. Provide OBO_CLIENT_SECRET via your local .env.
-  obo-mcp-server:
-    build:
-      context: src/obo-mcp-server
-      dockerfile: Dockerfile
-    ports:
-      - "8800:8000"
-    environment:
-      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-f7d09a0b-c429-41ac-b105-9ce32d6e5358}
-      OBO_API_CLIENT_ID: ${OBO_API_CLIENT_ID:-bec3169c-c01e-4acc-9974-bd9271f9bfae}
-      # LOCAL DEV ONLY — confidential-client secret for the OBO exchange.
-      OBO_CLIENT_SECRET: ${OBO_CLIENT_SECRET}
-      GRAPH_SCOPES: ${GRAPH_SCOPES:-https://graph.microsoft.com/User.Read https://graph.microsoft.com/User.ReadBasic.All https://graph.microsoft.com/Presence.Read.All https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Chat.Read}
-      # Only the SPA client may act as the user (confused-deputy guard). Add the
-      # VS Code client id here too if you drive it from VS Code.
-      ALLOWED_CLIENT_APP_IDS: ${ALLOWED_CLIENT_APP_IDS:-f31799cd-b0a5-4055-b7f9-574c25ea0238}
-      ENVIRONMENT: development
-      LOG_LEVEL: INFO
-
   backend:
     build:
       context: .
-      dockerfile: src/backend/Dockerfile
+      dockerfile: src/backend/Dockerfile.aks
+      secrets:
+        - pip_index_url
+        - npmrc
     ports:
       - "8000:8000"
     environment:
@@ -60,5 +40,9 @@ services:
     depends_on:
       azurite:
         condition: service_healthy
-      obo-mcp-server:
-        condition: service_started
+
+secrets:
+  pip_index_url:
+    environment: PRIVATE_PYPI_INDEX_URL
+  npmrc:
+    file: ${PRIVATE_NPMRC:?Set PRIVATE_NPMRC to a private-feed npmrc file}

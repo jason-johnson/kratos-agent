@@ -52,23 +52,6 @@ updates:
       - dependency-name: "pydantic-core"
       - dependency-name: "pydantic_core"
 
-  # The hosted agent has its own pyproject and shares github-copilot-sdk with
-  # the backend. Without this block it silently drifted behind (backend moved
-  # to 1.0.8 while this stayed on 1.0.0).
-  - package-ecosystem: pip
-    directory: /src/hosted-agent
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      hosted-agent-security:
-        applies-to: security-updates
-        patterns: ["*"]
-      hosted-agent-minor-patch:
-        applies-to: version-updates
-        update-types: [minor, patch]
-    labels: [dependencies, python]
-
   # --- JavaScript ---------------------------------------------------------
   - package-ecosystem: npm
     directory: /src/frontend
