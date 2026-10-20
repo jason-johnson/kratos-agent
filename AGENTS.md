@@ -51,14 +51,22 @@ There is one public agent identity and no persona selector, discovery endpoint,
 or caller-selected `useCase` field. `agent-reliability-engineer` remains an
 internal storage/configuration key. Technical systems are read-only; each
 ServiceNow write needs exact, single-use approval and post-write verification.
+Conversation-scoped routes must derive ownership from the authenticated
+principal and return not found rather than revealing another user's resource.
+
+Production integration boundaries are fixed: ServiceNow is the only mutable
+system; Microsoft Graph OBO, Application Insights/Azure Activity, and
+Kubernetes are read-only. Kubernetes inspection is namespace-allowlisted and
+GET-only. Do not add generic HTTP/KQL/Kubernetes paths or restore the
+ServiceNow mock to the active runtime.
 
 ## Validation
 
 Run the smallest thing that covers the change.
 
 ```bash
-# backend
-cd src/backend && uv run pytest && uv run ruff check .
+# backend (`--frozen` avoids writing private feed locations into uv.lock)
+cd src/backend && uv run --frozen pytest && uv run --frozen ruff check .
 
 # frontend
 cd src/frontend && npm run lint && npm run build

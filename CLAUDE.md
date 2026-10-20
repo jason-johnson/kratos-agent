@@ -76,6 +76,25 @@ Skills load in priority order (see [skill_registry.py](src/backend/app/services/
 blob storage → local filesystem → APM packages, with local/blob winning name conflicts. Authorized
 runtime changes go through `/api/admin/skills`, create immutable versions, and refresh replicas.
 
+Conversation, chat, approval, cancellation, and Copilot Studio routes derive a
+stable owner from the authenticated principal and must verify ownership before
+using a caller-supplied conversation ID. Auth-disabled local mode deliberately
+uses the legacy `default-user` partition.
+
+### Production reliability integrations
+
+- ServiceNow uses fixed Python tools, one configured HTTPS origin, exact
+  expiring approvals, an idempotency ledger, audit receipts, and re-read
+  verification. Do not restore the ServiceNow mock to the active runtime.
+- Application Insights and Azure Activity use fixed bounded KQL and read-only
+  identity permissions. Preserve partial/stale/coverage-gap reporting.
+- Command briefs are revisioned persisted records; updates require the expected
+  revision and provenance/verification evidence.
+- Microsoft Graph OBO is delegated and read-only in v1. Do not add mail,
+  calendar, or Teams mutation tools.
+- Kubernetes inspection is namespace-allowlisted and GET-only. Phase 5 still
+  supplies the AKS service account and RBAC.
+
 ### Local mode
 
 `LOCAL_MODE` auto-activates whenever `COSMOS_DB_ENDPOINT` is empty (`Settings.is_local_mode()`).
@@ -86,7 +105,8 @@ the existing `is_local_mode()` checks.
 ### Mocks
 
 [mocks/packages/](mocks/packages/) contains synthetic development servers. The active backend image
-installs only the ServiceNow and M365 Graph MCP packages retained by the ARE.
+installs only the local M365 Graph mock; production ServiceNow uses the fixed
+Python client.
 
 ## Conventions
 

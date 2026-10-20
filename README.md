@@ -29,18 +29,22 @@ FastAPI agent/API
     |-- GitHub Copilot SDK agent loop
     |-- ARE system prompt and skills
     |-- conversation, eval, trace, file, and runtime-config APIs
-    |-- read-only Application Insights investigation
-    |-- ServiceNow and Microsoft Graph MCP clients
+    |-- read-only Application Insights, Azure Activity, and Kubernetes inspection
+    |-- guarded production ServiceNow client
+    |-- persisted incident command briefs
     |
     +--> Microsoft Foundry model deployment
     +--> Cosmos DB
     +--> Blob Storage
     +--> Application Insights / Log Analytics
+    +--> ServiceNow
+    +--> delegated Microsoft Graph OBO MCP service
 ```
 
 The current Azure deployment remains Azure Container Apps plus Azure Static Web
-Apps. AKS packaging, Workload Identity, ingress, policies, and production
-integration hardening are planned in later phases; they are not complete yet.
+Apps. The production integration contracts are implemented, but live acceptance
+requires an explicitly approved deployment. AKS packaging, Workload Identity,
+ingress, and policies are Phase 5 work.
 
 ## Product model
 
@@ -60,7 +64,7 @@ The active configuration is under
 |---|---|
 | `SYSTEM_PROMPT.md` | ARE role, evidence rules, approval boundaries, and response contract |
 | `skills/` | Incident investigation, command-brief, and communication workflows |
-| `.mcp.json` | Retained ServiceNow and Microsoft Graph tool configuration |
+| `.mcp.json` | Synthetic local Microsoft Graph tool configuration |
 | `evals/` | ARE behavior and safety scenarios |
 
 ## Safety and operational UX
@@ -80,6 +84,9 @@ Production is visually distinct. The UI also states:
 Approval responses are sent to the active Copilot SDK user-input request. They
 are not converted into reusable chat instructions.
 
+All conversation-scoped APIs enforce the authenticated principal's ownership.
+ServiceNow writes are conversation-bound, exact, expiring, and single-use.
+
 ## Repository layout
 
 | Path | Purpose |
@@ -88,7 +95,7 @@ are not converted into reusable chat instructions.
 | [`src/frontend/`](src/frontend/) | Next.js user interface |
 | [`src/obo-mcp-server/`](src/obo-mcp-server/) | Optional Microsoft Graph On-Behalf-Of MCP service |
 | [`use-cases/agent-reliability-engineer/`](use-cases/agent-reliability-engineer/) | ARE prompt, skills, MCP config, and evals |
-| [`mocks/`](mocks/) | Synthetic ServiceNow and Microsoft Graph development servers |
+| [`mocks/`](mocks/) | Synthetic development servers; ServiceNow is not on the active production path |
 | [`infra/`](infra/) | Current Azure Container Apps infrastructure |
 | [`scripts/`](scripts/) | Eval and trace utilities |
 
@@ -139,14 +146,12 @@ npm run dev
 
 ### Retained MCP mocks
 
-Only the ServiceNow and Microsoft Graph packages are part of the ARE runtime
-image. Their fixtures are synthetic.
+The local ARE configuration retains the synthetic Microsoft Graph package.
+ServiceNow production behavior uses the fixed Python client; its mock remains
+only as a repository fixture pending Phase 6 cleanup.
 
 ```bash
-cd mocks/packages/servicenow-mcp-server
-npm run build
-
-cd ../m365-graph-mcp-server
+cd mocks/packages/m365-graph-mcp-server
 npm run build
 ```
 

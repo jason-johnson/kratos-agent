@@ -612,22 +612,67 @@ Phase 3 status: **Complete (2026-10-20).**
 
 ### Phase 4 - Add production reliability integrations
 
-- [ ] Replace the ServiceNow mock path with the production major-incident read
+- [x] Replace the ServiceNow mock path with the production major-incident read
   contract.
-- [ ] Implement exact-draft, explicitly approved ServiceNow updates with
+- [x] Implement exact-draft, explicitly approved ServiceNow updates with
   idempotency, audit receipts, and verification.
-- [ ] Implement allowlisted Azure Monitor/Application Insights evidence queries
+- [x] Implement allowlisted Azure Monitor/Application Insights evidence queries
   and deployment/change correlation.
-- [ ] Implement the live command brief model: impact, timeline, hypotheses,
+- [x] Implement the live command brief model: impact, timeline, hypotheses,
   decisions, owners, actions, questions, and staleness.
-- [ ] Implement delegated Microsoft Graph email, calendar, presence, and Teams
+- [x] Implement delegated Microsoft Graph email, calendar, presence, and Teams
   workflows through the OBO MCP service.
-- [ ] Add read-only Kubernetes inspection only where it supports the three v1
+- [x] Add read-only Kubernetes inspection only where it supports the three v1
   workflows; do not add remediation tools.
-- [ ] Enforce authorization, target scoping, approvals, audit, and verification.
-- [ ] Add failure, timeout, partial-data, and stale-data handling.
+- [x] Enforce authorization, target scoping, approvals, audit, and verification.
+- [x] Add failure, timeout, partial-data, and stale-data handling.
 
 Exit criteria: the v1 ARE workflows operate against real, permissioned systems.
+
+Phase 4 implementation status: **Complete (2026-10-20).**
+
+- ServiceNow uses a fixed HTTPS origin and OAuth client credentials. Reads are
+  bounded; writes execute only a stored, exact proposal after an unchanged,
+  conversation-bound, five-minute approval. The idempotency ledger persists
+  receipts and an independent re-read determines verified, unverified, or
+  failed status.
+- Application Insights queries and Azure Activity correlation use fixed KQL,
+  bounded windows/results, freshness markers, safe error classifications, and
+  explicit coverage gaps. Subscription Administrative, ServiceHealth, and
+  ResourceHealth logs are routed to Log Analytics by the current Bicep.
+- Incident command briefs are persisted with structured provenance, source
+  staleness, contradictions, verification evidence, and optimistic revision
+  control in SQLite and Cosmos.
+- Microsoft Graph OBO tools are delegated and read-only for profile, user,
+  presence, calendar, mail, and Teams chat context. Microsoft 365 mutations
+  remain outside the v1 authority boundary.
+- Kubernetes inspection is namespace-allowlisted and GET-only for workload
+  readiness, service pod health, and events. It exposes no exec, logs, secrets,
+  pod templates, restart, scale, patch, or delete operation.
+- Conversation, chat, approval, cancellation, and Copilot Studio routes now use
+  a stable authenticated principal and verify conversation ownership. Local
+  auth-disabled mode retains the existing `default-user` partition.
+- Commits: `78ad747`, `f1531d9`, `9fb69b9`, `9710665`, `75abebd`,
+  `eb5b711`, and `07264f6`.
+- Validation: 111 backend tests and Ruff lint/format passed; frontend lint and
+  production build passed with the four existing warnings; all mock packages
+  built; Bicep compiled with existing non-blocking warnings; all hook contracts
+  and Docker Compose configuration passed.
+- Mypy remains blocked before application analysis by NumPy stubs using Python
+  3.12 type-statement syntax while the project targets Python 3.11.
+- No deployment, provisioning, branch change, push, pull, or live cloud
+  mutation was performed.
+
+Post-Phase 4 manual acceptance:
+
+- Deploy to an explicitly identified non-production environment and verify
+  permissioned ServiceNow read/update/receipt/re-read behavior.
+- Verify Application Insights and Azure Activity evidence, including
+  permission, empty, stale, partial, throttled, and timeout outcomes.
+- Verify Graph delegated consent and read boundaries using a real signed-in
+  user.
+- Complete Phase 5 Workload Identity, service account, Role/RoleBinding, and
+  namespace wiring before exercising Kubernetes inspection in AKS.
 
 ### Phase 5 - Package for AKS
 
