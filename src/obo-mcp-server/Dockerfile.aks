@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1.7
+
+ARG PYTHON_IMAGE=python:3.11.14-slim-bookworm
+
+FROM ${PYTHON_IMAGE}
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8000 \
+    HOME=/home/obo
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN --mount=type=secret,id=pip_index_url,required=true \
+    PIP_INDEX_URL="$(cat /run/secrets/pip_index_url)" \
+    PIP_EXTRA_INDEX_URL="" \
+    pip install --no-cache-dir --requirement requirements.txt
+
+RUN groupadd --gid 10002 obo \
+    && useradd --uid 10002 --gid obo --create-home --shell /usr/sbin/nologin obo
+
+COPY --chown=obo:obo obo.py server.py ./
+
+USER 10002:10002
+
+EXPOSE 8000
+
+CMD ["python", "server.py"]

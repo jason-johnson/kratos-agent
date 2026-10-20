@@ -1,0 +1,9 @@
+{
+  "apiUrl": "${API_URL}",
+  "auth": {
+    "clientId": "${OBO_CLIENT_ID}",
+    "tenantId": "${AZURE_TENANT_ID}",
+    "mcpScope": "${OBO_MCP_SCOPE}",
+    "mcpServerName": "${OBO_MCP_SERVER_NAME}"
+  }
+}
