@@ -1,0 +1,32 @@
+backend:
+  image:
+    repository: example.invalid/kratos/backend
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+frontend:
+  image:
+    repository: example.invalid/kratos/frontend
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+obo:
+  image:
+    repository: example.invalid/kratos/obo
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+authProxy:
+  image:
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+workloadIdentity:
+  backendClientId: validation-placeholder
+  oboClientId: validation-placeholder
+azure:
+  tenantId: validation-placeholder
+  foundryEndpoint: https://foundry.example.invalid
+  foundryModelDeployment: validation-model
+  cosmosDbEndpoint: https://cosmos.example.invalid
+  blobStorageEndpoint: https://blob.example.invalid
+serviceNow:
+  instanceUrl: https://servicenow.example.invalid
+auth:
+  oboClientId: validation-placeholder
+  oboScope: api://validation/access_as_user
+  allowedClientAppIds: validation-placeholder
+ingress:
+  host: are.example.invalid

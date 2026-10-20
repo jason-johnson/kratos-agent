@@ -1,0 +1,120 @@
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+
+backend:
+  replicaCount: 2
+  image:
+    repository: ""
+    digest: ""
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: ""
+    digest: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+obo:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ""
+    digest: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+authProxy:
+  enabled: true
+  image:
+    repository: quay.io/oauth2-proxy/oauth2-proxy
+    digest: ""
+  adminGroupId: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+workloadIdentity:
+  backendClientId: ""
+  oboClientId: ""
+  backendServiceAccountName: kratos-agent-backend
+  oboServiceAccountName: kratos-agent-obo
+
+azure:
+  tenantId: ""
+  foundryEndpoint: ""
+  foundryModelDeployment: ""
+  cosmosDbEndpoint: ""
+  blobStorageEndpoint: ""
+  blobSkillsContainer: skills
+  applicationInsightsResourceId: ""
+  applicationInsightsWorkspaceId: ""
+
+serviceNow:
+  instanceUrl: ""
+
+observability:
+  otlpEndpoint: ""
+  serviceName: kratos-agent-service
+
+auth:
+  oboClientId: ""
+  oboScope: ""
+  oboServerName: graph-obo
+  allowedClientAppIds: ""
+
+secrets:
+  existingSecret: kratos-agent-secrets
+  serviceNowClientIdKey: servicenow-client-id
+  serviceNowClientSecretKey: servicenow-client-secret
+  appInsightsConnectionStringKey: applicationinsights-connection-string
+  oauthClientIdKey: oauth-client-id
+  oauthClientSecretKey: oauth-client-secret
+  oauthCookieSecretKey: oauth-cookie-secret
+
+ingress:
+  enabled: true
+  className: webapprouting.kubernetes.azure.com
+  host: ""
+  tlsSecretName: kratos-agent-tls
+  clusterIssuer: ""
+  controllerNamespace: app-routing-system
+
+autoscaling:
+  backend:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  frontend:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 75
+
+networkPolicy:
+  enabled: true
+  dnsNamespace: kube-system

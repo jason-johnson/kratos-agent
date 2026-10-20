@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kratos.fullname" . }}-config
+  labels:
+    {{- include "kratos.labels" . | nindent 4 }}
+data:
+  ENVIRONMENT: production
+  LOCAL_MODE: "false"
+  ADMIN_AUTH_ENABLED: "true"
+  TRUSTED_AUTH_PROXY_ENABLED: {{ .Values.authProxy.enabled | quote }}
+  TRUSTED_AUTH_PROXY_ADMIN_GROUP: {{ .Values.authProxy.adminGroupId | quote }}
+  ALLOWED_ORIGINS: ""
+  FOUNDRY_ENDPOINT: {{ required "azure.foundryEndpoint is required" .Values.azure.foundryEndpoint | quote }}
+  FOUNDRY_MODEL_DEPLOYMENT: {{ required "azure.foundryModelDeployment is required" .Values.azure.foundryModelDeployment | quote }}
+  COSMOS_DB_ENDPOINT: {{ required "azure.cosmosDbEndpoint is required" .Values.azure.cosmosDbEndpoint | quote }}
+  BLOB_STORAGE_ENDPOINT: {{ required "azure.blobStorageEndpoint is required" .Values.azure.blobStorageEndpoint | quote }}
+  BLOB_SKILLS_CONTAINER: {{ .Values.azure.blobSkillsContainer | quote }}
+  APPLICATION_INSIGHTS_RESOURCE_ID: {{ .Values.azure.applicationInsightsResourceId | quote }}
+  APPLICATION_INSIGHTS_WORKSPACE_ID: {{ .Values.azure.applicationInsightsWorkspaceId | quote }}
+  SERVICENOW_INSTANCE_URL: {{ required "serviceNow.instanceUrl is required" .Values.serviceNow.instanceUrl | quote }}
+  KUBERNETES_ALLOWED_NAMESPACES: {{ .Release.Namespace | quote }}
+  OBO_MCP_SERVER_NAME: {{ .Values.auth.oboServerName | quote }}
+  OBO_MCP_SERVER_MCP_URL: {{ printf "http://%s-obo:8000/mcp" (include "kratos.fullname" .) | quote }}
+  OTEL_SERVICE_NAME: {{ .Values.observability.serviceName | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.observability.otlpEndpoint | quote }}
+  OTEL_RESOURCE_ATTRIBUTES: {{ printf "service.namespace=%s,deployment.environment.name=production" .Release.Namespace | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kratos.fullname" . }}-frontend
+  labels:
+    {{- include "kratos.labels" . | nindent 4 }}
+data:
+  config.json: |
+    {
+      "apiUrl": "",
+      "auth": {
+        "clientId": {{ .Values.auth.oboClientId | quote }},
+        "tenantId": {{ required "azure.tenantId is required" .Values.azure.tenantId | quote }},
+        "mcpScope": {{ .Values.auth.oboScope | quote }},
+        "mcpServerName": {{ .Values.auth.oboServerName | quote }}
+      }
+    }

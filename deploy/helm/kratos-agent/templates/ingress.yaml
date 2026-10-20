@@ -1,0 +1,78 @@
+{{- if .Values.ingress.enabled }}
+{{- $host := required "ingress.host is required" .Values.ingress.host }}
+{{- if .Values.authProxy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "kratos.fullname" . }}-auth
+  labels:
+    {{- include "kratos.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    {{- with .Values.ingress.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ . | quote }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts: [{{ $host | quote }}]
+      secretName: {{ .Values.ingress.tlsSecretName }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /oauth2
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "kratos.fullname" . }}-auth
+                port:
+                  name: http
+---
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "kratos.fullname" . }}
+  labels:
+    {{- include "kratos.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/session-cookie-name: kratos-route
+    nginx.ingress.kubernetes.io/session-cookie-secure: "true"
+    {{- if .Values.authProxy.enabled }}
+    nginx.ingress.kubernetes.io/auth-url: {{ printf "http://%s-auth.%s.svc.cluster.local:4180/oauth2/auth" (include "kratos.fullname" .) .Release.Namespace | quote }}
+    nginx.ingress.kubernetes.io/auth-signin: {{ printf "https://%s/oauth2/start?rd=$escaped_request_uri" $host | quote }}
+    nginx.ingress.kubernetes.io/auth-response-headers: X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Groups
+    {{- end }}
+    {{- with .Values.ingress.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ . | quote }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts: [{{ $host | quote }}]
+      secretName: {{ .Values.ingress.tlsSecretName }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "kratos.fullname" . }}-backend
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "kratos.fullname" . }}-frontend
+                port:
+                  name: http
+{{- end }}
