@@ -6,13 +6,13 @@ enabled: true
 
 # Microsoft 365 incident context
 
-Use this skill to understand responder identity, presence, out-of-office state,
-calendar constraints, relevant mail, and existing Teams/chat context.
+Use this skill to understand responder identity, presence, calendar constraints,
+relevant mail, and existing Teams/chat context.
 
 ## Read routing
 
 - Resolve a responder: `m365_get_user`
-- Presence and out-of-office: `m365_get_user_presence`
+- Presence: `m365_get_user_presence`
 - Relevant mail: `m365_search_messages`, then `m365_get_message` or
   `m365_get_thread`
 - Calendar context: `m365_list_events`, then `m365_get_event`
@@ -25,5 +25,6 @@ calendar constraints, relevant mail, and existing Teams/chat context.
 - Cite message, event, chat, and user IDs from tool results.
 - Treat denied access as a permission boundary, not as evidence that data does
   not exist.
-- This skill is read-only. Use **incident-updates** for any draft, send, event
-  creation, or channel post.
+- Keep calendar windows to seven days or less and result sets to 25 or fewer.
+- This skill is read-only. Draft suggested communications in the response, but
+  do not create drafts, send mail, create events, or post to Teams.

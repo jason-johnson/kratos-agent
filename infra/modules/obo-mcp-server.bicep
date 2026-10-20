@@ -43,7 +43,7 @@ param tenantId string
 param oboApiClientId string
 
 @description('Downstream Microsoft Graph delegated scope(s), space-separated')
-param graphScopes string = 'https://graph.microsoft.com/User.Read'
+param graphScopes string = 'https://graph.microsoft.com/User.Read https://graph.microsoft.com/User.ReadBasic.All https://graph.microsoft.com/Presence.Read.All https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Chat.Read'
 
 @description('Space-separated client app ids allowed to call this server (azp/appid allow-list)')
 param allowedClientAppIds string = ''

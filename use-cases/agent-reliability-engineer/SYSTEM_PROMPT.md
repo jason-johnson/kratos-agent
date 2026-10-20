@@ -86,8 +86,8 @@ Before **every** ServiceNow mutation:
 
 1. Read the current target state unless it is already present from a fresh tool
    result in this turn.
-2. Present one exact proposed write: target record/channel/message, changed
-   fields, final wording, visibility/audience, risk, and expected receipt.
+2. Present one exact proposed write: target incident record, changed fields,
+   final wording, visibility, risk, and expected receipt.
 3. Ask for confirmation with `ask_user` and wait. Approval is valid only for that
    exact proposal.
 4. If any target, field, wording, visibility, or audience changes, discard the

@@ -29,7 +29,7 @@ services:
       OBO_API_CLIENT_ID: ${OBO_API_CLIENT_ID:-bec3169c-c01e-4acc-9974-bd9271f9bfae}
       # LOCAL DEV ONLY — confidential-client secret for the OBO exchange.
       OBO_CLIENT_SECRET: ${OBO_CLIENT_SECRET}
-      GRAPH_SCOPES: ${GRAPH_SCOPES:-https://graph.microsoft.com/User.Read}
+      GRAPH_SCOPES: ${GRAPH_SCOPES:-https://graph.microsoft.com/User.Read https://graph.microsoft.com/User.ReadBasic.All https://graph.microsoft.com/Presence.Read.All https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Chat.Read}
       # Only the SPA client may act as the user (confused-deputy guard). Add the
       # VS Code client id here too if you drive it from VS Code.
       ALLOWED_CLIENT_APP_IDS: ${ALLOWED_CLIENT_APP_IDS:-f31799cd-b0a5-4055-b7f9-574c25ea0238}

@@ -11,7 +11,8 @@
     2. isServer = true   -> the OBO SERVER app (the MCP server's identity).
        Exposes the `access_as_user` delegated scope, pre-authorizes the SPA
        client (so users are not prompted to consent), holds the delegated
-       Microsoft Graph `User.Read` permission used for the OBO exchange, and
+       least-privilege delegated Microsoft Graph read permissions used for
+       profile, responder, presence, calendar, mail, and chat context, and
        trusts the container app's user-assigned managed identity through a
        federated identity credential (FIC) — so OBO needs NO client secret.
 
@@ -60,6 +61,11 @@ param serviceManagementReference string = ''
 var vsCodeClientAppId = 'aebc6443-996d-45c2-90f0-388ff96faa56'
 var msGraphAppId = '00000003-0000-0000-c000-000000000000'
 var graphUserReadScopeId = 'e1fe6dd8-ba31-4d61-89e7-88639da4683d'
+var graphUserReadBasicAllScopeId = 'b340eb25-3456-403f-be2f-af7a0d370277'
+var graphPresenceReadAllScopeId = '2501663c-012b-4cb6-8b7a-1da47ef9249c'
+var graphCalendarsReadScopeId = '465a38f9-76ea-45b9-9f34-9e8b0d4c6fa6'
+var graphMailReadScopeId = '570282fd-fa5c-430d-a7fd-fc8dc98a9dca'
+var graphChatReadScopeId = 'c9ecc6e6-91ee-4e90-9363-1960beeb4c9a'
 
 var scopeId = guid(entraAppUniqueName, entraAppScopeValue)
 
@@ -92,13 +98,33 @@ resource entraApp 'Microsoft.Graph/applications@v1.0' = {
     ]
     requestedAccessTokenVersion: 2
   } : null
-  // The server app needs delegated Microsoft Graph User.Read for the OBO exchange.
+  // The server app requests only the delegated Graph reads used by the ARE.
   requiredResourceAccess: isServer ? [
     {
       resourceAppId: msGraphAppId
       resourceAccess: [
         {
           id: graphUserReadScopeId
+          type: 'Scope'
+        }
+        {
+          id: graphUserReadBasicAllScopeId
+          type: 'Scope'
+        }
+        {
+          id: graphPresenceReadAllScopeId
+          type: 'Scope'
+        }
+        {
+          id: graphCalendarsReadScopeId
+          type: 'Scope'
+        }
+        {
+          id: graphMailReadScopeId
+          type: 'Scope'
+        }
+        {
+          id: graphChatReadScopeId
           type: 'Scope'
         }
       ]
@@ -138,7 +164,7 @@ resource federatedIdentityCredential 'Microsoft.Graph/applications/federatedIden
   subject: acaManagedIdentityObjectId
 }
 
-// NOTE: admin consent for the delegated Graph `User.Read` above is deliberately
+// NOTE: admin consent for the delegated Graph permissions above is deliberately
 // NOT granted here. An `oauth2PermissionGrants` with consentType `AllPrincipals`
 // is a tenant-wide consent, which Graph refuses unless the deploying principal
 // holds an Entra directory role (Global Administrator, Privileged Role
