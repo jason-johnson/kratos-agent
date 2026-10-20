@@ -43,6 +43,8 @@ repo are disruptive and the data is already exposed.
 | `src/obo-mcp-server` | On-behalf-of MCP server (optional, `DEPLOY_OBO` flag) |
 | `use-cases/agent-reliability-engineer` | The single ARE prompt, skills, MCP config, and evals |
 | `infra/` | Bicep templates |
+| `deploy/helm/kratos-agent` | AKS Helm chart |
+| `deploy/aks` | Manual AKS operator runbook |
 | `.copilot/skills/` | Repo-local agent skills, incl. `e2e-smoke` |
 
 ## Single Agent Reliability Engineer
@@ -59,6 +61,12 @@ system; Microsoft Graph OBO, Application Insights/Azure Activity, and
 Kubernetes are read-only. Kubernetes inspection is namespace-allowlisted and
 GET-only. Do not add generic HTTP/KQL/Kubernetes paths or restore the
 ServiceNow mock to the active runtime.
+
+The AKS chart accepts immutable image digests only. Its backend and OBO service
+accounts are Workload Identity principals; the frontend and auth proxy do not
+receive Kubernetes API tokens. Keep default-deny NetworkPolicies, namespace-only
+inspection RBAC, non-root/read-only containers, OIDC ingress authentication,
+and local accounts disabled.
 
 ## Validation
 

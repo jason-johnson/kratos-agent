@@ -12,8 +12,8 @@ Agent Reliability Engineer (ARE). The ARE helps an incident commander:
 Technical systems are read-only. In v1, the only allowed mutations are
 single-use, explicitly approved ServiceNow updates.
 
-See [PLAN.md](PLAN.md) for the migration decisions, phase status, and remaining
-AKS work.
+See [PLAN.md](PLAN.md) for the migration decisions, phase status, and manual AKS
+acceptance gates.
 
 ## Current architecture
 
@@ -41,10 +41,10 @@ FastAPI agent/API
     +--> delegated Microsoft Graph OBO MCP service
 ```
 
-The current Azure deployment remains Azure Container Apps plus Azure Static Web
-Apps. The production integration contracts are implemented, but live acceptance
-requires an explicitly approved deployment. AKS packaging, Workload Identity,
-ingress, and policies are Phase 5 work.
+The currently deployed path remains Azure Container Apps plus Azure Static Web
+Apps. The AKS images, Helm chart, Workload Identity/RBAC infrastructure,
+ingress, policies, monitoring, and runbook are implemented but have not been
+deployed. Live acceptance requires an explicitly approved non-production target.
 
 ## Product model
 
@@ -96,7 +96,9 @@ ServiceNow writes are conversation-bound, exact, expiring, and single-use.
 | [`src/obo-mcp-server/`](src/obo-mcp-server/) | Optional Microsoft Graph On-Behalf-Of MCP service |
 | [`use-cases/agent-reliability-engineer/`](use-cases/agent-reliability-engineer/) | ARE prompt, skills, MCP config, and evals |
 | [`mocks/`](mocks/) | Synthetic development servers; ServiceNow is not on the active production path |
-| [`infra/`](infra/) | Current Azure Container Apps infrastructure |
+| [`infra/`](infra/) | Parameterized Azure infrastructure, including optional AKS |
+| [`deploy/helm/kratos-agent/`](deploy/helm/kratos-agent/) | Hardened AKS Helm chart |
+| [`deploy/aks/`](deploy/aks/) | Manual AKS build, deploy, acceptance, and rollback runbook |
 | [`scripts/`](scripts/) | Eval and trace utilities |
 
 ## Local development
@@ -182,14 +184,16 @@ The current `azure.yaml` still deploys:
 
 Container images use ACR remote builds. Do not switch them back to local builds.
 
-The target architecture is two AKS workloads in one namespace:
+The packaged target architecture uses AKS workloads in one namespace:
 
 1. frontend; and
-2. agent/API, with the optional OBO service isolated behind its own identity and
-   policy boundary.
+2. agent/API;
+3. optional OBO service, isolated behind its own identity and policy boundary;
+4. OIDC authentication proxy.
 
-AKS deployment is not ready until Phase 5 exit criteria in [PLAN.md](PLAN.md)
-are met.
+Provisioning is disabled by default (`DEPLOY_AKS=false`) and no CI job deploys.
+Follow the [AKS runbook](deploy/aks/README.md) only with an explicitly approved
+target and private values.
 
 ## Validation policy
 

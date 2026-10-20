@@ -13,10 +13,10 @@ hard-won deployment gotchas. It is not duplicated here — read it before commit
 ```bash
 # Backend (Python 3.11, uv)
 cd src/backend
-uv run pytest                          # all tests
-uv run pytest tests/test_skill_registry.py::test_name -v   # a single test
-uv run ruff check . && uv run ruff format --check .
-uv run mypy app/ --ignore-missing-imports
+uv run --frozen pytest                          # all tests
+uv run --frozen pytest tests/test_skill_registry.py::test_name -v
+uv run --frozen ruff check . && uv run --frozen ruff format --check .
+uv run --frozen mypy app/ --ignore-missing-imports
 
 # Frontend (Next.js 15, static export)
 cd src/frontend
@@ -38,6 +38,12 @@ SKIP_BROWSER=1 ./run.sh                # API-only, skips the Chromium download
 python scripts/run_evals.py --use-case agent-reliability-engineer --mode validation
 python scripts/generate_evals.py --use-case agent-reliability-engineer --count 5 --save
 python scripts/fetch_traces.py --conversation-id abc123
+
+# AKS package validation (never deploys)
+helm lint deploy/helm/kratos-agent -f deploy/helm/kratos-agent/values-ci.yaml
+helm template validation deploy/helm/kratos-agent --namespace kratos-agent \
+  -f deploy/helm/kratos-agent/values-ci.yaml
+az bicep build --file infra/main.bicep --stdout > /dev/null
 ```
 
 `azd` commands follow the **globally selected** environment. Confirm with
@@ -52,7 +58,7 @@ The FastAPI service owns the API and the Copilot SDK agent loop:
 
 | Layer | Entry point | Runtime |
 |---|---|---|
-| **Agent/API** | [src/backend/app/main.py](src/backend/app/main.py) — FastAPI, port 8000 | Azure Container Apps |
+| **Agent/API** | [src/backend/app/main.py](src/backend/app/main.py) — FastAPI, port 8000 | AKS target; Container Apps retained during migration |
 | **Model host** | Microsoft Foundry model deployment | Azure AI Services |
 
 `POST /api/agent/chat` invokes [copilot_agent.py](src/backend/app/services/copilot_agent.py)
@@ -92,8 +98,21 @@ uses the legacy `default-user` partition.
   revision and provenance/verification evidence.
 - Microsoft Graph OBO is delegated and read-only in v1. Do not add mail,
   calendar, or Teams mutation tools.
-- Kubernetes inspection is namespace-allowlisted and GET-only. Phase 5 still
-  supplies the AKS service account and RBAC.
+- Kubernetes inspection is namespace-allowlisted and GET-only. The Helm chart
+  supplies a dedicated Workload Identity service account and same-namespace
+  read-only Role/RoleBinding.
+
+### AKS package
+
+[deploy/helm/kratos-agent/](deploy/helm/kratos-agent/) is the target deployment.
+Images are immutable-digest only, non-root, read-only, and built through private
+feed BuildKit secrets. The chart includes OIDC auth proxying, Workload Identity,
+probes, HPA/PDB, TLS ingress, network policy, and read-only inspection RBAC.
+[deploy/aks/README.md](deploy/aks/README.md) is the manual operator runbook.
+
+`DEPLOY_AKS` defaults to false. CI builds, smoke-tests, scans, and renders but
+does not publish images, provision resources, change DNS/certificates, or run
+Helm. Do not add automatic deployment without explicit approval.
 
 ### Local mode
 
@@ -116,7 +135,9 @@ Python client.
 - Python: `ruff` (lint + format, line length 120) and `mypy` are both gating in CI. Per-module
   mypy relaxations are documented in `pyproject.toml` — extend that list rather than sprinkling
   `# type: ignore`.
-- Container images build in ACR (`remoteBuild: true`), never locally. Don't "simplify" this back.
+- Transitional Container Apps images still use ACR remote builds. AKS images
+  use the separate `Dockerfile.aks` files and private-feed BuildKit secrets.
+  Do not merge the paths until Phase 6 replacement validation passes.
 - Every azd hook carries both a `posix:` and a `windows:` variant (`hooks/*.sh` + `hooks/*.ps1`),
   and `*.sh` is pinned to LF in `.gitattributes`. Both are load-bearing on Windows — see the
   hook rules in [AGENTS.md](AGENTS.md). Test either side with

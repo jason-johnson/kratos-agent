@@ -676,18 +676,75 @@ Post-Phase 4 manual acceptance:
 
 ### Phase 5 - Package for AKS
 
-- [ ] Create a deterministic, pinned production image.
-- [ ] Add Kubernetes manifests or a Helm chart.
-- [ ] Configure Workload Identity and least-privilege Azure RBAC.
-- [ ] Configure ingress/Gateway API and TLS.
-- [ ] Configure secrets, ConfigMaps, probes, resources, PDB, and NetworkPolicies.
-- [ ] Configure persistent managed services and backup/retention policies.
-- [ ] Configure OpenTelemetry and operational dashboards/alerts.
-- [ ] Add CI image build, scan, test, and manifest validation.
-- [ ] Keep deployment manual until a deployment workflow is explicitly approved.
+- [x] Create deterministic, pinned production images.
+- [x] Add a Helm chart.
+- [x] Configure Workload Identity and least-privilege Azure RBAC.
+- [x] Configure ingress and TLS.
+- [x] Configure secrets, ConfigMaps, probes, resources, PDBs, and NetworkPolicies.
+- [x] Configure persistent managed services and backup/retention policies.
+- [x] Configure OpenTelemetry and operational dashboards/alerts.
+- [x] Add CI image build, scan, test, and manifest validation.
+- [x] Keep deployment manual until a deployment workflow is explicitly approved.
 
 Exit criteria: the application is repeatably deployable to a non-production AKS
 cluster and passes smoke, security, and resilience checks.
+
+Phase 5 implementation status: **Complete (2026-10-20).**
+
+- Separate AKS Dockerfiles pin Python, Node, Copilot CLI, OBO, frontend, and
+  Python dependency versions. They run as non-root and require BuildKit secrets
+  for private feeds; they do not fall back to public PyPI or bake credentials
+  into layers. The existing Container Apps Dockerfiles remain unchanged until
+  Phase 6.
+- The Helm chart deploys digest-pinned backend, frontend, optional OBO, and
+  OIDC auth-proxy images. It includes truthful startup/readiness/liveness
+  probes, resources, HPA, PDBs, rolling-update safeguards, read-only root
+  filesystems, default-deny Cilium NetworkPolicies, and same-namespace
+  read-only Kubernetes inspection RBAC.
+- The public ingress uses the managed AKS application-routing class, TLS, OIDC
+  authentication, trusted identity headers, and cookie affinity for active
+  approval/cancellation state. TLS may use an existing secret or an explicitly
+  attached Key Vault certificate.
+- Optional Bicep provisioning (`DEPLOY_AKS=false` by default) creates a
+  zone-spread autoscaling AKS cluster with local accounts disabled, Azure RBAC,
+  Workload Identity, separate backend/OBO service accounts, managed ingress,
+  Cilium, Azure Policy, Defender, Key Vault CSI, Container Insights, and managed
+  Prometheus. Azure roles are scoped to the required managed resources.
+- Cosmos DB now uses continuous seven-day backup. Blob skills use versioning
+  plus 30-day blob/container delete retention; no application state is moved to
+  an in-cluster volume.
+- Azure Monitor includes pod-availability and restart alerts plus an AKS
+  operations workbook. An action group remains an environment parameter.
+- CI requires private Python/npm feed secrets, builds and smoke-tests all AKS
+  images, scans every image and the chart, and validates Helm. It never pushes
+  images, provisions resources, or deploys.
+- Commits: `1ae77ac`, `12d9985`, `b2cd3a5`, `07fc204`, `2f1f081`,
+  `99d69b7`, and `4d38183`.
+- Validation: 114 backend tests and Ruff lint/format passed; frontend lint and
+  production build passed with the four existing warnings; all mock packages
+  built; the Python export lock is current; all three Dockerfiles pass BuildKit
+  checks; Bicep compiles without AKS-module warnings; Helm lint/render and strict
+  Kubernetes schema validation pass for 27 resources; both CI workflows pass
+  actionlint.
+- Full image builds/scans require `PRIVATE_PYPI_INDEX_URL` and
+  `PRIVATE_NPMRC`; those credentials were unavailable to this session and are
+  enforced in CI rather than bypassed. Mypy retains the prior NumPy-stub parser
+  blocker.
+- No deployment, provisioning, branch change, push, pull, DNS change,
+  certificate attachment, image publication, or live cloud/cluster mutation
+  was performed.
+
+Post-Phase 5 manual acceptance:
+
+- Configure the private feed secrets, build/scan/push the three application
+  images, and deploy their immutable digests to an approved non-production AKS
+  environment.
+- Exercise probes, TLS/OIDC, identity, secret rotation, telemetry, HPA, PDB,
+  rolling restart, node disruption, network isolation, Kubernetes read-only
+  boundaries, managed-service restore, and Helm rollback as documented in the
+  AKS runbook.
+- Phase 6 may remove the old Container Apps/Static Web Apps path only after that
+  acceptance passes.
 
 ### Phase 6 - Delete obsolete architecture
 
