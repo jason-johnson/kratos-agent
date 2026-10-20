@@ -12,8 +12,8 @@ handoff.
 
 ## Evidence collection
 
-1. Fetch the incident with `servicenow_get_ticket`.
-2. Fetch chronological notes with `servicenow_list_work_notes`.
+1. Fetch the incident with `servicenow_get_major_incident`.
+2. Fetch chronological notes with `servicenow_list_incident_updates`.
 3. Use `app-insights-investigation` when a technical hypothesis, affected service,
    and bounded time window are available.
 4. Use **m365-incident-context** only when responder availability or existing

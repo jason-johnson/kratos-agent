@@ -197,7 +197,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
 async def user_input_response(body: UserInputResponseRequest, request: Request) -> JSONResponse:
     """Resolve an approval or other user-input request from the active turn."""
     copilot_agent = request.app.state.copilot_agent
-    if not copilot_agent.resolve_user_input(body.requestId, body.answer):
+    if not copilot_agent.resolve_user_input(body.requestId, body.answer, body.conversationId):
         raise HTTPException(status_code=404, detail="User input request is not active")
     return JSONResponse(content={"accepted": True})
 

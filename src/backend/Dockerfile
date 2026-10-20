@@ -18,15 +18,12 @@ RUN npm install -g @github/copilot@latest \
 
 # ── Layer 2b: ARE MCP servers only ──
 COPY mocks/package.json mocks/package-lock.json /opt/mocks/
-COPY mocks/packages/servicenow-mcp-server/ /opt/mocks/packages/servicenow-mcp-server/
 COPY mocks/packages/m365-graph-mcp-server/ /opt/mocks/packages/m365-graph-mcp-server/
 RUN cd /opt/mocks \
     && npm ci --ignore-scripts --no-audit --no-fund \
-        --workspace packages/servicenow-mcp-server \
         --workspace packages/m365-graph-mcp-server \
-    && npm run build --workspace packages/servicenow-mcp-server \
-        --workspace packages/m365-graph-mcp-server \
-    && npm install -g ./packages/servicenow-mcp-server ./packages/m365-graph-mcp-server \
+    && npm run build --workspace packages/m365-graph-mcp-server \
+    && npm install -g ./packages/m365-graph-mcp-server \
     && rm -rf /root/.npm /tmp/*
 
 # ── Layer 3: Playwright Chromium + system deps for PDF rendering ──

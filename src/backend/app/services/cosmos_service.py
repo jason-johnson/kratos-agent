@@ -355,6 +355,28 @@ class CosmosService:
         await self._settings_container.upsert_item(setting)
         return setting
 
+    async def create_setting_once(self, setting: dict) -> bool:
+        """Atomically create a setting document, returning False when it exists."""
+        setting_id = setting["id"]
+        setting = {**setting, "category": "system"}
+        if self._using_sqlite():
+            assert self._sqlite_db is not None
+            cursor = await self._sqlite_db.execute(
+                "INSERT OR IGNORE INTO settings (id, partition_key, data) VALUES (?, ?, ?)",
+                (setting_id, "system", json.dumps(setting)),
+            )
+            await self._sqlite_db.commit()
+            return cursor.rowcount == 1
+        if not self._settings_container:
+            raise RuntimeError("Shared action ledger is unavailable")
+        try:
+            await self._settings_container.create_item(setting)
+        except CosmosHttpResponseError as exc:
+            if exc.status_code == 409:
+                return False
+            raise
+        return True
+
     async def delete_setting(self, setting_id: str) -> None:
         """Delete a setting document by id."""
         if self._using_sqlite():

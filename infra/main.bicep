@@ -26,6 +26,16 @@ param agentServiceName string = ''
 param vnetName string = ''
 param storageAccountName string = ''
 
+@description('ServiceNow HTTPS instance origin used by the fixed incident API contract')
+param serviceNowInstanceUrl string = ''
+
+@description('ServiceNow OAuth client ID')
+param serviceNowClientId string = ''
+
+@secure()
+@description('ServiceNow OAuth client secret')
+param serviceNowClientSecret string = ''
+
 @description('Optional prefix prepended to generated resource names. Empty (default) yields names identical to the base template, so the canonical/prod deployment is unaffected. Set per-subscription (e.g. via AZURE_RESOURCE_PREFIX) to avoid cross-subscription resource name collisions.')
 param resourcePrefix string = ''
 
@@ -256,6 +266,9 @@ module agentService './modules/agent-service.bicep' = {
     bingSearchEndpoint: bingSearch.outputs.endpoint
     blobStorageEndpoint: blobStorage.outputs.endpoint
     staticWebAppUrl: staticWebApp.outputs.url
+    serviceNowInstanceUrl: serviceNowInstanceUrl
+    serviceNowClientId: serviceNowClientId
+    serviceNowClientSecret: serviceNowClientSecret
   }
 }
 

@@ -33,30 +33,26 @@ Never claim success from the proposed text or from a missing/ambiguous receipt.
 
 Use read tools before writes:
 
-- `servicenow_get_ticket`
-- `servicenow_list_work_notes`
+- `servicenow_get_major_incident`
+- `servicenow_list_incident_updates`
 
-Allowed writes after exact confirmation:
+Allowed updates:
 
-- `servicenow_add_work_note`
-- `servicenow_update_ticket_state`
-- `servicenow_assign_ticket`
-- `servicenow_create_incident`
+1. Call `servicenow_prepare_update` with one exact action.
+2. Show the returned current state and pass its `approvalQuestion` to
+   `ask_user` unchanged.
+3. Only after an affirmative response, call `servicenow_execute_update` with
+   the returned `approvalId`.
+4. Report the persisted action receipt and its `verified`, `unverified`, or
+   `failed` status.
 
 Public notes require the exact caller-visible wording to be shown. State changes
-must include a reason. Verify with `servicenow_get_ticket` and, for notes,
-`servicenow_list_work_notes`.
+and assignments must include a reason. Never call the execute tool without the
+prepare/read and approval sequence.
 
 ## Microsoft 365
 
-Creating a draft is a write. Sending it is a separate write:
-
-1. Show exact sender, recipients, subject, body, importance, and thread target.
-2. Confirm before `m365_draft_message`.
-3. Report the draft ID and verify it with `m365_get_message`.
-4. Show the verified draft again and request a separate confirmation before
-   `m365_send_message`.
-5. Verify that the message is in Sent Items.
-
-If a Teams/channel post tool is unavailable, say so. Do not substitute an email,
-claim a post occurred, or invent a receipt.
+Microsoft 365 is read-only in v1. Draft the proposed communication in the
+response, but do not create drafts, send mail, create events, or post to Teams.
+Tell the incident commander that ServiceNow is the only mutable system currently
+enabled.

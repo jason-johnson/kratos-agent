@@ -36,7 +36,14 @@ from app.config import Settings
 from app.constants import PRIMARY_USE_CASE
 from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UsageEvent, UserInputRequestEvent
 from app.observability import operation_duration_histogram, token_usage_histogram
-from app.services.skill_tools import ALL_TOOLS, _ctx_conversation_id, _ctx_eval_run_id, _ctx_use_case
+from app.services.action_approval import action_approval_store
+from app.services.skill_tools import (
+    ALL_TOOLS,
+    _ctx_conversation_id,
+    _ctx_eval_run_id,
+    _ctx_use_case,
+    get_enabled_custom_tools,
+)
 
 if TYPE_CHECKING:
     from app.services.cosmos_service import CosmosService
@@ -199,6 +206,7 @@ class CopilotAgent:
         self._system_prompt: str = DEFAULT_SYSTEM_PROMPT
         # Futures for resolving user input requests from the SDK
         self._user_input_futures: dict[str, asyncio.Future] = {}
+        self._user_input_context: dict[str, tuple[str, str]] = {}
         self._queues: dict[str, asyncio.Queue] = {}
         self._tool_counters: dict[str, int] = {}
         self._registered_handlers: set[str] = set()
@@ -610,6 +618,7 @@ class CopilotAgent:
         self._queues.clear()
         self._tool_counters.clear()
         self._user_input_futures.clear()
+        self._user_input_context.clear()
         if self._client:
             await self._client.stop()
         if self._credential:
@@ -636,6 +645,7 @@ class CopilotAgent:
         self._queues.clear()
         self._tool_counters.clear()
         self._user_input_futures.clear()
+        self._user_input_context.clear()
         # Purge stale Cosmos session mappings so the next request doesn't attempt (and fail)
         # to resume disconnected sessions, which would log spurious warnings.
         if self._cosmos_service:
@@ -731,6 +741,8 @@ class CopilotAgent:
         request_id = str(uuid.uuid4())
         future: asyncio.Future = asyncio.get_event_loop().create_future()
         self._user_input_futures[request_id] = future
+        question = request.get("question", "")
+        self._user_input_context[request_id] = (conversation_id, question)
 
         # Push the request event to the SSE queue
         q = self._queues.get(conversation_id)
@@ -738,7 +750,7 @@ class CopilotAgent:
             q.put_nowait(
                 UserInputRequestEvent(
                     requestId=request_id,
-                    question=request.get("question", ""),
+                    question=question,
                     choices=request.get("choices", []),
                     allowFreeform=request.get("allowFreeform", True),
                 )
@@ -749,16 +761,20 @@ class CopilotAgent:
             answer = await asyncio.wait_for(future, timeout=300.0)
         except TimeoutError:
             self._user_input_futures.pop(request_id, None)
+            self._user_input_context.pop(request_id, None)
             return {"answer": "No response provided", "wasFreeform": True}
         finally:
             self._user_input_futures.pop(request_id, None)
+            self._user_input_context.pop(request_id, None)
 
         return {"answer": answer, "wasFreeform": True}
 
-    def resolve_user_input(self, request_id: str, answer: str) -> bool:
+    def resolve_user_input(self, request_id: str, answer: str, conversation_id: str) -> bool:
         """Resolve a pending user input request. Returns True if found."""
         future = self._user_input_futures.get(request_id)
-        if future and not future.done():
+        context = self._user_input_context.get(request_id)
+        if future and not future.done() and context and context[0] == conversation_id:
+            action_approval_store.record_response(conversation_id, context[1], answer)
             future.set_result(answer)
             return True
         return False
@@ -798,7 +814,7 @@ class CopilotAgent:
             mcp_servers: dict = {}
             if registry is not None:
                 enabled_names = registry.get_enabled_tool_names()
-                enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
+                enabled_tools = get_enabled_custom_tools(enabled_names)
                 skill_dirs = registry.get_skill_directories()
                 mcp_servers = getattr(registry, "mcp_servers", {})
 

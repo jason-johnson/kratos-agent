@@ -38,8 +38,8 @@ class _FakeAgent:
         yield ContentEvent(content="Evidence found.")
         yield UsageEvent(promptTokens=10, completionTokens=4, totalTokens=14)
 
-    def resolve_user_input(self, request_id: str, answer: str) -> bool:
-        return request_id == "active" and answer == "approve"
+    def resolve_user_input(self, request_id: str, answer: str, conversation_id: str) -> bool:
+        return request_id == "active" and answer == "approve" and conversation_id == "conv-1"
 
     def cancel(self, conversation_id: str) -> bool:
         return conversation_id == "running"

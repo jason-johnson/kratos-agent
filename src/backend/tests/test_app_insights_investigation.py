@@ -193,8 +193,14 @@ async def test_are_use_case_resolves_to_registered_investigation_tool():
         "incident_updates",
         "m365_incident_context",
     }
-    assert set(registry.mcp_servers) == {"servicenow", "m365-graph"}
+    assert set(registry.mcp_servers) == {"m365-graph"}
     assert "app_insights_investigation" in TOOL_MAP
+    assert {
+        "servicenow_get_major_incident",
+        "servicenow_list_incident_updates",
+        "servicenow_prepare_update",
+        "servicenow_execute_update",
+    }.issubset(TOOL_MAP)
 
 
 def test_are_eval_scenarios_are_valid_and_use_investigation_skill():
@@ -224,5 +230,6 @@ def test_are_prompt_and_update_skill_define_exact_write_gate():
         assert phrase in normalized_prompt
 
     assert "Any edit to target, fields, wording, visibility, or" in update_skill
-    assert "Sending it is a separate write" in update_skill
+    assert "Microsoft 365 is read-only in v1" in update_skill
+    assert "ServiceNow is the only mutable system currently" in update_skill
     assert "`verified`, `unverified`, or `failed`" in update_skill

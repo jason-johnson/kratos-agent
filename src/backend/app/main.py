@@ -35,6 +35,7 @@ from app.services.eval_service import EvalService
 from app.services.eval_storage import EvalStorage
 from app.services.runtime_config_service import RuntimeConfigService
 from app.services.skill_registry import SkillRegistry
+from app.services.skill_tools import configure_tool_runtime
 from app.services.traces_service import TracesService
 
 logging.basicConfig(
@@ -102,6 +103,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     cosmos_service = CosmosService(settings)
     await cosmos_service.initialize()
     application.state.cosmos_service = cosmos_service
+    configure_tool_runtime(cosmos_service)
 
     # Initialize Blob Storage service for skills
     blob_skill_service = BlobSkillService(settings)

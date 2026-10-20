@@ -40,6 +40,16 @@ param blobStorageEndpoint string
 @description('Static Web App URL for CORS (e.g. https://xxx.azurestaticapps.net)')
 param staticWebAppUrl string = ''
 
+@description('ServiceNow HTTPS instance origin')
+param serviceNowInstanceUrl string = ''
+
+@description('ServiceNow OAuth client ID')
+param serviceNowClientId string = ''
+
+@secure()
+@description('ServiceNow OAuth client secret')
+param serviceNowClientSecret string = ''
+
 // ─── ACR pull identity ───
 // A User-Assigned Managed Identity is created for ACR access so that the
 // AcrPull role assignment exists BEFORE the Container App tries to validate
@@ -85,6 +95,12 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: containerAppsEnvId
     configuration: {
       activeRevisionsMode: 'Single'
+      secrets: !empty(serviceNowClientSecret) ? [
+        {
+          name: 'servicenow-client-secret'
+          value: serviceNowClientSecret
+        }
+      ] : []
       registries: [
         {
           server: '${acrName}.azurecr.io'
@@ -112,7 +128,7 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('1.0')
             memory: '2Gi'
           }
-          env: [
+          env: concat([
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
             { name: 'APPLICATION_INSIGHTS_RESOURCE_ID', value: appInsightsResourceId }
             { name: 'COSMOS_DB_ENDPOINT', value: cosmosDbEndpoint }
@@ -126,7 +142,14 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT', value: 'true' }
             { name: 'ENVIRONMENT', value: 'production' }
             { name: 'ALLOWED_ORIGINS', value: empty(staticWebAppUrl) ? '*' : staticWebAppUrl }
-          ]
+            { name: 'SERVICENOW_INSTANCE_URL', value: serviceNowInstanceUrl }
+            { name: 'SERVICENOW_CLIENT_ID', value: serviceNowClientId }
+          ], !empty(serviceNowClientSecret) ? [
+            {
+              name: 'SERVICENOW_CLIENT_SECRET'
+              secretRef: 'servicenow-client-secret'
+            }
+          ] : [])
         }
       ]
       scale: {

@@ -86,6 +86,15 @@ class Settings(BaseSettings):
     application_insights_resource_id: str = ""
     application_insights_workspace_id: str = ""
 
+    # Production incident integrations. ServiceNow access is pinned to one
+    # configured HTTPS origin and uses OAuth client credentials. The client
+    # secret must come from the runtime secret provider, never source control.
+    servicenow_instance_url: str = ""
+    servicenow_token_url: str = ""
+    servicenow_client_id: str = ""
+    servicenow_client_secret: str = ""
+    integration_timeout_seconds: float = 15.0
+
     @property
     def is_local_mode(self) -> bool:
         """True when the backend should run without Azure services."""

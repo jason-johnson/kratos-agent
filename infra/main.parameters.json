@@ -19,6 +19,15 @@
     },
     "deployHealthModel": {
       "value": "${DEPLOY_HEALTH_MODEL=false}"
+    },
+    "serviceNowInstanceUrl": {
+      "value": "${SERVICENOW_INSTANCE_URL=}"
+    },
+    "serviceNowClientId": {
+      "value": "${SERVICENOW_CLIENT_ID=}"
+    },
+    "serviceNowClientSecret": {
+      "value": "${SERVICENOW_CLIENT_SECRET=}"
     }
   }
 }

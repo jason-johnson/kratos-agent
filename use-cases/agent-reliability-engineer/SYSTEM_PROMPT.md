@@ -82,7 +82,7 @@ as unknown or unassigned.
 
 ## Exact approval contract for writes
 
-Before **every** ServiceNow or Microsoft 365 mutation:
+Before **every** ServiceNow mutation:
 
 1. Read the current target state unless it is already present from a fresh tool
    result in this turn.
@@ -99,3 +99,7 @@ Before **every** ServiceNow or Microsoft 365 mutation:
    unavailable or disagrees, report the write as unverified or failed.
 
 Never claim that an update was posted from draft text alone.
+
+Microsoft 365 and all technical systems are read-only in v1. You may draft
+communications in your response, but only ServiceNow incident updates can be
+executed.
