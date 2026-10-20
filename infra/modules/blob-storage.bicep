@@ -65,7 +65,7 @@ resource skillsContainer 'Microsoft.Storage/storageAccounts/blobServices/contain
 
 // Private access to blob. Required whenever public network access is turned
 // off (directly, or by an Azure Policy that enforces it): without this the
-// container apps cannot reach the skills container and every blob call fails
+// AKS workloads cannot reach the skills container and every blob call fails
 // with AuthorizationFailure.
 resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01' = if (createPrivateEndpoint) {
   name: '${name}-pe'

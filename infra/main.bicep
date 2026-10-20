@@ -13,40 +13,20 @@ param location string
 param principalId string = ''
 
 // Optional overrides
-param containerAppsEnvName string = ''
 param containerRegistryName string = ''
 param cosmosDbAccountName string = ''
 param aiServicesName string = ''
-param bingSearchName string = ''
 param keyVaultName string = ''
 param appInsightsName string = ''
 param logAnalyticsName string = ''
-param staticWebAppName string = ''
-param agentServiceName string = ''
 param vnetName string = ''
 param storageAccountName string = ''
-
-@description('ServiceNow HTTPS instance origin used by the fixed incident API contract')
-param serviceNowInstanceUrl string = ''
-
-@description('ServiceNow OAuth client ID')
-param serviceNowClientId string = ''
-
-@secure()
-@description('ServiceNow OAuth client secret')
-param serviceNowClientSecret string = ''
 
 @description('Optional prefix prepended to generated resource names. Empty (default) yields names identical to the base template, so the canonical/prod deployment is unaffected. Set per-subscription (e.g. via AZURE_RESOURCE_PREFIX) to avoid cross-subscription resource name collisions.')
 param resourcePrefix string = ''
 
-@description('Path prefix for the agent API on the gateway (set during Foundry portal registration)')
-param agentApiPath string = 'kratos-agent'
-
 @description('Deploy the OBO MCP server and its Entra app registrations. Requires directory permission to register Entra applications. Set to false in tenants/subscriptions where the deploying identity cannot create app registrations.')
 param deployObo bool = true
-
-@description('Provision the AKS target platform. Deployment remains manual and this defaults to false.')
-param deployAks bool = false
 
 @description('Optional AKS cluster name override')
 param aksClusterName string = ''
@@ -57,44 +37,8 @@ param aksNamespace string = 'kratos-agent'
 @description('Optional Azure Monitor action group resource ID for AKS alerts')
 param aksAlertActionGroupId string = ''
 
-@description('Deploy the Azure Monitor health model resources')
-param deployHealthModel bool = false
-
-@description('Location for Azure Monitor health model resources')
-@allowed([
-  'uksouth'
-  'canadacentral'
-  'centralus'
-  'swedencentral'
-  'southeastasia'
-  'switzerlandnorth'
-  'italynorth'
-  'northeurope'
-  'germanywestcentral'
-  'australiaeast'
-  'eastasia'
-  'japanwest'
-])
-param healthModelLocation string = 'centralus'
-
-@description('Optional health model name override')
-param healthModelName string = ''
-
-@description('Optional Azure AI Search resource id for health model wiring. Must be in this deployment resource group because the health-model identity is granted Monitoring Reader on the RG only. For out-of-RG targets, add Monitoring Reader at that scope.')
-param aiSearchResourceId string = ''
-
-@description('Optional APIM resource id for health model wiring. Must be in this deployment resource group because the health-model identity is granted Monitoring Reader on the RG only. For out-of-RG targets, add Monitoring Reader at that scope.')
-param apimResourceId string = ''
-
-@description('Location for the Static Web App (must be one of: centralus, eastus2, westus2, westeurope, eastasia)')
-@allowed([
-  'centralus'
-  'eastus2'
-  'westus2'
-  'westeurope'
-  'eastasia'
-])
-param staticWebAppLocation string = 'eastus2'
+@description('Optional public frontend origin registered as an OBO SPA redirect URI')
+param frontendUrl string = ''
 
 // ─── Resource Naming ───
 var abbrs = loadJsonContent('./abbreviations.json')
@@ -102,32 +46,6 @@ var resourceToken = toLower(uniqueString(subscription().id, environmentName, loc
 var namePrefix = empty(resourcePrefix) ? '' : '${resourcePrefix}-'
 var namePrefixNoHyphen = empty(resourcePrefix) ? '' : toLower(resourcePrefix)
 var tags = { 'azd-env-name': environmentName, project: 'kratos-agent' }
-var resourceCatalog = {
-  foundry: {
-    azureResourceId: aiFoundry.outputs.id
-    metricNamespace: 'Microsoft.CognitiveServices/accounts'
-  }
-  cosmos: {
-    azureResourceId: cosmosDb.outputs.id
-    metricNamespace: 'Microsoft.DocumentDB/databaseAccounts'
-  }
-  agentApp: {
-    azureResourceId: agentService.outputs.id
-    metricNamespace: 'Microsoft.App/containerApps'
-  }
-  storage: {
-    azureResourceId: blobStorage.outputs.id
-    metricNamespace: 'Microsoft.Storage/storageAccounts'
-  }
-  search: {
-    azureResourceId: aiSearchResourceId
-    metricNamespace: 'Microsoft.Search/searchServices'
-  }
-  apim: {
-    azureResourceId: apimResourceId
-    metricNamespace: 'Microsoft.ApiManagement/service'
-  }
-}
 
 // ─── Resource Group ───
 resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = {
@@ -233,17 +151,6 @@ module aiFoundry './modules/ai-services.bicep' = {
   }
 }
 
-// ─── Bing Search ───
-module bingSearch './modules/bing-search.bicep' = {
-  name: 'bing-search'
-  scope: rg
-  params: {
-    name: !empty(bingSearchName) ? bingSearchName : '${namePrefix}${abbrs.bingSearchAccounts}${resourceToken}'
-    tags: tags
-    keyVaultName: keyVault.outputs.name
-  }
-}
-
 // ─── Blob Storage (Skills) ───
 module blobStorage './modules/blob-storage.bicep' = {
   name: 'blob-storage'
@@ -268,70 +175,9 @@ module containerRegistry './modules/container-registry.bicep' = {
   }
 }
 
-// ─── Container Apps Environment ───
-module containerAppsEnv './modules/container-apps-env.bicep' = {
-  name: 'container-apps-env'
-  scope: rg
-  params: {
-    name: !empty(containerAppsEnvName) ? containerAppsEnvName : '${namePrefix}${abbrs.appManagedEnvironments}${resourceToken}'
-    location: location
-    tags: tags
-    logAnalyticsWorkspaceId: logAnalytics.outputs.id
-    subnetId: network.outputs.containerAppsSubnetId
-  }
-}
-
-// ─── Agent Service (Container App) ───
-module agentService './modules/agent-service.bicep' = {
-  name: 'agent-service'
-  scope: rg
-  params: {
-    name: !empty(agentServiceName) ? agentServiceName : '${namePrefix}${abbrs.appContainerApps}agent-${resourceToken}'
-    location: location
-    tags: tags
-    containerAppsEnvId: containerAppsEnv.outputs.id
-    containerRegistryName: containerRegistry.outputs.name
-    appInsightsConnectionString: appInsights.outputs.connectionString
-    appInsightsResourceId: appInsights.outputs.id
-    appInsightsWorkspaceId: logAnalytics.outputs.customerId
-    cosmosDbEndpoint: cosmosDb.outputs.endpoint
-    keyVaultUri: keyVault.outputs.uri
-    foundryEndpoint: aiFoundry.outputs.endpoint
-    foundryModelDeployment: aiFoundry.outputs.modelDeploymentName
-    bingSearchEndpoint: bingSearch.outputs.endpoint
-    blobStorageEndpoint: blobStorage.outputs.endpoint
-    staticWebAppUrl: staticWebApp.outputs.url
-    serviceNowInstanceUrl: serviceNowInstanceUrl
-    serviceNowClientId: serviceNowClientId
-    serviceNowClientSecret: serviceNowClientSecret
-  }
-}
-
-// ─── Static Web App ───
-module staticWebApp './modules/static-web-app.bicep' = {
-  name: 'static-web-app'
-  scope: rg
-  params: {
-    name: !empty(staticWebAppName) ? staticWebAppName : '${namePrefix}${abbrs.webStaticSites}${resourceToken}'
-    location: staticWebAppLocation
-    tags: tags
-  }
-}
-
-module healthModel './modules/health-model.bicep' = if (deployHealthModel) {
-  name: 'health-model'
-  scope: rg
-  params: {
-    name: !empty(healthModelName) ? healthModelName : '${namePrefix}${abbrs.cloudHealthHealthModels}${resourceToken}'
-    location: healthModelLocation
-    tags: tags
-    resourceCatalog: resourceCatalog
-  }
-}
-
-// ─── OBO MCP Server: identity, Entra apps, container app ───
-// One user-assigned managed identity is the ACR-pull identity, the container
-// runtime identity, AND the federated subject the OBO server app trusts.
+// ─── OBO MCP Server: identity and Entra apps ───
+// The user-assigned identity is federated to the AKS service account below and
+// is also the subject trusted by the OBO server app registration.
 module oboIdentity './modules/obo-identity.bicep' = if (deployObo) {
   name: 'obo-identity'
   scope: rg
@@ -351,12 +197,13 @@ module oboEntraAppClient './modules/obo-entra-app.bicep' = if (deployObo) {
     entraAppDisplayName: 'kratos-obo-client-${environmentName}'
     entraAppUniqueName: 'kratos-obo-client-${resourceToken}'
     isServer: false
-    spaRedirectUris: [
-      staticWebApp.outputs.url
-      'http://localhost:3000'
-      'http://localhost:5173'
-      'http://localhost:4280'
-    ]
+    spaRedirectUris: concat(
+      empty(frontendUrl) ? [] : [frontendUrl],
+      [
+        'http://localhost:3000'
+        'http://localhost:5173'
+      ]
+    )
   }
 }
 
@@ -368,31 +215,12 @@ module oboEntraAppServer './modules/obo-entra-app.bicep' = if (deployObo) {
     entraAppDisplayName: 'kratos-obo-server-${environmentName}'
     entraAppUniqueName: 'kratos-obo-server-${resourceToken}'
     isServer: true
-    knownClientAppId: oboEntraAppClient.outputs.entraAppClientId
-    acaManagedIdentityObjectId: oboIdentity.outputs.principalId
+    knownClientAppId: oboEntraAppClient!.outputs.entraAppClientId
+    managedIdentityObjectId: oboIdentity!.outputs.principalId
   }
 }
 
-module oboMcpServer './modules/obo-mcp-server.bicep' = if (deployObo) {
-  name: 'obo-mcp-server'
-  scope: rg
-  params: {
-    name: '${namePrefix}${abbrs.appContainerApps}obo-${resourceToken}'
-    location: location
-    tags: tags
-    containerAppsEnvId: containerAppsEnv.outputs.id
-    containerRegistryName: containerRegistry.outputs.name
-    appInsightsConnectionString: appInsights.outputs.connectionString
-    oboIdentityId: oboIdentity.outputs.id
-    oboIdentityClientId: oboIdentity.outputs.clientId
-    oboIdentityPrincipalId: oboIdentity.outputs.principalId
-    tenantId: tenant().tenantId
-    oboApiClientId: oboEntraAppServer.outputs.entraAppClientId
-    allowedClientAppIds: oboEntraAppClient.outputs.entraAppClientId
-  }
-}
-
-module aksPlatform './modules/aks-platform.bicep' = if (deployAks) {
+module aksPlatform './modules/aks-platform.bicep' = {
   name: 'aks-platform'
   scope: rg
   params: {
@@ -410,32 +238,15 @@ module aksPlatform './modules/aks-platform.bicep' = if (deployAks) {
     appInsightsName: appInsights.outputs.name
     logAnalyticsName: logAnalytics.outputs.name
     kubernetesNamespace: aksNamespace
-    oboIdentityName: deployObo ? oboIdentity.outputs.name : ''
+    oboIdentityName: deployObo ? oboIdentity!.outputs.name : ''
     deployObo: deployObo
     alertActionGroupId: aksAlertActionGroupId
     clusterAdminPrincipalId: principalId
   }
 }
 
-// ─── Role Assignments ───
-module roleAssignments './modules/role-assignments.bicep' = {
-  name: 'role-assignments'
-  scope: rg
-  params: {
-    agentServicePrincipalId: agentService.outputs.principalId
-    cosmosDbAccountName: cosmosDb.outputs.name
-    aiServicesName: aiFoundry.outputs.name
-    keyVaultName: keyVault.outputs.name
-    storageAccountName: blobStorage.outputs.name
-    appInsightsName: appInsights.outputs.name
-    logAnalyticsName: logAnalytics.outputs.name
-    principalId: principalId
-  }
-}
-
 // ─── Outputs ───
 output AZURE_RESOURCE_GROUP string = rg.name
-output AZURE_CONTAINER_APPS_ENV_NAME string = containerAppsEnv.outputs.name
 output AZURE_CONTAINER_REGISTRY_NAME string = containerRegistry.outputs.name
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.outputs.loginServer
 output AZURE_COSMOS_DB_ENDPOINT string = cosmosDb.outputs.endpoint
@@ -443,26 +254,19 @@ output AZURE_KEY_VAULT_URI string = keyVault.outputs.uri
 output AZURE_APP_INSIGHTS_CONNECTION_STRING string = appInsights.outputs.connectionString
 output APPLICATION_INSIGHTS_RESOURCE_ID string = appInsights.outputs.id
 output APPLICATION_INSIGHTS_WORKSPACE_ID string = logAnalytics.outputs.customerId
-output AZURE_STATIC_WEB_APP_URL string = staticWebApp.outputs.url
-output AGENT_SERVICE_DIRECT_URL string = agentService.outputs.url
-output AGENT_SERVICE_URL string = agentService.outputs.url
 output FOUNDRY_ENDPOINT string = aiFoundry.outputs.endpoint
 output FOUNDRY_MODEL_DEPLOYMENT string = aiFoundry.outputs.modelDeploymentName
 output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint
 output AZURE_BLOB_STORAGE_ACCOUNT_NAME string = blobStorage.outputs.name
-output AKS_CLUSTER_NAME string = deployAks ? aksPlatform.outputs.clusterName : ''
-output AKS_BACKEND_IDENTITY_CLIENT_ID string = deployAks ? aksPlatform.outputs.backendIdentityClientId : ''
-output AKS_OBO_IDENTITY_CLIENT_ID string = deployAks && deployObo ? aksPlatform.outputs.oboIdentityClientId : ''
-output AKS_OIDC_ISSUER_URL string = deployAks ? aksPlatform.outputs.oidcIssuerUrl : ''
-output AKS_OPERATIONS_WORKBOOK_ID string = deployAks ? aksPlatform.outputs.operationsWorkbookId : ''
-output AZURE_HEALTH_MODEL_ID string = deployHealthModel ? healthModel.outputs.id : ''
-output AZURE_HEALTH_MODEL_NAME string = deployHealthModel ? healthModel.outputs.name : ''
+output AKS_CLUSTER_NAME string = aksPlatform.outputs.clusterName
+output AKS_BACKEND_IDENTITY_CLIENT_ID string = aksPlatform.outputs.backendIdentityClientId
+output AKS_OBO_IDENTITY_CLIENT_ID string = deployObo ? aksPlatform.outputs.oboIdentityClientId : ''
+output AKS_OIDC_ISSUER_URL string = aksPlatform.outputs.oidcIssuerUrl
+output AKS_OPERATIONS_WORKBOOK_ID string = aksPlatform.outputs.operationsWorkbookId
 
 // ─── OBO MCP server outputs ───
-output OBO_MCP_SERVER_URL string = deployObo ? oboMcpServer.outputs.url : ''
-output OBO_MCP_SERVER_MCP_URL string = deployObo ? oboMcpServer.outputs.mcpUrl : ''
-output OBO_SERVER_APP_CLIENT_ID string = deployObo ? oboEntraAppServer.outputs.entraAppClientId : ''
-output OBO_SERVER_APP_IDENTIFIER_URI string = deployObo ? oboEntraAppServer.outputs.entraAppIdentifierUri : ''
-output OBO_SERVER_APP_SCOPE_VALUE string = deployObo ? oboEntraAppServer.outputs.entraAppScopeValue : ''
-output OBO_CLIENT_APP_CLIENT_ID string = deployObo ? oboEntraAppClient.outputs.entraAppClientId : ''
+output OBO_SERVER_APP_CLIENT_ID string = deployObo ? oboEntraAppServer!.outputs.entraAppClientId : ''
+output OBO_SERVER_APP_IDENTIFIER_URI string = deployObo ? oboEntraAppServer!.outputs.entraAppIdentifierUri : ''
+output OBO_SERVER_APP_SCOPE_VALUE string = deployObo ? oboEntraAppServer!.outputs.entraAppScopeValue : ''
+output OBO_CLIENT_APP_CLIENT_ID string = deployObo ? oboEntraAppClient!.outputs.entraAppClientId : ''
 output OBO_TENANT_ID string = tenant().tenantId

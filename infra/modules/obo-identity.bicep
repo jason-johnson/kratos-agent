@@ -1,8 +1,7 @@
-// User-assigned managed identity for the OBO MCP server container app.
+// User-assigned managed identity for the OBO MCP server on AKS.
 //
 // This single identity plays two roles:
-//   1. Pulls the container image from ACR (AcrPull role, granted in
-//      obo-mcp-server.bicep).
+//   1. Is federated to the OBO Kubernetes service account.
 //   2. Is the FEDERATED subject for the OBO server app registration — its
 //      principalId is the FIC subject, so the app can authenticate to Entra
 //      with NO client secret (see obo-entra-app.bicep).

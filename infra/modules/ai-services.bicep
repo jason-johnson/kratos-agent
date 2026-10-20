@@ -74,9 +74,8 @@ resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-
   }
 }
 
-// Connect Application Insights to the project so the Foundry portal Traces tab
-// has a data source AND the platform injects the trace connection string into
-// hosted agents (their OpenTelemetry gen_ai spans land here).
+// Connect Application Insights to the project so Foundry evaluations and the
+// portal Traces tab share the application's telemetry source.
 resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01' = if (!empty(appInsightsId)) {
   parent: project
   name: 'appinsights'
@@ -103,7 +102,3 @@ output projectName string = project.name
 output projectEndpoint string = '${aiFoundry.properties.endpoint}api/projects/${project.name}'
 output projectId string = project.id
 output principalId string = aiFoundry.identity.principalId
-// The project MI is what pulls the hosted-agent container image from ACR
-// (per foundry-hosted-agents skill). Account MI ≠ project MI — both are
-// system-assigned, both need different roles.
-output projectPrincipalId string = project.identity.principalId

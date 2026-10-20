@@ -13,7 +13,7 @@
        client (so users are not prompted to consent), holds the delegated
        least-privilege delegated Microsoft Graph read permissions used for
        profile, responder, presence, calendar, mail, and chat context, and
-       trusts the container app's user-assigned managed identity through a
+       trusts the AKS workload's user-assigned managed identity through a
        federated identity credential (FIC) — so OBO needs NO client secret.
 
   To break the circular dependency between the two apps, deploy the client
@@ -48,8 +48,8 @@ param knownClientAppId string = ''
 @description('Redirect URIs for the SPA client app (client only)')
 param spaRedirectUris array = []
 
-@description('Object (principal) id of the container app user-assigned managed identity. Required when isServer is true — it is the FIC subject.')
-param acaManagedIdentityObjectId string = ''
+@description('Object (principal) id of the AKS workload user-assigned managed identity. Required when isServer is true — it is the FIC subject.')
+param managedIdentityObjectId string = ''
 
 @description('FIC token-exchange audience. Public cloud: api://AzureADTokenExchange.')
 param tokenExchangeAudience string = 'api://AzureADTokenExchange'
@@ -154,14 +154,14 @@ resource servicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' = {
   appId: entraApp.appId
 }
 
-// Federated identity credential: trust the container app's UAMI to mint the
+// Federated identity credential: trust the AKS workload UAMI to mint the
 // server app's client assertion (replaces a client secret for OBO).
 resource federatedIdentityCredential 'Microsoft.Graph/applications/federatedIdentityCredentials@v1.0' = if (isServer) {
   name: '${entraApp.uniqueName}/OboServerCredential'
   audiences: [tokenExchangeAudience]
   description: 'Token-exchange credential for the OBO MCP server app registration'
   issuer: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
-  subject: acaManagedIdentityObjectId
+  subject: managedIdentityObjectId
 }
 
 // NOTE: admin consent for the delegated Graph permissions above is deliberately
@@ -177,8 +177,7 @@ resource federatedIdentityCredential 'Microsoft.Graph/applications/federatedIden
 // is admin-gated (the default in most corporate tenants). The app registration
 // still *requests* the permission above — that part needs no special rights.
 //
-// The grant itself now happens in hooks/grant-obo-consent.sh at postprovision,
-// where it can fail softly and explain what to ask an administrator for.
+// The grant is a separate operator action documented in the AKS runbook.
 
 output entraAppClientId string = entraApp.appId
 output entraAppObjectId string = entraApp.id

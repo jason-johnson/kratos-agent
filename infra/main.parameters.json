@@ -17,9 +17,6 @@
     "deployObo": {
       "value": "${DEPLOY_OBO=true}"
     },
-    "deployAks": {
-      "value": "${DEPLOY_AKS=false}"
-    },
     "aksClusterName": {
       "value": "${AKS_CLUSTER_NAME=}"
     },
@@ -29,17 +26,8 @@
     "aksAlertActionGroupId": {
       "value": "${AKS_ALERT_ACTION_GROUP_ID=}"
     },
-    "deployHealthModel": {
-      "value": "${DEPLOY_HEALTH_MODEL=false}"
-    },
-    "serviceNowInstanceUrl": {
-      "value": "${SERVICENOW_INSTANCE_URL=}"
-    },
-    "serviceNowClientId": {
-      "value": "${SERVICENOW_CLIENT_ID=}"
-    },
-    "serviceNowClientSecret": {
-      "value": "${SERVICENOW_CLIENT_SECRET=}"
+    "frontendUrl": {
+      "value": "${FRONTEND_URL=}"
     }
   }
 }
