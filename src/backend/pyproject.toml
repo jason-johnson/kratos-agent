@@ -135,8 +135,3 @@ disable_error_code = ["call-arg"]
 [[tool.mypy.overrides]]
 module = "app.services.eval_service"
 disable_error_code = ["attr-defined", "union-attr"]
-
-# Lazily-initialized aiohttp session guarded by the proxy lifecycle.
-[[tool.mypy.overrides]]
-module = "app.services.foundry_agent_proxy"
-disable_error_code = ["union-attr"]

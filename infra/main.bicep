@@ -253,8 +253,6 @@ module agentService './modules/agent-service.bicep' = {
     keyVaultUri: keyVault.outputs.uri
     foundryEndpoint: aiFoundry.outputs.endpoint
     foundryModelDeployment: aiFoundry.outputs.modelDeploymentName
-    foundryProjectName: aiFoundry.outputs.projectName
-    foundryProjectEndpoint: aiFoundry.outputs.projectEndpoint
     bingSearchEndpoint: bingSearch.outputs.endpoint
     blobStorageEndpoint: blobStorage.outputs.endpoint
     staticWebAppUrl: staticWebApp.outputs.url
@@ -354,12 +352,9 @@ module roleAssignments './modules/role-assignments.bicep' = {
     agentServicePrincipalId: agentService.outputs.principalId
     cosmosDbAccountName: cosmosDb.outputs.name
     aiServicesName: aiFoundry.outputs.name
-    aiServicesPrincipalId: aiFoundry.outputs.principalId
-    aiServicesProjectPrincipalId: aiFoundry.outputs.projectPrincipalId
     keyVaultName: keyVault.outputs.name
     storageAccountName: blobStorage.outputs.name
     appInsightsName: appInsights.outputs.name
-    containerRegistryName: containerRegistry.outputs.name
     principalId: principalId
   }
 }
@@ -378,18 +373,6 @@ output AGENT_SERVICE_DIRECT_URL string = agentService.outputs.url
 output AGENT_SERVICE_URL string = agentService.outputs.url
 output FOUNDRY_ENDPOINT string = aiFoundry.outputs.endpoint
 output FOUNDRY_MODEL_DEPLOYMENT string = aiFoundry.outputs.modelDeploymentName
-output AZURE_AI_PROJECT_ENDPOINT string = aiFoundry.outputs.projectEndpoint
-// Extension contract drift (per foundry-hosted-agents skill): azure.ai.agents
-// extension v0.1.31+ reads FOUNDRY_PROJECT_ENDPOINT, older versions read
-// AZURE_AI_PROJECT_ENDPOINT. Emit both with the same value until the
-// extension settles on one name.
-output FOUNDRY_PROJECT_ENDPOINT string = aiFoundry.outputs.projectEndpoint
-// Full ARM resource ID of the Foundry project. Surfacing it as an azd output
-// writes AZURE_AI_PROJECT_ID into the environment during `azd provision`, so the
-// `azure.ai.agent` extension can deploy the hosted agent without a manual
-// `azd env set AZURE_AI_PROJECT_ID ...` step. Also consumed by
-// hooks/assign-agent-roles.sh to resolve the agent identity.
-output AZURE_AI_PROJECT_ID string = aiFoundry.outputs.projectId
 output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint
 output AZURE_BLOB_STORAGE_ACCOUNT_NAME string = blobStorage.outputs.name
 output AZURE_HEALTH_MODEL_ID string = deployHealthModel ? healthModel.outputs.id : ''

@@ -35,21 +35,6 @@ class Settings(BaseSettings):
     # Empty = call Foundry direct.
     llm_gateway_base_url: str = ""
 
-    # Hosted agent proxy — backend forwards requests to the Foundry hosted agent
-    foundry_project_endpoint: str = ""  # e.g. https://host/api/projects/proj
-    foundry_agent_name: str = "kratos-agent"
-    foundry_agent_invocations_endpoint: str = ""  # full URL override (optional)
-    foundry_api_version: str = "v1"
-
-    # Hosted-agent keep-warm — the backend keeps a small pool of pre-provisioned,
-    # UNCLAIMED hosted-agent sandboxes ready. Each new conversation claims its own
-    # warm sandbox (fast startup) that it owns exclusively (its own /tmp — no file
-    # leakage between conversations). The keep-warm loop pings pooled sandboxes to
-    # reset their idle timer and replenishes the pool. Disabled in local mode.
-    keep_warm_enabled: bool = True
-    keep_warm_interval_s: int = 300  # ping cadence; must be shorter than the per-session 15-min idle timeout
-    warm_pool_size: int = 2  # number of pre-warmed, unclaimed sandboxes kept ready for new conversations
-
     # Azure Blob Storage for skills
     blob_storage_endpoint: str = ""
     blob_skills_container: str = "skills"
@@ -100,9 +85,6 @@ class Settings(BaseSettings):
     # (workspace-scoped) when the resource ID is not set.
     application_insights_resource_id: str = ""
     application_insights_workspace_id: str = ""
-    # Foundry project endpoint used by the eval submitter (overrides the
-    # value already on Settings if set explicitly for evals).
-    eval_foundry_project_endpoint: str = ""
 
     @property
     def is_local_mode(self) -> bool:

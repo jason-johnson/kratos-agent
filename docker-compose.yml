@@ -13,38 +13,6 @@ services:
       retries: 10
       start_period: 5s
 
-  hosted-agent:
-    build:
-      context: .
-      dockerfile: src/hosted-agent/Dockerfile
-    ports:
-      - "8088:8088"
-    environment:
-      LOCAL_MODE: "true"
-      COPILOT_GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN}
-      GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN}
-      BLOB_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
-      BLOB_SKILLS_CONTAINER: skills
-      LOCAL_DATA_DIR: /data
-      APM_USE_CASES_ROOT: /app/use-cases
-      ENVIRONMENT: development
-      APM_ENABLED: "true"
-      # OBO: point the in-sandbox agent at the local OBO MCP server so the
-      # graph-obo tool auto-attaches exactly as it does in the cloud. This is the
-      # local equivalent of the OBO_MCP_SERVER_MCP_URL env declared in agent.yaml.
-      OBO_MCP_SERVER_MCP_URL: "http://obo-mcp-server:8000/mcp"
-      OBO_MCP_SERVER_NAME: graph-obo
-      # Capture prompts + completions on the invoke_agent span (gen_ai.* attrs).
-      AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED: "true"
-    volumes:
-      - ./.local/hosted-agent:/data
-      - ./use-cases:/app/use-cases
-    depends_on:
-      azurite:
-        condition: service_healthy
-      obo-mcp-server:
-        condition: service_started
-
   # Entra-protected OBO MCP server. Locally it authenticates ITSELF with a client
   # secret (OBO_CLIENT_SECRET) instead of the cloud's secret-less managed-identity
   # federated credential — same app registration, same real Entra OBO -> Graph
@@ -77,7 +45,7 @@ services:
     environment:
       LOCAL_MODE: "true"
       COPILOT_GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN}
-      FOUNDRY_AGENT_INVOCATIONS_ENDPOINT: "http://hosted-agent:8088/invocations"
+      GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN}
       BLOB_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
       BLOB_SKILLS_CONTAINER: skills
       LOCAL_DATA_DIR: /data
@@ -89,5 +57,5 @@ services:
     depends_on:
       azurite:
         condition: service_healthy
-      hosted-agent:
+      obo-mcp-server:
         condition: service_started

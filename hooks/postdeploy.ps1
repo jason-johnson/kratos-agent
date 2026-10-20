@@ -4,10 +4,8 @@
 #
 # Uploads the selected use-cases' skills to blob storage after a deploy.
 #
-# NOTE: this is not the same script as the one the project exporter ships as
-# hooks/postdeploy.ps1 in an exported agent — that one grants RBAC to the
-# identities from `azd ai agent show`. Here, RBAC is assign-agent-roles.ps1's
-# job and this hook only does the skills upload.
+# NOTE: this is not the same script as the one the project exporter ships in an
+# exported agent. This repository hook only performs the skills upload.
 
 [CmdletBinding()]
 param(
@@ -20,7 +18,8 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
-# See assign-agent-roles.ps1 — keep expected non-zero `az` exits non-terminating.
+# Keep expected non-zero native-command exits non-terminating; callers inspect
+# $LASTEXITCODE where needed.
 $PSNativeCommandUseErrorActionPreference = $false
 
 $ContainerName = 'skills'

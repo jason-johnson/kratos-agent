@@ -47,10 +47,6 @@ _MCP_PREFIX = "mcp-tools-"
 _FSI_USE_CASES = {"insurance", "retail-banking", "wealth-management"}
 _CANON_BASE = Path("/Users/ricchi/Repos/awesome-gbb/skills/threadlight-demo-data-factory/references")
 
-# Warmup parameters (tuned per foundry-evals skill guidance)
-_WARMUP_ATTEMPTS = 6
-_WARMUP_BACKOFF_S = 5.0
-
 # Request timeout for the Foundry OpenAI client (seconds)
 # Bumped to 300s — complex multi-tool scenarios (PDF report generation, multi-step
 # triage flows) routinely exceed 120s; gateway throttle bursts also push tail latency.
@@ -144,19 +140,6 @@ Rules:
 - Include all five evaluator names in `evaluators`.
 - Vary the categories; do not produce all `standard` scenarios.
 """
-
-
-def _build_foundry_oai_client(settings: Settings) -> Any:
-    """Return an AIProjectClient-derived OpenAI client bound to the hosted agent."""
-    from azure.ai.projects import AIProjectClient
-
-    endpoint = settings.eval_foundry_project_endpoint or settings.foundry_project_endpoint
-    project = AIProjectClient(
-        endpoint=endpoint,
-        credential=DefaultAzureCredential(),
-        allow_preview=True,
-    )
-    return project.get_openai_client(agent_name=settings.foundry_agent_name)
 
 
 def _build_model_config(settings: Settings) -> dict[str, Any]:
@@ -543,7 +526,6 @@ class EvalService:
     async def _do_execute_run(self, run: EvalRun) -> None:
         use_case = run.use_case
         run_id = run.run_id
-        settings = self._settings
 
         # ── Phase 0: resolve scenarios ────────────────────────────────────
         all_stored = await self._storage.list_scenarios(use_case)
@@ -562,36 +544,6 @@ class EvalService:
         # ── Phase 1: INVOKING ─────────────────────────────────────────────
         run.status = EvalRunStatus.INVOKING
         await self._storage.save_run(run)
-
-        # Build Foundry OpenAI client (used later for scoring evaluators in FOUNDRY mode)
-        _oai = _build_foundry_oai_client(settings) if run.mode == EvalMode.FOUNDRY else None
-
-        # Warmup loop — handles scale-from-zero hosted agents (uses Invocations protocol)
-        logger.info("[eval %s] warmup start (max %d attempts)", run_id, _WARMUP_ATTEMPTS)
-        backoff = _WARMUP_BACKOFF_S
-        for attempt in range(1, _WARMUP_ATTEMPTS + 1):
-            try:
-                wtext, _, werr = await self._invoke_agent(
-                    message="ping",
-                    conversation_id=f"warmup-{run_id}-{attempt}",
-                    use_case=use_case,
-                    run_id=run_id,
-                    timeout=60.0,
-                )
-                if werr:
-                    logger.warning("[eval %s] warmup attempt=%d error: %s", run_id, attempt, werr[:160])
-                elif wtext:
-                    logger.info("[eval %s] warmup READY (chars=%d)", run_id, len(wtext))
-                    break
-                else:
-                    logger.warning("[eval %s] warmup attempt=%d empty response", run_id, attempt)
-            except Exception as exc:
-                logger.warning("[eval %s] warmup attempt=%d exc: %s", run_id, attempt, str(exc)[:160])
-            if attempt < _WARMUP_ATTEMPTS:
-                await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, 60.0)
-        else:
-            raise RuntimeError(f"Hosted agent failed to warm up after {_WARMUP_ATTEMPTS} attempts.")
 
         # Sequential invocation
         total = len(scenarios_to_run)

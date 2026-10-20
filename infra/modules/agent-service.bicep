@@ -34,15 +34,6 @@ param foundryModelDeployment string
 @description('Bing Search endpoint')
 param bingSearchEndpoint string
 
-@description('Foundry project name')
-param foundryProjectName string
-
-@description('Foundry project endpoint (e.g. https://host/api/projects/proj)')
-param foundryProjectEndpoint string = ''
-
-@description('Hosted agent name deployed in Foundry')
-param foundryAgentName string = 'kratos-agent'
-
 @description('Azure Blob Storage endpoint for skills')
 param blobStorageEndpoint string
 
@@ -118,8 +109,8 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'agent-service'
           image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
           resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
+            cpu: json('1.0')
+            memory: '2Gi'
           }
           env: [
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
@@ -128,9 +119,6 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'FOUNDRY_ENDPOINT', value: foundryEndpoint }
             { name: 'FOUNDRY_MODEL_DEPLOYMENT', value: foundryModelDeployment }
-            { name: 'FOUNDRY_PROJECT_NAME', value: foundryProjectName }
-            { name: 'FOUNDRY_PROJECT_ENDPOINT', value: foundryProjectEndpoint }
-            { name: 'FOUNDRY_AGENT_NAME', value: foundryAgentName }
             { name: 'BING_SEARCH_ENDPOINT', value: bingSearchEndpoint }
             { name: 'BLOB_STORAGE_ENDPOINT', value: blobStorageEndpoint }
             { name: 'OTEL_SERVICE_NAME', value: 'kratos-agent-service' }

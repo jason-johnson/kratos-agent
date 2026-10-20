@@ -31,7 +31,8 @@
 # exits 0.
 
 $ErrorActionPreference = 'Continue'
-# See assign-agent-roles.ps1 — keep expected non-zero `az` exits non-terminating.
+# Keep expected non-zero Azure CLI exits non-terminating; this best-effort hook
+# inspects $LASTEXITCODE itself.
 $PSNativeCommandUseErrorActionPreference = $false
 
 $MsGraphAppId = '00000003-0000-0000-c000-000000000000'
