@@ -197,8 +197,8 @@ class EvalStorage:
         run.updated_at = datetime.now(UTC)
         payload = run.model_dump_json(indent=2).encode("utf-8")
         if self._blob.is_available:
-            await self._blob.upload_file(f"{_runs_prefix(run.use_case)}{run.run_id}/_meta.json", payload)
-        local_dir = self._local_runs_dir(run.use_case) / run.run_id
+            await self._blob.upload_file(f"{_runs_prefix(run.agent_id)}{run.run_id}/_meta.json", payload)
+        local_dir = self._local_runs_dir(run.agent_id) / run.run_id
         local_dir.mkdir(parents=True, exist_ok=True)
         (local_dir / "_meta.json").write_bytes(payload)
 

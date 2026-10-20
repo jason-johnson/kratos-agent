@@ -8,7 +8,7 @@ import time
 
 import httpx
 from azure.identity.aio import DefaultAzureCredential
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.auth import get_admin_actor, require_admin_user
@@ -38,14 +38,14 @@ def _get_http_client() -> httpx.AsyncClient:
     return _http_client
 
 
-def _get_registry(request: Request, use_case: str) -> SkillRegistry:
-    """Resolve the SkillRegistry for the given use-case."""
+def _get_registry(request: Request) -> SkillRegistry:
+    """Resolve the ARE skill registry."""
     registries = getattr(request.app.state, "registries", {})
-    registry = registries.get(use_case)
+    registry = registries.get(PRIMARY_USE_CASE)
     if registry is None:
         registry = getattr(request.app.state, "skill_registry", None)
     if registry is None:
-        raise HTTPException(status_code=404, detail=f"Use-case '{use_case}' not found")
+        raise HTTPException(status_code=503, detail="ARE skill registry is unavailable")
     return registry
 
 
@@ -199,15 +199,14 @@ def _build_analysis_content(registry: SkillRegistry, include_disabled: bool) -> 
 async def analyze_consistency(
     request: Request,
     body: AnalysisRequest | None = None,
-    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> AnalysisResponse:
-    """Analyze a use-case's system prompt and skills for inconsistencies."""
+    """Analyze the ARE system prompt and skills for inconsistencies."""
     t0 = time.monotonic()
-    registry = _get_registry(request, use_case)
+    registry = _get_registry(request)
     include_disabled = body.includeDisabled if body else True
 
     content = _build_analysis_content(registry, include_disabled)
-    logger.info("Consistency analysis for '%s': %d chars", use_case, len(content))
+    logger.info("ARE consistency analysis: %d chars", len(content))
 
     raw_content = await _call_llm(ANALYSIS_SYSTEM_PROMPT, content, json_mode=True)
 
@@ -287,10 +286,10 @@ async def _call_llm(system_prompt: str, user_content: str, *, json_mode: bool = 
 # ─── Apply Fix endpoint ───
 
 
-async def _record_mutation(request: Request, use_case: str) -> None:
+async def _record_mutation(request: Request) -> None:
     runtime_config: RuntimeConfigService = request.app.state.runtime_config_service
     await runtime_config.record_version(
-        use_case,
+        PRIMARY_USE_CASE,
         action="analysis.apply-fix",
         actor=get_admin_actor(request),
     )
@@ -300,10 +299,9 @@ async def _record_mutation(request: Request, use_case: str) -> None:
 async def apply_fix(
     request: Request,
     body: ApplyFixRequest,
-    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> ApplyFixResponse:
     """Apply an AI-generated fix for a specific consistency issue."""
-    registry = _get_registry(request, use_case)
+    registry = _get_registry(request)
     changes: list[FixChange] = []
 
     # ── Simple case: disable unused skills ──
@@ -320,7 +318,7 @@ async def apply_fix(
                     )
                 )
         if changes:
-            await _record_mutation(request, use_case)
+            await _record_mutation(request)
             return ApplyFixResponse(success=True, changes=changes)
         return ApplyFixResponse(success=False, error="No matching enabled skills found to disable")
 
@@ -383,7 +381,7 @@ async def apply_fix(
             )
 
     if changes:
-        await _record_mutation(request, use_case)
+        await _record_mutation(request)
         return ApplyFixResponse(success=True, changes=changes)
 
     return ApplyFixResponse(success=False, error="No changes were needed or the LLM returned identical content")

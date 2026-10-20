@@ -26,15 +26,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(require_admin_user)])
 
 
-def _get_registry(request: Request, use_case: str) -> SkillRegistry:
-    """Resolve the SkillRegistry for the given use-case."""
+def _get_registry(request: Request) -> SkillRegistry:
+    """Resolve the ARE skill registry."""
     registries = getattr(request.app.state, "registries", {})
-    registry = registries.get(use_case)
+    registry = registries.get(PRIMARY_USE_CASE)
     if registry is None:
         # Fall back to the legacy single registry
         registry = getattr(request.app.state, "skill_registry", None)
     if registry is None:
-        raise HTTPException(status_code=404, detail=f"Use-case '{use_case}' not found")
+        raise HTTPException(status_code=503, detail="ARE skill registry is unavailable")
     return registry
 
 
@@ -45,9 +45,9 @@ def _get_runtime_config_service(request: Request) -> RuntimeConfigService:
     return service
 
 
-async def _record_mutation(request: Request, use_case: str, action: str) -> RuntimeConfigVersion:
+async def _record_mutation(request: Request, action: str) -> RuntimeConfigVersion:
     marker = await _get_runtime_config_service(request).record_version(
-        use_case,
+        PRIMARY_USE_CASE,
         action=action,
         actor=get_admin_actor(request),
     )
@@ -77,9 +77,9 @@ def _to_response(skill: SkillMetadata) -> SkillResponse:
 
 
 @router.get("", response_model=SkillList)
-async def list_skills(request: Request, use_case: str = Query(PRIMARY_USE_CASE)) -> SkillList:
-    """List all registered skills for a use-case."""
-    registry = _get_registry(request, use_case)
+async def list_skills(request: Request) -> SkillList:
+    """List all registered ARE skills."""
+    registry = _get_registry(request)
     skills = sorted(registry.skills.values(), key=lambda s: s.name)
     return SkillList(skills=[_to_response(s) for s in skills])
 
@@ -87,11 +87,10 @@ async def list_skills(request: Request, use_case: str = Query(PRIMARY_USE_CASE))
 @router.get("/versions", response_model=RuntimeConfigVersionList)
 async def list_runtime_config_versions(
     request: Request,
-    use_case: str = Query(PRIMARY_USE_CASE),
     limit: int = Query(default=50, ge=1, le=100),
 ) -> RuntimeConfigVersionList:
     """List immutable skill/prompt/MCP configuration versions."""
-    versions = await _get_runtime_config_service(request).list_versions(use_case, limit)
+    versions = await _get_runtime_config_service(request).list_versions(PRIMARY_USE_CASE, limit)
     return RuntimeConfigVersionList(versions=[RuntimeConfigVersion(**version) for version in versions])
 
 
@@ -99,11 +98,14 @@ async def list_runtime_config_versions(
 async def rollback_runtime_config(
     version: str,
     request: Request,
-    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> RuntimeConfigVersion:
     """Restore a prior version and publish the rollback as a new version."""
     try:
-        marker = await _get_runtime_config_service(request).rollback(use_case, version, get_admin_actor(request))
+        marker = await _get_runtime_config_service(request).rollback(
+            PRIMARY_USE_CASE,
+            version,
+            get_admin_actor(request),
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"Runtime config version '{version}' not found") from exc
     except ValueError as exc:
@@ -115,10 +117,9 @@ async def rollback_runtime_config(
 async def get_skill(
     skill_name: str,
     request: Request,
-    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> SkillResponse:
     """Get a single skill by name."""
-    registry = _get_registry(request, use_case)
+    registry = _get_registry(request)
     skill = registry.get_skill(skill_name)
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
@@ -129,10 +130,9 @@ async def get_skill(
 async def create_skill(
     body: SkillCreate,
     request: Request,
-    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> SkillResponse:
     """Create a new skill definition."""
-    registry = _get_registry(request, use_case)
+    registry = _get_registry(request)
 
     if registry.get_skill(body.name):
         raise HTTPException(status_code=409, detail=f"Skill '{body.name}' already exists")
@@ -145,7 +145,7 @@ async def create_skill(
         tool_name=body.name.replace("-", "_"),
     )
     await registry.add_skill(skill)
-    await _record_mutation(request, use_case, f"skill.create:{body.name}")
+    await _record_mutation(request, f"skill.create:{body.name}")
     logger.info("Admin created skill: %s", body.name)
     return _to_response(skill)
 
@@ -155,10 +155,9 @@ async def update_skill(
     skill_name: str,
     body: SkillUpdate,
     request: Request,
-    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> SkillResponse:
     """Update an existing skill (partial update)."""
-    registry = _get_registry(request, use_case)
+    registry = _get_registry(request)
 
     updates = body.model_dump(exclude_none=True)
     if not updates:
@@ -168,7 +167,7 @@ async def update_skill(
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
 
-    await _record_mutation(request, use_case, f"skill.update:{skill_name}")
+    await _record_mutation(request, f"skill.update:{skill_name}")
     logger.info("Admin updated skill: %s fields=%s", skill_name, list(updates.keys()))
     return _to_response(skill)
 
@@ -177,16 +176,15 @@ async def update_skill(
 async def delete_skill(
     skill_name: str,
     request: Request,
-    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> None:
     """Delete a skill definition."""
-    registry = _get_registry(request, use_case)
+    registry = _get_registry(request)
 
     removed = await registry.remove_skill(skill_name)
     if not removed:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
 
-    await _record_mutation(request, use_case, f"skill.delete:{skill_name}")
+    await _record_mutation(request, f"skill.delete:{skill_name}")
     logger.info("Admin deleted skill: %s", skill_name)
 
 
@@ -208,10 +206,9 @@ def _validate_file_path(file_path: str) -> None:
 async def list_skill_files(
     skill_name: str,
     request: Request,
-    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> SkillFileList:
     """List all non-SKILL.md files for a skill, including their content."""
-    registry = _get_registry(request, use_case)
+    registry = _get_registry(request)
     skill = registry.get_skill(skill_name)
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
@@ -237,17 +234,16 @@ async def upsert_skill_file(
     file_path: str,
     body: SkillFileUpsert,
     request: Request,
-    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> None:
     """Upload or update a file within a skill folder."""
     _validate_file_path(file_path)
-    registry = _get_registry(request, use_case)
+    registry = _get_registry(request)
     skill = registry.get_skill(skill_name)
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
     await registry.upsert_skill_file(skill_name, file_path, body.content.encode())
-    await _record_mutation(request, use_case, f"skill.file.upsert:{skill_name}/{file_path}")
-    logger.info("Admin upserted file: %s/%s/%s", use_case, skill_name, file_path)
+    await _record_mutation(request, f"skill.file.upsert:{skill_name}/{file_path}")
+    logger.info("Admin upserted skill file: %s/%s", skill_name, file_path)
 
 
 @router.delete("/{skill_name}/files/{file_path:path}", status_code=204)
@@ -255,13 +251,12 @@ async def delete_skill_file(
     skill_name: str,
     file_path: str,
     request: Request,
-    use_case: str = Query(PRIMARY_USE_CASE),
 ) -> None:
     """Delete a file from a skill folder."""
     _validate_file_path(file_path)
-    registry = _get_registry(request, use_case)
+    registry = _get_registry(request)
     if not registry.get_skill(skill_name):
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
     await registry.remove_skill_file(skill_name, file_path)
-    await _record_mutation(request, use_case, f"skill.file.delete:{skill_name}/{file_path}")
-    logger.info("Admin deleted file: %s/%s/%s", use_case, skill_name, file_path)
+    await _record_mutation(request, f"skill.file.delete:{skill_name}/{file_path}")
+    logger.info("Admin deleted skill file: %s/%s", skill_name, file_path)

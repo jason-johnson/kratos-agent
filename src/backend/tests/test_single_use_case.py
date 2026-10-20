@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from app.config import Settings
 from app.constants import PRIMARY_USE_CASE
+from app.main import app
 from app.models import AgentRequest, Conversation, ConversationCreate, CopilotStudioRequest
 from app.services.blob_skill_service import BlobSkillService
 from app.services.copilot_agent import DEFAULT_USE_CASE
@@ -16,9 +17,15 @@ from app.services.skill_registry import SkillRegistry
 
 
 def test_request_models_default_to_are():
-    assert ConversationCreate().useCase == PRIMARY_USE_CASE
-    assert AgentRequest(conversationId="conversation", message="hello").useCase == PRIMARY_USE_CASE
-    assert CopilotStudioRequest(message="hello").useCase == PRIMARY_USE_CASE
+    assert ConversationCreate().model_dump() == {"title": "New Conversation"}
+    assert AgentRequest(conversationId="conversation", message="hello").model_dump(exclude_defaults=True) == {
+        "conversationId": "conversation",
+        "message": "hello",
+    }
+    assert CopilotStudioRequest(message="hello").model_dump() == {
+        "message": "hello",
+        "conversationId": "",
+    }
     assert DEFAULT_USE_CASE == PRIMARY_USE_CASE
     assert SkillRegistry().use_case == PRIMARY_USE_CASE
 
@@ -31,8 +38,8 @@ def test_request_models_default_to_are():
         (CopilotStudioRequest, {"message": "hello", "useCase": "generic"}),
     ],
 )
-def test_request_models_reject_legacy_personas(model, payload):
-    with pytest.raises(ValidationError, match="Only the 'agent-reliability-engineer' use-case is supported"):
+def test_request_models_reject_obsolete_use_case_field(model, payload):
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         model(**payload)
 
 
@@ -49,7 +56,16 @@ def test_persisted_legacy_conversation_remains_readable():
         }
     )
 
-    assert conversation.useCase == "generic"
+    assert "useCase" not in conversation.model_dump()
+
+
+def test_openapi_exposes_only_single_agent_routes():
+    paths = app.openapi()["paths"]
+
+    assert "/api/evals/scenarios" in paths
+    assert "/api/admin/apm" in paths
+    assert "/api/use-cases" not in paths
+    assert all("use-case" not in path and "use_case" not in path for path in paths)
 
 
 class _EmptyContainer:

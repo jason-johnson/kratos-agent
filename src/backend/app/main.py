@@ -27,7 +27,6 @@ from app.routers import (
     health,
     settings,
     traces,
-    use_cases,
 )
 from app.services.apm_service import ApmError, ApmService
 from app.services.blob_skill_service import BlobSkillService
@@ -222,10 +221,9 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(admin_skills.router, prefix="/api/admin/skills", tags=["admin"])
 app.include_router(admin_prompt.router, prefix="/api/admin/system-prompt", tags=["admin"])
 app.include_router(admin_mcp.router, prefix="/api/admin/mcp-servers", tags=["admin"])
-app.include_router(admin_apm.router, prefix="/api/admin/use-cases/{use_case}/apm", tags=["admin"])
+app.include_router(admin_apm.router, prefix="/api/admin/apm", tags=["admin"])
 app.include_router(admin_analysis.router, prefix="/api/admin/analysis", tags=["admin"])
-app.include_router(use_cases.router, prefix="/api/use-cases", tags=["use-cases"])
-app.include_router(evals.router, prefix="/api/use-cases", tags=["evals"])
+app.include_router(evals.router, prefix="/api/evals", tags=["evals"])
 app.include_router(traces.router, prefix="/api/traces", tags=["traces"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(copilot_studio.router, prefix="/api/copilot-studio", tags=["copilot-studio"])

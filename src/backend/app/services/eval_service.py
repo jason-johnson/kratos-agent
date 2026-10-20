@@ -467,7 +467,7 @@ class EvalService:
         now = _now()
         run = EvalRun(
             run_id=run_id,
-            use_case=use_case,
+            agent_id=use_case,
             mode=mode,
             status=EvalRunStatus.PENDING,
             scenarios=scenarios,
@@ -524,7 +524,7 @@ class EvalService:
             await self._storage.save_run(run)
 
     async def _do_execute_run(self, run: EvalRun) -> None:
-        use_case = run.use_case
+        use_case = run.agent_id
         run_id = run.run_id
 
         # ── Phase 0: resolve scenarios ────────────────────────────────────

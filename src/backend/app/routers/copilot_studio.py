@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
 
+from app.constants import PRIMARY_USE_CASE
 from app.models import (
     Conversation,
     ConversationStatus,
@@ -46,7 +47,6 @@ async def copilot_studio_chat(
             id=str(uuid.uuid4()),
             userId="copilot-studio",
             title=body.message[:80],
-            useCase=body.useCase,
             status=ConversationStatus.ACTIVE,
             createdAt=now,
             updatedAt=now,
@@ -66,11 +66,11 @@ async def copilot_studio_chat(
 
     # Invoke the in-process agent and collect the full reply
     parts: list[str] = []
-    copilot_agent.set_conversation_use_case(conversation_id, body.useCase)
+    copilot_agent.set_conversation_use_case(conversation_id, PRIMARY_USE_CASE)
     async for event in copilot_agent.run(
         message=body.message,
         conversation_id=conversation_id,
-        use_case=body.useCase,
+        use_case=PRIMARY_USE_CASE,
     ):
         if event.type == "content":
             parts.append(event.content)

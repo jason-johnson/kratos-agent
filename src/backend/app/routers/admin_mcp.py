@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth import get_admin_actor, require_admin_user
+from app.constants import PRIMARY_USE_CASE
 from app.models import MCPConfigResponse, MCPConfigUpdate
 from app.services.runtime_config_service import RuntimeConfigService
 
@@ -14,12 +15,12 @@ router = APIRouter(dependencies=[Depends(require_admin_user)])
 
 
 @router.get("", response_model=MCPConfigResponse)
-async def get_mcp_config(use_case: str, request: Request) -> MCPConfigResponse:
-    """Return the current MCP servers config for a use-case."""
+async def get_mcp_config(request: Request) -> MCPConfigResponse:
+    """Return the current ARE MCP server configuration."""
     registries: dict = request.app.state.registries
-    registry = registries.get(use_case)
+    registry = registries.get(PRIMARY_USE_CASE)
     if registry is None:
-        raise HTTPException(status_code=404, detail=f"Use-case '{use_case}' not found")
+        raise HTTPException(status_code=503, detail="ARE skill registry is unavailable")
     return MCPConfigResponse(
         servers=registry.mcp_servers,
         sources=getattr(registry, "mcp_sources", {}),
@@ -27,22 +28,22 @@ async def get_mcp_config(use_case: str, request: Request) -> MCPConfigResponse:
 
 
 @router.put("", response_model=MCPConfigResponse)
-async def update_mcp_config(use_case: str, body: MCPConfigUpdate, request: Request) -> MCPConfigResponse:
-    """Update (replace) the MCP servers config for a use-case. Clears active sessions."""
+async def update_mcp_config(body: MCPConfigUpdate, request: Request) -> MCPConfigResponse:
+    """Update the ARE MCP server configuration and clear active sessions."""
     registries: dict = request.app.state.registries
-    registry = registries.get(use_case)
+    registry = registries.get(PRIMARY_USE_CASE)
     if registry is None:
-        raise HTTPException(status_code=404, detail=f"Use-case '{use_case}' not found")
+        raise HTTPException(status_code=503, detail="ARE skill registry is unavailable")
 
     await registry.update_mcp_servers(body.servers)
     runtime_config: RuntimeConfigService = request.app.state.runtime_config_service
     await runtime_config.record_version(
-        use_case,
+        PRIMARY_USE_CASE,
         action="mcp.update",
         actor=get_admin_actor(request),
     )
 
-    logger.info("MCP config updated for use-case '%s': %d servers", use_case, len(body.servers))
+    logger.info("ARE MCP config updated: %d servers", len(body.servers))
     return MCPConfigResponse(
         servers=body.servers,
         sources=getattr(registry, "mcp_sources", {}),

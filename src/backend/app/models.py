@@ -4,16 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
-
-from app.constants import PRIMARY_USE_CASE
-
-
-def _validate_primary_use_case(value: str) -> str:
-    if value != PRIMARY_USE_CASE:
-        raise ValueError(f"Only the '{PRIMARY_USE_CASE}' use-case is supported")
-    return value
-
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 # ─── Enums ───
 
@@ -34,10 +25,9 @@ class ConversationStatus(str, Enum):
 
 
 class ConversationCreate(BaseModel):
-    title: str = "New Conversation"
-    useCase: str = PRIMARY_USE_CASE
+    model_config = ConfigDict(extra="forbid")
 
-    _single_use_case = field_validator("useCase")(_validate_primary_use_case)
+    title: str = "New Conversation"
 
 
 class ConversationUpdate(BaseModel):
@@ -48,7 +38,6 @@ class Conversation(BaseModel):
     id: str
     userId: str
     title: str
-    useCase: str = PRIMARY_USE_CASE
     status: ConversationStatus = ConversationStatus.ACTIVE
     createdAt: datetime
     updatedAt: datetime
@@ -105,9 +94,10 @@ Attachment = FileAttachment | DirectoryAttachment | SelectionAttachment
 
 
 class AgentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     conversationId: str
     message: str
-    useCase: str = PRIMARY_USE_CASE
     attachments: list[Attachment] = Field(default_factory=list)
     # Per-MCP-server user access tokens, keyed by MCP server name
     # (e.g. {"graph-obo": "<entra access token>"}). Sent by the frontend after
@@ -115,8 +105,6 @@ class AgentRequest(BaseModel):
     # token as the Authorization header on the matching remote MCP server so the
     # tool runs On-Behalf-Of the signed-in user. Never logged in clear text.
     mcpAccessTokens: dict[str, str] = Field(default_factory=dict)
-
-    _single_use_case = field_validator("useCase")(_validate_primary_use_case)
 
 
 class ToolCallEvent(BaseModel):
@@ -216,14 +204,13 @@ class AgentCancelRequest(BaseModel):
 class CopilotStudioRequest(BaseModel):
     """Inbound message from Copilot Studio / Teams."""
 
+    model_config = ConfigDict(extra="forbid")
+
     message: str = Field(..., description="User message text")
     conversationId: str = Field(
         default="",
         description="Optional conversation ID to continue a multi-turn session. Leave empty to start a new conversation.",
     )
-    useCase: str = Field(default=PRIMARY_USE_CASE, description="Use-case identifier")
-
-    _single_use_case = field_validator("useCase")(_validate_primary_use_case)
 
 
 class CopilotStudioResponse(BaseModel):
@@ -304,7 +291,6 @@ class RuntimeConfigVersion(BaseModel):
     """Immutable runtime configuration version metadata."""
 
     version: str
-    useCase: str
     createdAt: datetime
     actor: str
     action: str
@@ -320,26 +306,6 @@ class SkillList(BaseModel):
     """List of skills."""
 
     skills: list[SkillResponse]
-
-
-# ─── System Prompt Admin ───
-
-
-class UseCaseInfo(BaseModel):
-    """Use-case metadata as returned by the API."""
-
-    name: str
-    displayName: str = ""
-    description: str = ""
-    skillCount: int = 0
-    sampleQuestions: list[str] = Field(default_factory=list)
-    curated: bool = False
-
-
-class UseCaseList(BaseModel):
-    """List of available use-cases."""
-
-    useCases: list[UseCaseInfo]
 
 
 class SystemPromptResponse(BaseModel):
@@ -497,7 +463,7 @@ class EvalRun(BaseModel):
     """An eval run record."""
 
     run_id: str
-    use_case: str
+    agent_id: str = Field(validation_alias=AliasChoices("agent_id", "use_case"))
     mode: EvalMode
     status: EvalRunStatus
     scenarios: list[str] = Field(default_factory=list)
@@ -549,7 +515,6 @@ class TraceOperation(BaseModel):
     timestamp: str = ""
     total_duration_ms: float = 0
     span_count: int = 0
-    use_case: str = ""
     conversation_id: str = ""
     eval_run_id: str = ""
     spans: list[TraceSpan] = Field(default_factory=list)

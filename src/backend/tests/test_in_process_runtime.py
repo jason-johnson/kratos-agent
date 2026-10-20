@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.constants import PRIMARY_USE_CASE
 from app.models import (
     AgentCancelRequest,
     AgentRequest,
@@ -84,7 +85,7 @@ async def test_chat_streams_in_process_events_and_persists_messages():
 
     assert any(chunk["event"] == "content" and "Evidence found." in chunk["data"] for chunk in chunks)
     assert any(chunk["event"] == "done" for chunk in chunks)
-    assert agent.use_cases == [("conv-1", body.useCase)]
+    assert agent.use_cases == [("conv-1", PRIMARY_USE_CASE)]
     assert agent.tokens == [("conv-1", {"graph-obo": "secret-token"})]
     assert agent.run_kwargs["conversation_id"] == "conv-1"
     assert cosmos.upsert_message.await_count == 2

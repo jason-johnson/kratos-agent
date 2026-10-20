@@ -1,13 +1,13 @@
-"""Evals API — per-use-case scenario CRUD + run management.
+"""ARE evaluation scenario CRUD and run management.
 
 Endpoints:
-    GET    /api/use-cases/{use_case}/evals/scenarios
-    POST   /api/use-cases/{use_case}/evals/scenarios/generate
-    PUT    /api/use-cases/{use_case}/evals/scenarios/{name}
-    DELETE /api/use-cases/{use_case}/evals/scenarios/{name}
-    POST   /api/use-cases/{use_case}/evals/run
-    GET    /api/use-cases/{use_case}/evals/runs
-    GET    /api/use-cases/{use_case}/evals/runs/{run_id}
+    GET    /api/evals/scenarios
+    POST   /api/evals/scenarios/generate
+    PUT    /api/evals/scenarios/{name}
+    DELETE /api/evals/scenarios/{name}
+    POST   /api/evals/run
+    GET    /api/evals/runs
+    GET    /api/evals/runs/{run_id}
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth import require_authenticated_user
+from app.constants import PRIMARY_USE_CASE
 from app.models import (
     EvalRun,
     EvalRunList,
@@ -48,70 +49,58 @@ def _get_service(request: Request) -> EvalService:
     return svc
 
 
-def _ensure_use_case(request: Request, use_case: str) -> None:
-    registries = getattr(request.app.state, "registries", {})
-    if use_case not in registries:
-        raise HTTPException(status_code=404, detail=f"Use-case '{use_case}' not found")
-
-
 # ── Scenarios ────────────────────────────────────────────────────────────────
 
 
-@router.get("/{use_case}/evals/scenarios", response_model=EvalScenarioList)
-async def list_scenarios(use_case: str, request: Request) -> EvalScenarioList:
-    _ensure_use_case(request, use_case)
+@router.get("/scenarios", response_model=EvalScenarioList)
+async def list_scenarios(request: Request) -> EvalScenarioList:
     storage = _get_storage(request)
-    scenarios = await storage.list_scenarios(use_case)
+    scenarios = await storage.list_scenarios(PRIMARY_USE_CASE)
     return EvalScenarioList(scenarios=scenarios)
 
 
-@router.post("/{use_case}/evals/scenarios/generate", response_model=GenerateScenariosResponse)
+@router.post("/scenarios/generate", response_model=GenerateScenariosResponse)
 async def generate_scenarios(
-    use_case: str,
     body: GenerateScenariosRequest,
     request: Request,
 ) -> GenerateScenariosResponse:
-    _ensure_use_case(request, use_case)
     storage = _get_storage(request)
     service = _get_service(request)
     try:
         scenarios = await service.generate_scenarios(
-            use_case=use_case,
+            use_case=PRIMARY_USE_CASE,
             count=body.count,
             instructions=body.instructions,
         )
     except Exception as exc:
-        logger.exception("Scenario generation failed for %s", use_case)
+        logger.exception("ARE scenario generation failed")
         raise HTTPException(status_code=502, detail=f"Scenario generation failed: {exc}") from exc
 
     if body.persist:
         for s in scenarios:
-            await storage.upsert_scenario(use_case, s)
+            await storage.upsert_scenario(PRIMARY_USE_CASE, s)
     return GenerateScenariosResponse(scenarios=scenarios, persisted=body.persist)
 
 
-@router.put("/{use_case}/evals/scenarios/{name}", response_model=EvalScenario)
+@router.put("/scenarios/{name}", response_model=EvalScenario)
 async def upsert_scenario(
-    use_case: str,
     name: str,
     scenario: EvalScenario,
     request: Request,
 ) -> EvalScenario:
-    _ensure_use_case(request, use_case)
     # Allow renaming if the path name doesn't match — prefer body name
     # but reject obvious mismatches that suggest a client bug.
     if scenario.name != name and not scenario.name:
         scenario = scenario.model_copy(update={"name": name})
     storage = _get_storage(request)
-    await storage.upsert_scenario(use_case, scenario)
+    await storage.upsert_scenario(PRIMARY_USE_CASE, scenario)
     return scenario
 
 
-@router.delete("/{use_case}/evals/scenarios/{name}")
-async def delete_scenario(use_case: str, name: str, request: Request) -> dict[str, bool]:
-    _ensure_use_case(request, use_case)
+@router.delete("/scenarios/{name}")
+async def delete_scenario(name: str, request: Request) -> dict[str, bool]:
     storage = _get_storage(request)
-    removed = await storage.delete_scenario(use_case, name)
+    removed = await storage.delete_scenario(PRIMARY_USE_CASE, name)
     if not removed:
         raise HTTPException(status_code=404, detail=f"Scenario '{name}' not found")
     return {"deleted": True}
@@ -120,18 +109,16 @@ async def delete_scenario(use_case: str, name: str, request: Request) -> dict[st
 # ── Runs ─────────────────────────────────────────────────────────────────────
 
 
-@router.post("/{use_case}/evals/run", response_model=EvalRun)
+@router.post("/run", response_model=EvalRun)
 async def start_run(
-    use_case: str,
     body: EvalRunRequest,
     request: Request,
     user: dict = Depends(require_authenticated_user),
 ) -> EvalRun:
-    _ensure_use_case(request, use_case)
     service = _get_service(request)
     try:
         run = await service.start_run(
-            use_case=use_case,
+            use_case=PRIMARY_USE_CASE,
             mode=body.mode,
             scenario_names=body.scenarios or None,
             started_by=user.get("userId", "anonymous"),
@@ -139,24 +126,22 @@ async def start_run(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("Failed to start eval run for %s", use_case)
+        logger.exception("Failed to start ARE eval run")
         raise HTTPException(status_code=500, detail=f"Failed to start eval run: {exc}") from exc
     return run
 
 
-@router.get("/{use_case}/evals/runs", response_model=EvalRunList)
-async def list_runs(use_case: str, request: Request, limit: int = 50) -> EvalRunList:
-    _ensure_use_case(request, use_case)
+@router.get("/runs", response_model=EvalRunList)
+async def list_runs(request: Request, limit: int = 50) -> EvalRunList:
     service = _get_service(request)
-    runs = await service.list_runs(use_case, limit=limit)
+    runs = await service.list_runs(PRIMARY_USE_CASE, limit=limit)
     return EvalRunList(runs=runs)
 
 
-@router.get("/{use_case}/evals/runs/{run_id}", response_model=EvalRun)
-async def get_run(use_case: str, run_id: str, request: Request) -> EvalRun:
-    _ensure_use_case(request, use_case)
+@router.get("/runs/{run_id}", response_model=EvalRun)
+async def get_run(run_id: str, request: Request) -> EvalRun:
     service = _get_service(request)
-    run = await service.get_run(use_case, run_id)
+    run = await service.get_run(PRIMARY_USE_CASE, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
     return run

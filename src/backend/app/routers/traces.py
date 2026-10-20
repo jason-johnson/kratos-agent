@@ -12,6 +12,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.auth import require_authenticated_user
+from app.constants import PRIMARY_USE_CASE
 from app.models import TraceList, TraceOperation
 from app.services.traces_service import TracesService
 
@@ -30,7 +31,6 @@ def _get_service(request: Request) -> TracesService:
 @router.get("/operations", response_model=TraceList)
 async def list_operations(
     request: Request,
-    use_case: str | None = Query(default=None),
     conversation_id: str | None = Query(default=None),
     eval_run_id: str | None = Query(default=None),
     hours: int = Query(default=24, ge=1, le=720),
@@ -38,7 +38,7 @@ async def list_operations(
 ) -> TraceList:
     service = _get_service(request)
     return await service.fetch_operations(
-        use_case=use_case,
+        use_case=PRIMARY_USE_CASE,
         conversation_id=conversation_id,
         eval_run_id=eval_run_id,
         lookback_hours=hours,

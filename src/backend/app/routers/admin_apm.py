@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from app.auth import get_admin_actor, require_admin_user
+from app.constants import PRIMARY_USE_CASE
 from app.services.apm_service import ApmCommandResult, ApmDependency, ApmError, ApmMcpServer, ApmService
 from app.services.runtime_config_service import RuntimeConfigService
 from app.services.skill_registry import SkillRegistry
@@ -182,13 +183,13 @@ async def _build_command_response(
 
 
 @router.get("", response_model=ApmStatusResponse)
-async def get_apm_status(use_case: str, request: Request) -> ApmStatusResponse:
-    """Return the APM dependency snapshot and CLI version for a use-case."""
+async def get_apm_status(request: Request) -> ApmStatusResponse:
+    """Return the ARE APM dependency snapshot and CLI version."""
     apm_service = _get_apm_service(request)
     try:
-        deps = await apm_service.list_dependencies(use_case)
-        skill_dirs = await apm_service.list_materialised_skill_dirs(use_case)
-        mcp_servers = await apm_service.list_mcp_servers(use_case)
+        deps = await apm_service.list_dependencies(PRIMARY_USE_CASE)
+        skill_dirs = await apm_service.list_materialised_skill_dirs(PRIMARY_USE_CASE)
+        mcp_servers = await apm_service.list_mcp_servers(PRIMARY_USE_CASE)
     except ApmError as exc:
         raise _apm_error_to_http(exc) from exc
 
@@ -207,15 +208,14 @@ async def get_apm_status(use_case: str, request: Request) -> ApmStatusResponse:
 
 @router.post("/install", response_model=ApmCommandResponse)
 async def install_package(
-    use_case: str,
     body: InstallRequest,
     request: Request,
 ) -> ApmCommandResponse:
-    """Install (or add) an APM package for a use-case and refresh the registry."""
+    """Install an APM package for the ARE and refresh the registry."""
     apm_service = _get_apm_service(request)
     try:
         result = await apm_service.install(
-            use_case,
+            PRIMARY_USE_CASE,
             package=body.package,
             ref=body.ref,
             dev=body.dev,
@@ -223,82 +223,78 @@ async def install_package(
     except ApmError as exc:
         raise _apm_error_to_http(exc) from exc
 
-    await _reload_use_case(request, use_case)
-    logger.info("APM install %s for use-case '%s' succeeded", body.package, use_case)
-    return await _build_command_response(apm_service, use_case, result)
+    await _reload_use_case(request, PRIMARY_USE_CASE)
+    logger.info("ARE APM install %s succeeded", body.package)
+    return await _build_command_response(apm_service, PRIMARY_USE_CASE, result)
 
 
 @router.delete("/mcp/{name}", response_model=ApmCommandResponse)
 async def uninstall_mcp_server(
-    use_case: str,
     name: str,
     request: Request,
 ) -> ApmCommandResponse:
     """Remove an MCP server from ``apm.yml`` and refresh the registry."""
     apm_service = _get_apm_service(request)
     try:
-        result = await apm_service.uninstall_mcp_server(use_case, name)
+        result = await apm_service.uninstall_mcp_server(PRIMARY_USE_CASE, name)
     except ApmError as exc:
         raise _apm_error_to_http(exc) from exc
 
-    await _reload_use_case(request, use_case)
-    logger.info("APM MCP uninstall '%s' for use-case '%s' succeeded", name, use_case)
-    return await _build_command_response(apm_service, use_case, result)
+    await _reload_use_case(request, PRIMARY_USE_CASE)
+    logger.info("ARE APM MCP uninstall '%s' succeeded", name)
+    return await _build_command_response(apm_service, PRIMARY_USE_CASE, result)
 
 
 @router.delete("/{package:path}", response_model=ApmCommandResponse)
 async def uninstall_package(
-    use_case: str,
     package: str,
     request: Request,
 ) -> ApmCommandResponse:
     """Uninstall an APM package (``owner/repo``) and refresh the registry."""
     apm_service = _get_apm_service(request)
     try:
-        result = await apm_service.uninstall(use_case, package)
+        result = await apm_service.uninstall(PRIMARY_USE_CASE, package)
     except ApmError as exc:
         raise _apm_error_to_http(exc) from exc
 
-    await _reload_use_case(request, use_case)
-    logger.info("APM uninstall %s for use-case '%s' succeeded", package, use_case)
-    return await _build_command_response(apm_service, use_case, result)
+    await _reload_use_case(request, PRIMARY_USE_CASE)
+    logger.info("ARE APM uninstall %s succeeded", package)
+    return await _build_command_response(apm_service, PRIMARY_USE_CASE, result)
 
 
 @router.post("/sync", response_model=ApmCommandResponse)
-async def sync_packages(use_case: str, request: Request) -> ApmCommandResponse:
+async def sync_packages(request: Request) -> ApmCommandResponse:
     """Re-materialise declared APM dependencies and refresh the registry."""
     apm_service = _get_apm_service(request)
     try:
-        result = await apm_service.sync(use_case)
+        result = await apm_service.sync(PRIMARY_USE_CASE)
     except ApmError as exc:
         raise _apm_error_to_http(exc) from exc
 
-    await _reload_use_case(request, use_case)
-    logger.info("APM sync for use-case '%s' succeeded", use_case)
-    return await _build_command_response(apm_service, use_case, result)
+    await _reload_use_case(request, PRIMARY_USE_CASE)
+    logger.info("ARE APM sync succeeded")
+    return await _build_command_response(apm_service, PRIMARY_USE_CASE, result)
 
 
 @router.post("/update", response_model=ApmCommandResponse)
 async def update_packages(
-    use_case: str,
     body: UpdateRequest,
     request: Request,
 ) -> ApmCommandResponse:
     """Update one or all APM packages for a use-case and refresh the registry."""
     apm_service = _get_apm_service(request)
     try:
-        result = await apm_service.update(use_case, package=body.package)
+        result = await apm_service.update(PRIMARY_USE_CASE, package=body.package)
     except ApmError as exc:
         raise _apm_error_to_http(exc) from exc
 
-    await _reload_use_case(request, use_case)
-    logger.info("APM update %s for use-case '%s' succeeded", body.package or "<all>", use_case)
-    return await _build_command_response(apm_service, use_case, result)
+    await _reload_use_case(request, PRIMARY_USE_CASE)
+    logger.info("ARE APM update %s succeeded", body.package or "<all>")
+    return await _build_command_response(apm_service, PRIMARY_USE_CASE, result)
 
 
 @router.post("/mcp", response_model=ApmCommandResponse)
 async def install_mcp_server(
-    use_case: str,
     body: InstallMcpRequest,
     request: Request,
 ) -> ApmCommandResponse:
@@ -306,7 +302,7 @@ async def install_mcp_server(
     apm_service = _get_apm_service(request)
     try:
         result = await apm_service.install_mcp_server(
-            use_case,
+            PRIMARY_USE_CASE,
             name=body.name,
             transport=body.transport,
             command=body.command,
@@ -317,6 +313,6 @@ async def install_mcp_server(
     except ApmError as exc:
         raise _apm_error_to_http(exc) from exc
 
-    await _reload_use_case(request, use_case)
-    logger.info("APM MCP install '%s' for use-case '%s' succeeded", body.name, use_case)
-    return await _build_command_response(apm_service, use_case, result)
+    await _reload_use_case(request, PRIMARY_USE_CASE)
+    logger.info("ARE APM MCP install '%s' succeeded", body.name)
+    return await _build_command_response(apm_service, PRIMARY_USE_CASE, result)

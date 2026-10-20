@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.constants import PRIMARY_USE_CASE
 from app.models import (
     Conversation,
     ConversationCreate,
@@ -37,19 +38,18 @@ async def create_conversation(body: ConversationCreate, request: Request) -> Con
     if blob_service and blob_service.is_available:
         try:
             registry = SkillRegistry()
-            await registry.load(body.useCase, blob_service, apm_service=apm_service)
+            await registry.load(PRIMARY_USE_CASE, blob_service, apm_service=apm_service)
             registries: dict[str, SkillRegistry] = request.app.state.registries
-            registries[body.useCase] = registry
-            logger.info("Re-synced use-case '%s' from blob for new conversation", body.useCase)
+            registries[PRIMARY_USE_CASE] = registry
+            logger.info("Re-synced ARE configuration from blob")
         except Exception:
-            logger.exception("Failed to re-sync use-case '%s' from blob — using cached version", body.useCase)
+            logger.exception("Failed to re-sync ARE configuration from blob — using cached version")
 
     now = datetime.now(UTC)
     conversation = Conversation(
         id=str(uuid.uuid4()),
         userId="default-user",  # Replaced by Entra ID user in production
         title=body.title,
-        useCase=body.useCase,
         status=ConversationStatus.ACTIVE,
         createdAt=now,
         updatedAt=now,

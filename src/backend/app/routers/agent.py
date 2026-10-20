@@ -13,6 +13,7 @@ from opentelemetry import context as otel_context
 from opentelemetry import trace
 from sse_starlette.sse import EventSourceResponse
 
+from app.constants import PRIMARY_USE_CASE
 from app.models import (
     AgentCancelRequest,
     AgentRequest,
@@ -43,7 +44,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
     eval_run_id = request.headers.get("x-kratos-eval-run-id") or ""
     request.state.eval_run_id = eval_run_id
     span = trace.get_current_span()
-    span.set_attribute("kratos.use_case", body.useCase)
+    span.set_attribute("kratos.use_case", PRIMARY_USE_CASE)
     span.set_attribute("kratos.conversation_id", body.conversationId)
     if eval_run_id:
         span.set_attribute("kratos.eval_run_id", eval_run_id)
@@ -80,7 +81,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                 )
             )
 
-            copilot_agent.set_conversation_use_case(body.conversationId, body.useCase)
+            copilot_agent.set_conversation_use_case(body.conversationId, PRIMARY_USE_CASE)
             copilot_agent.set_conversation_mcp_tokens(body.conversationId, body.mcpAccessTokens)
             attachments = [attachment.model_dump() for attachment in body.attachments]
 
@@ -88,7 +89,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                 message=body.message,
                 conversation_id=body.conversationId,
                 attachments=attachments,
-                use_case=body.useCase,
+                use_case=PRIMARY_USE_CASE,
                 eval_run_id=eval_run_id or None,
             ):
                 event_data = event.model_dump()
@@ -140,7 +141,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
             )
 
             try:
-                registry = getattr(app.state, "registries", {}).get(body.useCase)
+                registry = getattr(app.state, "registries", {}).get(PRIMARY_USE_CASE)
                 skills = registry.get_enabled_skills() if registry else []
                 follow_ups = await generate_follow_ups(
                     body.message,
