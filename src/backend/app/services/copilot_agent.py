@@ -14,7 +14,7 @@ import os
 import re
 import time
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from importlib.metadata import version
 from typing import TYPE_CHECKING
 
@@ -208,6 +208,7 @@ class CopilotAgent:
         self._first_token_time: dict[str, float] = {}
         self._model_response_start: dict[str, float] = {}
         self._response_parts: dict[str, list[str]] = {}
+        self._active_runs: set[str] = set()
 
     @property
     def system_prompt(self) -> str:
@@ -228,9 +229,9 @@ class CopilotAgent:
         self._queues.clear()
         logger.info("System prompt updated — all sessions reset")
 
-    def set_registries(self, registries: dict[str, object]) -> None:
+    def set_registries(self, registries: Mapping[str, object]) -> None:
         """Inject the use-case skill registries."""
-        self._registries = registries
+        self._registries = dict(registries)
         self._queues: dict[str, asyncio.Queue] = {}
         self._tool_counters: dict[str, int] = {}
         self._registered_handlers: set[str] = set()
@@ -762,6 +763,16 @@ class CopilotAgent:
             return True
         return False
 
+    def cancel(self, conversation_id: str) -> bool:
+        """Abort the active SDK turn for a conversation."""
+        if conversation_id not in self._active_runs:
+            return False
+        session = self._sessions.get(conversation_id)
+        if session is None:
+            return False
+        session.abort()
+        return True
+
     def get_sdk_session_id(self, conversation_id: str) -> str | None:
         """Return the SDK session ID for a conversation, if one is cached."""
         session = self._sessions.get(conversation_id)
@@ -883,7 +894,10 @@ class CopilotAgent:
         sdk_session_id: str | None = None,
         use_case: str = "",
         eval_run_id: str | None = None,
-    ) -> AsyncGenerator[ThoughtEvent | ToolCallEvent | ContentEvent | ErrorEvent | UserInputRequestEvent, None]:
+    ) -> AsyncGenerator[
+        ThoughtEvent | ToolCallEvent | ContentEvent | UsageEvent | ErrorEvent | UserInputRequestEvent,
+        None,
+    ]:
         """Send a message and stream SDK events as typed SSE events."""
 
         # Propagate kratos context into tool spans via ContextVars
@@ -936,6 +950,7 @@ class CopilotAgent:
 
             try:
                 session = await self._get_or_create_session(conversation_id, sdk_session_id=sdk_session_id)
+                self._active_runs.add(conversation_id)
                 logger.info("Sending prompt for conversation=%s message=%r", conversation_id, message)
                 self._send_time = time.monotonic()
 
@@ -1337,6 +1352,7 @@ class CopilotAgent:
                 if self._cosmos_service:
                     await self._cosmos_service.delete_session_mapping(conversation_id)
             finally:
+                self._active_runs.discard(conversation_id)
                 self._queues.pop(conversation_id, None)
 
     def get_run_stats(self, conversation_id: str) -> dict:

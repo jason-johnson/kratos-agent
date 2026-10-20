@@ -32,8 +32,8 @@ from app.models import (
     FoundryEvalSummary,
     ScenarioResult,
 )
+from app.services.copilot_agent import CopilotAgent
 from app.services.eval_storage import EvalStorage
-from app.services.foundry_agent_proxy import FoundryAgentProxy
 from app.services.skill_registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
@@ -339,17 +339,17 @@ class EvalService:
         settings: Settings,
         storage: EvalStorage,
         registries: dict[str, SkillRegistry],
-        foundry_proxy: FoundryAgentProxy | None = None,
+        copilot_agent: CopilotAgent | None = None,
     ) -> None:
         self._settings = settings
         self._storage = storage
         self._registries = registries
-        self._foundry_proxy = foundry_proxy
+        self._copilot_agent = copilot_agent
         self._tasks: dict[tuple[str, str], asyncio.Task[None]] = {}
 
-    # ── Hosted-agent invocation helper (uses Invocations protocol via FoundryAgentProxy) ──
+    # ── In-process agent invocation helper ────────────────────────────────────
 
-    async def _invoke_hosted_agent(
+    async def _invoke_agent(
         self,
         message: str,
         conversation_id: str,
@@ -357,13 +357,14 @@ class EvalService:
         run_id: str | None = None,
         timeout: float = _REQUEST_TIMEOUT,
     ) -> tuple[str, list[dict[str, Any]], str | None]:
-        """Invoke the hosted agent once and aggregate the SSE stream.
+        """Invoke the in-process agent once and aggregate its event stream.
 
         Returns ``(response_text, tool_calls, error_message)``. ``error_message``
         is non-empty when the agent stream emitted an error event.
         """
-        if self._foundry_proxy is None:
-            raise RuntimeError("EvalService: foundry_proxy is not configured — cannot invoke hosted agent.")
+        agent = self._copilot_agent
+        if agent is None:
+            raise RuntimeError("EvalService: copilot_agent is not configured")
 
         chunks: list[str] = []
         tool_calls: list[dict[str, Any]] = []
@@ -371,14 +372,15 @@ class EvalService:
 
         async def _drain() -> None:
             nonlocal error_msg
-            async for ev in self._foundry_proxy.invoke(
+            agent.set_conversation_use_case(conversation_id, use_case)
+            async for event in agent.run(
                 message=message,
                 conversation_id=conversation_id,
                 use_case=use_case,
                 eval_run_id=run_id,
             ):
-                etype = ev.get("event") or ev.get("type") or ""
-                data = ev.get("data") or {}
+                etype = event.type
+                data = event.model_dump()
                 if etype == "content":
                     txt = data.get("content") or data.get("text") or ""
                     if txt:
@@ -391,7 +393,7 @@ class EvalService:
         try:
             await asyncio.wait_for(_drain(), timeout=timeout)
         except TimeoutError:
-            error_msg = error_msg or f"Hosted agent invocation timed out after {timeout}s"
+            error_msg = error_msg or f"Agent invocation timed out after {timeout}s"
 
         return "".join(chunks), tool_calls, error_msg
 
@@ -569,7 +571,7 @@ class EvalService:
         backoff = _WARMUP_BACKOFF_S
         for attempt in range(1, _WARMUP_ATTEMPTS + 1):
             try:
-                wtext, _, werr = await self._invoke_hosted_agent(
+                wtext, _, werr = await self._invoke_agent(
                     message="ping",
                     conversation_id=f"warmup-{run_id}-{attempt}",
                     use_case=use_case,
@@ -596,7 +598,7 @@ class EvalService:
         for idx, scenario in enumerate(scenarios_to_run):
             t_start = time.monotonic()
             try:
-                resp_text, raw_tool_calls, err = await self._invoke_hosted_agent(
+                resp_text, raw_tool_calls, err = await self._invoke_agent(
                     message=scenario.input_message,
                     conversation_id=f"eval-{run_id}-{scenario.name}",
                     use_case=use_case,
@@ -606,7 +608,7 @@ class EvalService:
                 # Retry once on empty response (and no explicit error)
                 if not resp_text and not err:
                     await asyncio.sleep(3)
-                    resp_text, raw_tool_calls, err = await self._invoke_hosted_agent(
+                    resp_text, raw_tool_calls, err = await self._invoke_agent(
                         message=scenario.input_message,
                         conversation_id=f"eval-{run_id}-{scenario.name}-retry",
                         use_case=use_case,

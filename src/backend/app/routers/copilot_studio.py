@@ -36,7 +36,7 @@ async def copilot_studio_chat(
     If ``conversationId`` is omitted a new conversation is created automatically.
     """
     cosmos = request.app.state.cosmos_service
-    foundry_proxy = request.app.state.foundry_proxy
+    copilot_agent = request.app.state.copilot_agent
 
     # Resolve or create conversation
     conversation_id = body.conversationId
@@ -64,19 +64,18 @@ async def copilot_studio_chat(
     )
     await cosmos.upsert_message(user_msg)
 
-    # Invoke hosted agent and collect the full reply
+    # Invoke the in-process agent and collect the full reply
     parts: list[str] = []
-    async for event_dict in foundry_proxy.invoke(
+    copilot_agent.set_conversation_use_case(conversation_id, body.useCase)
+    async for event in copilot_agent.run(
         message=body.message,
         conversation_id=conversation_id,
         use_case=body.useCase,
     ):
-        event_name = event_dict.get("event")
-        event_data = event_dict.get("data", {})
-        if event_name == "content":
-            parts.append(event_data.get("content", ""))
-        elif event_name == "error":
-            logger.error("Agent error (copilot-studio): %s", event_data.get("message", ""))
+        if event.type == "content":
+            parts.append(event.content)
+        elif event.type == "error":
+            logger.error("Agent error (copilot-studio): %s", event.message)
 
     full_reply = "".join(parts)
 

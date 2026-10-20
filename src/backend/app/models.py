@@ -204,6 +204,12 @@ class UserInputResponseRequest(BaseModel):
     answer: str
 
 
+class AgentCancelRequest(BaseModel):
+    """Cancel the active agent turn for a conversation."""
+
+    conversationId: str
+
+
 # ─── Copilot Studio (synchronous bridge) ───
 
 

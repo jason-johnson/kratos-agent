@@ -29,6 +29,18 @@ def test_copilot_agent_init(copilot_agent, settings):
     assert copilot_agent._sessions == {}
 
 
+def test_cancel_aborts_only_active_turn(copilot_agent):
+    session = MagicMock()
+    copilot_agent._sessions["active"] = session
+    copilot_agent._sessions["idle"] = MagicMock()
+    copilot_agent._active_runs.add("active")
+
+    assert copilot_agent.cancel("active") is True
+    assert copilot_agent.cancel("idle") is False
+    assert copilot_agent.cancel("missing") is False
+    session.abort.assert_called_once_with()
+
+
 @pytest.mark.asyncio
 async def test_copilot_agent_start_stop(settings):
     """Test CopilotClient start and stop lifecycle."""
