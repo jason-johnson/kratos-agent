@@ -27,17 +27,19 @@ accept, or invent a subscription ID, resource ID, workspace ID, or arbitrary KQL
 2. Call `app_insights_investigation`.
 3. Inspect every query receipt. A failed or partial query is an evidence gap, not
    an empty result.
-4. Correlate requests, dependencies, exceptions, traces, and change events by
-   timestamps and operation IDs when present.
-5. Assess the hypothesis as:
+4. Correlate requests, dependencies, exceptions, traces, application change
+   events, and `AZURE-ACTIVITY` deployment/configuration writes by timestamps
+   and operation/correlation IDs when present.
+5. Inspect `freshness`. Stale or empty evidence must be named as a gap.
+6. Assess the hypothesis as:
    - **Supported**
    - **Contradicted**
    - **Mixed**
    - **Untestable with available telemetry**
-6. Cite `evidenceId` and `queryId` for each material observation.
-7. Separate observed facts from inference. Temporal proximity does not establish
+7. Cite `evidenceId` and `queryId` for each material observation.
+8. Separate observed facts from inference. Temporal proximity does not establish
    causation.
-8. Recommend the smallest read-only next checks that would reduce uncertainty.
+9. Recommend the smallest read-only next checks that would reduce uncertainty.
 
 ## Required response
 
@@ -70,4 +72,3 @@ accept, or invent a subscription ID, resource ID, workspace ID, or arbitrary KQL
 ```
 
 Never modify ServiceNow, Azure, or AKS during this workflow.
-

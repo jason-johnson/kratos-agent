@@ -6,7 +6,7 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from azure.identity import DefaultAzureCredential
@@ -63,6 +63,7 @@ class AppInsightsInvestigationService:
     def __init__(self, settings: Settings, client: Any | None = None) -> None:
         self._resource_id = settings.application_insights_resource_id.strip()
         self._workspace_id = settings.application_insights_workspace_id.strip()
+        self._query_timeout_seconds = settings.integration_timeout_seconds
         self._credential = None
         if client is None:
             self._credential = DefaultAzureCredential()
@@ -82,9 +83,16 @@ class AppInsightsInvestigationService:
                 ],
             }
 
-        queries = build_investigation_queries(params)
+        include_azure_activity = bool(self._workspace_id)
+        queries = build_investigation_queries(params, include_azure_activity=include_azure_activity)
         results = await asyncio.gather(
-            *(asyncio.to_thread(self._run_query, target, query.kql, params.lookback_hours) for query in queries),
+            *(
+                asyncio.wait_for(
+                    asyncio.to_thread(self._run_query, target, query, params.lookback_hours),
+                    timeout=self._query_timeout_seconds,
+                )
+                for query in queries
+            ),
             return_exceptions=True,
         )
 
@@ -92,6 +100,12 @@ class AppInsightsInvestigationService:
         query_receipts: list[dict[str, Any]] = []
         failed_queries: list[dict[str, str]] = []
         partial = False
+        coverage_gaps: list[str] = []
+        if not include_azure_activity:
+            coverage_gaps.append(
+                "APPLICATION_INSIGHTS_WORKSPACE_ID is not configured; Azure Activity deployment/change "
+                "correlation was not queried"
+            )
 
         for query, result in zip(queries, results, strict=True):
             receipt = {
@@ -103,7 +117,7 @@ class AppInsightsInvestigationService:
                 "kql": query.kql,
             }
             if isinstance(result, BaseException):
-                message = str(result)
+                message = _query_error(result, self._query_timeout_seconds)
                 failed_queries.append({"queryId": query.query_id, "error": message})
                 query_receipts.append({**receipt, "status": "failed", "rowCount": 0})
                 logger.warning("Application Insights query %s failed: %s", query.query_id, message)
@@ -131,11 +145,13 @@ class AppInsightsInvestigationService:
 
         if failed_queries and not evidence:
             status = "error"
-        elif failed_queries or partial:
+        elif failed_queries or partial or coverage_gaps:
             status = "partial"
         else:
             status = "success"
 
+        retrieved_at = datetime.now(UTC)
+        freshness = _evidence_freshness(evidence, retrieved_at)
         return {
             "status": status,
             "target": "configured-application-insights-resource",
@@ -146,6 +162,9 @@ class AppInsightsInvestigationService:
             "evidence": evidence,
             "queries": query_receipts,
             "failedQueries": failed_queries,
+            "coverageGaps": coverage_gaps,
+            "retrievedAt": retrieved_at.isoformat(),
+            "freshness": freshness,
             "guidance": (
                 "Treat evidence rows as observations, not conclusions. Cite evidenceId and queryId, "
                 "and report contradictory evidence, unknowns, and failed or partial queries."
@@ -157,17 +176,27 @@ class AppInsightsInvestigationService:
         if self._credential is not None:
             await asyncio.to_thread(self._credential.close)
 
-    def _run_query(self, target: str, kql: str, lookback_hours: int) -> Any:
+    def _run_query(self, target: str, query: InvestigationQuery, lookback_hours: int) -> Any:
         timespan = timedelta(hours=lookback_hours)
+        if query.table == "AzureActivity":
+            return self._client.query_workspace(
+                workspace_id=self._workspace_id,
+                query=query.kql,
+                timespan=timespan,
+            )
         if target.startswith("/"):
             try:
-                return self._client.query_resource(resource_id=target, query=kql, timespan=timespan)
+                return self._client.query_resource(resource_id=target, query=query.kql, timespan=timespan)
             except TypeError:
-                return self._client.query_resource(resource_uri=target, query=kql, timespan=timespan)
-        return self._client.query_workspace(workspace_id=target, query=kql, timespan=timespan)
+                return self._client.query_resource(resource_uri=target, query=query.kql, timespan=timespan)
+        return self._client.query_workspace(workspace_id=target, query=query.kql, timespan=timespan)
 
 
-def build_investigation_queries(params: AppInsightsInvestigationParams) -> list[InvestigationQuery]:
+def build_investigation_queries(
+    params: AppInsightsInvestigationParams,
+    *,
+    include_azure_activity: bool = False,
+) -> list[InvestigationQuery]:
     """Build the fixed query set for a suspected-cause investigation."""
     service = _escape_kql_string(params.service_name.strip())
     cause_terms = _cause_terms(params.suspected_cause)
@@ -175,7 +204,7 @@ def build_investigation_queries(params: AppInsightsInvestigationParams) -> list[
     common_filter = f"| where isempty('{service}') or cloud_RoleName =~ '{service}'"
     take = params.max_rows_per_query
 
-    return [
+    queries = [
         InvestigationQuery(
             query_id="AI-REQUESTS",
             table="requests",
@@ -239,6 +268,27 @@ def build_investigation_queries(params: AppInsightsInvestigationParams) -> list[
 | take {take}""",
         ),
     ]
+    if include_azure_activity:
+        queries.append(
+            InvestigationQuery(
+                query_id="AZURE-ACTIVITY",
+                table="AzureActivity",
+                purpose="Azure control-plane deployments and configuration writes correlated to the service",
+                kql=f"""AzureActivity
+| where TimeGenerated > ago({params.lookback_hours}h)
+| where CategoryValue =~ 'Administrative'
+| where OperationNameValue endswith '/write'
+    or OperationNameValue endswith '/delete'
+    or OperationNameValue endswith '/action'
+| where ResourceId contains '{service}' or Properties_d has '{service}'
+| project timestamp=TimeGenerated, operation_Id=CorrelationId, operationName=OperationNameValue,
+    activityStatus=ActivityStatusValue, resourceName=tostring(split(ResourceId, '/')[-1]),
+    resourceType=ResourceProviderValue
+| order by timestamp desc
+| take {take}""",
+            )
+        )
+    return queries
 
 
 def _cause_terms(suspected_cause: str) -> list[str]:
@@ -273,3 +323,41 @@ def _table_rows(tables: list[Any]) -> list[dict[str, Any]]:
         for row in getattr(table, "rows", None) or []:
             rows.append(dict(zip(columns, row, strict=False)))
     return rows
+
+
+def _query_error(exc: BaseException, timeout_seconds: float) -> str:
+    if isinstance(exc, TimeoutError):
+        return f"Query timed out after {timeout_seconds:g} seconds"
+    status_code = getattr(exc, "status_code", None)
+    if status_code in {401, 403}:
+        return f"Query permission denied (HTTP {status_code})"
+    if status_code == 429:
+        return "Query rate-limited (HTTP 429)"
+    if status_code:
+        return f"Query failed (HTTP {status_code})"
+    return f"Query failed ({type(exc).__name__})"
+
+
+def _evidence_freshness(evidence: list[dict[str, Any]], retrieved_at: datetime) -> dict[str, Any]:
+    timestamps: list[datetime] = []
+    for item in evidence:
+        raw = item.get("data", {}).get("timestamp")
+        if not isinstance(raw, str):
+            continue
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        timestamps.append(parsed.astimezone(UTC))
+    if not timestamps:
+        return {"status": "empty", "latestEvidenceAt": None, "ageSeconds": None}
+    latest = max(timestamps)
+    age_seconds = max(0, int((retrieved_at - latest).total_seconds()))
+    return {
+        "status": "fresh" if age_seconds <= 900 else "stale",
+        "latestEvidenceAt": latest.isoformat(),
+        "ageSeconds": age_seconds,
+        "staleAfterSeconds": 900,
+    }

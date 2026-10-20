@@ -146,6 +146,28 @@ module logAnalytics './modules/log-analytics.bicep' = {
   }
 }
 
+resource subscriptionActivityLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: '${namePrefix}administrative-activity-${resourceToken}'
+  scope: subscription()
+  properties: {
+    workspaceId: logAnalytics.outputs.id
+    logs: [
+      {
+        category: 'Administrative'
+        enabled: true
+      }
+      {
+        category: 'ServiceHealth'
+        enabled: true
+      }
+      {
+        category: 'ResourceHealth'
+        enabled: true
+      }
+    ]
+  }
+}
+
 // ─── Application Insights ───
 module appInsights './modules/app-insights.bicep' = {
   name: 'app-insights'
@@ -259,6 +281,7 @@ module agentService './modules/agent-service.bicep' = {
     containerRegistryName: containerRegistry.outputs.name
     appInsightsConnectionString: appInsights.outputs.connectionString
     appInsightsResourceId: appInsights.outputs.id
+    appInsightsWorkspaceId: logAnalytics.outputs.customerId
     cosmosDbEndpoint: cosmosDb.outputs.endpoint
     keyVaultUri: keyVault.outputs.uri
     foundryEndpoint: aiFoundry.outputs.endpoint
@@ -368,6 +391,7 @@ module roleAssignments './modules/role-assignments.bicep' = {
     keyVaultName: keyVault.outputs.name
     storageAccountName: blobStorage.outputs.name
     appInsightsName: appInsights.outputs.name
+    logAnalyticsName: logAnalytics.outputs.name
     principalId: principalId
   }
 }
@@ -381,6 +405,7 @@ output AZURE_COSMOS_DB_ENDPOINT string = cosmosDb.outputs.endpoint
 output AZURE_KEY_VAULT_URI string = keyVault.outputs.uri
 output AZURE_APP_INSIGHTS_CONNECTION_STRING string = appInsights.outputs.connectionString
 output APPLICATION_INSIGHTS_RESOURCE_ID string = appInsights.outputs.id
+output APPLICATION_INSIGHTS_WORKSPACE_ID string = logAnalytics.outputs.customerId
 output AZURE_STATIC_WEB_APP_URL string = staticWebApp.outputs.url
 output AGENT_SERVICE_DIRECT_URL string = agentService.outputs.url
 output AGENT_SERVICE_URL string = agentService.outputs.url

@@ -114,10 +114,12 @@ async def test_investigation_uses_only_configured_resource_and_returns_provenanc
         )
     )
 
-    assert result["status"] == "success"
+    assert result["status"] == "partial"
     assert result["readOnly"] is True
     assert result["target"] == "configured-application-insights-resource"
     assert len(result["queries"]) == 5
+    assert result["coverageGaps"]
+    assert result["freshness"]["status"] == "stale"
     assert len(result["evidence"]) == 4
     assert {item["queryId"] for item in result["evidence"]} == {
         "AI-REQUESTS",
@@ -141,6 +143,7 @@ async def test_investigation_reports_partial_failures_without_success_fallback()
             "exceptions": RuntimeError("exceptions query denied"),
             "traces": RuntimeError("traces query denied"),
             "customEvents": RuntimeError("changes query denied"),
+            "AzureActivity": RuntimeError("activity query denied"),
         }
     )
     service = AppInsightsInvestigationService(
@@ -156,8 +159,58 @@ async def test_investigation_reports_partial_failures_without_success_fallback()
     )
 
     assert result["status"] == "partial"
-    assert len(result["failedQueries"]) == 4
+    assert len(result["failedQueries"]) == 5
     assert result["queries"][1]["status"] == "failed"
+
+
+def test_workspace_configuration_adds_allowlisted_azure_activity_query():
+    params = AppInsightsInvestigationParams(
+        service_name="checkout-api",
+        suspected_cause="deployment regression",
+        lookback_hours=2,
+        max_rows_per_query=12,
+    )
+
+    query = build_investigation_queries(params, include_azure_activity=True)[-1]
+
+    assert query.query_id == "AZURE-ACTIVITY"
+    assert query.table == "AzureActivity"
+    assert "CategoryValue =~ 'Administrative'" in query.kql
+    assert "OperationNameValue endswith '/write'" in query.kql
+    assert "checkout-api" in query.kql
+    assert "| take 12" in query.kql
+    assert "SubscriptionId" not in query.kql
+    assert "Caller" not in query.kql
+
+
+@pytest.mark.asyncio
+async def test_workspace_investigation_correlates_azure_activity_without_coverage_gap():
+    client = FakeLogsClient(
+        {
+            "requests": _result(),
+            "dependencies": _result(),
+            "exceptions": _result(),
+            "traces": _result(),
+            "customEvents": _result(),
+            "AzureActivity": _result(["2026-10-20T11:00:00Z", "deployment write"]),
+        }
+    )
+    service = AppInsightsInvestigationService(
+        Settings(application_insights_workspace_id="workspace-test"),
+        client=client,
+    )
+
+    result = await service.investigate(
+        AppInsightsInvestigationParams(
+            service_name="checkout-api",
+            suspected_cause="deployment regression",
+        )
+    )
+
+    assert result["status"] == "success"
+    assert result["coverageGaps"] == []
+    assert result["evidence"][0]["queryId"] == "AZURE-ACTIVITY"
+    assert len(result["queries"]) == 6
 
 
 @pytest.mark.asyncio

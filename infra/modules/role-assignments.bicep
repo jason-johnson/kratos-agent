@@ -16,6 +16,9 @@ param storageAccountName string
 @description('Application Insights resource name (for Monitoring Reader RBAC)')
 param appInsightsName string = ''
 
+@description('Log Analytics workspace name (for Monitoring Reader RBAC)')
+param logAnalyticsName string = ''
+
 @description('Deploying user principal ID')
 param principalId string = ''
 
@@ -45,6 +48,10 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing 
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = if (!empty(appInsightsName)) {
   name: appInsightsName
+}
+
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = if (!empty(logAnalyticsName)) {
+  name: logAnalyticsName
 }
 
 // ─── Agent Service → Cosmos DB ───
@@ -98,6 +105,16 @@ resource agentStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' =
 resource agentAppInsightsRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(appInsightsName)) {
   name: guid(appInsights.id, agentServicePrincipalId, monitoringReader)
   scope: appInsights
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', monitoringReader)
+    principalId: agentServicePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource agentLogAnalyticsRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(logAnalyticsName)) {
+  name: guid(logAnalytics.id, agentServicePrincipalId, monitoringReader)
+  scope: logAnalytics
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', monitoringReader)
     principalId: agentServicePrincipalId

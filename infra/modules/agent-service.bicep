@@ -19,6 +19,9 @@ param appInsightsConnectionString string
 @description('App Insights resource ID (for resource-scoped KQL queries from the Traces panel)')
 param appInsightsResourceId string = ''
 
+@description('Log Analytics workspace customer ID for Azure Activity correlation')
+param appInsightsWorkspaceId string = ''
+
 @description('Cosmos DB endpoint')
 param cosmosDbEndpoint string
 
@@ -131,6 +134,7 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
           env: concat([
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
             { name: 'APPLICATION_INSIGHTS_RESOURCE_ID', value: appInsightsResourceId }
+            { name: 'APPLICATION_INSIGHTS_WORKSPACE_ID', value: appInsightsWorkspaceId }
             { name: 'COSMOS_DB_ENDPOINT', value: cosmosDbEndpoint }
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'FOUNDRY_ENDPOINT', value: foundryEndpoint }
