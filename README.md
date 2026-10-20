@@ -72,23 +72,23 @@ End-to-end request flow from the frontend to the Foundry-hosted agent, which cal
 <img src="docs/static/img/architecture-overview.png" alt="Architecture Overview" width="800">
 </div>
 
-### Dual-Compute Architecture
+### In-Process Agent Architecture
 
-Kratos runs two compute layers that work together:
+Kratos runs the API and Copilot SDK agent loop in one application service:
 
 | Layer | Runtime | Purpose |
 |-------|---------|---------|
-| **Hosted Agent** | Microsoft Foundry (auto-scaled, Invocations protocol, port 8088) | Runs the Copilot SDK agentic loop, executes skills, calls models |
-| **Backend Proxy** | Azure Container Apps (FastAPI, port 8000) | Frontend API, conversation persistence, file serving, admin endpoints |
+| **Agent/API** | Azure Container Apps (FastAPI, port 8000) | Runs the Copilot SDK loop, skills, frontend API, persistence, files, and administration |
+| **Model Host** | Microsoft Foundry | Hosts the model deployment called by the Agent/API managed identity |
 
-The backend proxies all chat requests to the Foundry hosted agent via the Invocations REST API and streams SSE events back to the frontend. Agent session pinning (`x-agent-session-id` header) ensures multi-turn conversations route to the same agent container, preserving in-memory SDK state.
+The Agent/API invokes Copilot in-process and streams SSE events to the frontend. Copilot SDK session mappings are persisted in Cosmos DB so multi-turn conversations can resume across replicas.
 
 ### Core Pillars
 
 | Pillar | Technology | Role |
 |--------|------------|------|
 | **Engine** | [GitHub Copilot SDK](https://github.com/features/copilot) `1.0.8` | Agentic loop — Plan → Act → Observe → Iterate |
-| **Platform** | [Microsoft Foundry](https://ai.azure.com) | Hosted agent lifecycle, model hosting, evaluation, guardrails |
+| **Platform** | [Microsoft Foundry](https://ai.azure.com) | Model hosting, evaluation, guardrails |
 | **Extensibility** | [MCP Skills Protocol](https://modelcontextprotocol.io) | Portable, standard tool interface for agent capabilities |
 | **Persistence** | [Azure Cosmos DB](https://learn.microsoft.com/azure/cosmos-db/) | Conversations, messages, settings, session mappings |
 | **Observability** | [OpenTelemetry](https://opentelemetry.io) + Foundry Traces | End-to-end tracing with GenAI semantic conventions |
@@ -127,7 +127,7 @@ The backend proxies all chat requests to the Foundry hosted agent via the Invoca
 
 Azure services provisioned via `azd up`:
 
-> VNet · Container Apps Environment · Container Apps (backend proxy **+** OBO MCP server) · Container Registry · Static Web App · AI Services (Foundry — agent calls models **directly**, no APIM) · Cosmos DB · Blob Storage · Key Vault · App Insights · Log Analytics · Bing Search · Entra OBO app registrations + user-assigned managed identity · RBAC Role Assignments
+> VNet · Container Apps Environment · Container Apps (agent/API **+** OBO MCP server) · Container Registry · Static Web App · AI Services (Foundry — agent calls models **directly**, no APIM) · Cosmos DB · Blob Storage · Key Vault · App Insights · Log Analytics · Bing Search · Entra OBO app registrations + user-assigned managed identity · RBAC Role Assignments
 
 ---
 
@@ -351,16 +351,14 @@ npm install && npm run dev
 ```
 1. User sends message via frontend
 2. POST /api/agent/chat → Backend (FastAPI)
-3. Backend looks up the agent session ID for the conversation
-4. Backend forwards to Foundry hosted agent via Invocations REST API
-5. Hosted agent runs CopilotClient agentic loop:
+3. Agent/API restores or creates the Copilot SDK session for the conversation
+4. Agent/API runs the CopilotClient agentic loop:
    a. Load system prompt + use-case skills
    b. Call model (GPT-4o / GPT-5) with tools
-   c. Execute tool calls (MCP skills, code interpreter, RAG, etc.)
+   c. Execute the bounded ARE tools and MCP integrations
    d. Iterate until the model produces a final response
-6. Hosted agent streams SSE events back through the proxy
-7. Backend persists messages to Cosmos DB
-8. Frontend renders streaming response with live execution details
+5. Agent/API streams SSE events and persists messages to Cosmos DB
+6. Frontend renders the response with live execution details
 ```
 
 ### Event Streaming (SSE)
@@ -656,11 +654,11 @@ The agent can create files (CSVs, PDFs, charts, code) and share them with users 
 ### How It Works
 
 1. **Skill instructions** guide the agent to write files to `/tmp` and reference the path in the response
-2. **Hosted agent** detects `/tmp/` file paths in the response, reads the files, and streams them as base64-encoded `file_content` SSE events
-3. **Backend proxy** intercepts these events, decodes the base64 content, and saves files to its own `/tmp`
+2. **Agent/API** detects `/tmp/` file paths in the response and emits `file_content` SSE events
+3. **Agent/API** keeps the files in its own `/tmp` for the download route
 4. **Frontend** detects `/tmp/` paths in markdown and rewrites them as download links pointing to `GET /api/files/download/{filename}?path=/tmp/{filename}`
 
-This SSE streaming approach solves the cross-container file sharing problem — the hosted agent (Foundry-managed, outside VNet) cannot directly access the storage account (private endpoint only), so files are streamed through the existing SSE channel instead.
+The SDK and file-serving route share the same application filesystem in this runtime.
 
 ---
 
@@ -747,7 +745,7 @@ Spans carry three custom attributes for the filter:
 - `kratos.conversation_id`
 - `kratos.eval_run_id` (only set during eval runs)
 
-These are stamped in `copilot_agent.py` and forwarded to the hosted agent via `x-kratos-*` headers from `foundry_agent_proxy.py`.
+These are stamped directly by the in-process runtime in `copilot_agent.py`.
 
 ### CLI
 
@@ -797,7 +795,7 @@ python scripts/fetch_traces.py --conversation-id abc123
 ```
 kratos-agent/
 ├── azure.yaml                      # azd config: 4 services (agent-service, hosted-agent, obo-mcp-server, web)
-├── docker-compose.yml              # Local dev: backend + hosted-agent + obo-mcp-server + azurite
+├── docker-compose.yml              # Local dev: backend + obo-mcp-server + azurite
 ├── AGENTS.md                       # Working agreements for AI agents (public-repo rules, validation)
 │
 ├── .github/
@@ -810,7 +808,7 @@ kratos-agent/
 │   ├── main.bicep
 │   └── modules/
 │       ├── network.bicep           # VNet + subnets + private endpoints
-│       ├── agent-service.bicep     # Container App (backend proxy)
+│       ├── agent-service.bicep     # Container App (agent/API runtime)
 │       ├── ai-services.bicep       # AI Services (Foundry account + project + App Insights connection)
 │       ├── obo-mcp-server.bicep    # Container App — Entra-protected OBO MCP server (graph-obo)
 │       ├── obo-entra-app.bicep     # Entra app registrations for the OBO API (server + client)
@@ -827,16 +825,16 @@ kratos-agent/
 │       └── role-assignments.bicep  # All RBAC assignments
 │
 ├── src/
-│   ├── backend/                    # Python agent service (FastAPI)
+│   ├── backend/                    # Python agent/API service (FastAPI + Copilot SDK)
 │   │   ├── Dockerfile              # python:3.11-slim + Node.js 20 + Playwright
 │   │   ├── pyproject.toml
 │   │   └── app/
-│   │       ├── main.py             # FastAPI entry point (port 8000)
+│   │       ├── main.py             # FastAPI + Copilot runtime entry point (port 8000)
 │   │       ├── config.py           # Settings + LOCAL_MODE auto-detection
 │   │       ├── models.py           # Pydantic event schemas
 │   │       ├── observability.py    # OpenTelemetry setup
 │   │       ├── routers/
-│   │       │   ├── agent.py        # POST /api/agent/chat — SSE proxy to hosted agent
+│   │       │   ├── agent.py        # POST /api/agent/chat — in-process Copilot SSE
 │   │       │   ├── conversations.py
 │   │       │   ├── files.py        # GET /api/files/download/{filename}
 │   │       │   ├── settings.py
@@ -853,12 +851,10 @@ kratos-agent/
 │   │           ├── skill_registry.py      # Per-use-case skill loading
 │   │           ├── skill_tools.py         # @define_tool implementations
 │   │           ├── blob_skill_service.py  # Blob CRUD for skills
-│   │           ├── foundry_agent_proxy.py # Invocations REST API client
 │   │           ├── apm_service.py         # APM CLI wrapper
-│   │           ├── ai_search_tools.py     # AI Search index management
 │   │           └── follow_up_service.py   # Follow-up question generation
 │   │
-│   ├── hosted-agent/               # Foundry hosted agent
+│   ├── hosted-agent/               # Exporter source only; not an active runtime
 │   │   ├── Dockerfile              # python:3.11-slim + same tooling as backend
 │   │   ├── main.py                 # InvocationAgentServerHost (port 8088)
 │   │   ├── agent.yaml              # Foundry agent manifest

@@ -34,7 +34,7 @@ The project currently calls a personality a **use-case**. A use-case consists of
 The product name is **Agent Reliability Engineer** and the single use-case
 identifier is `agent-reliability-engineer`.
 
-## Current-state findings
+## Baseline findings (before conversion)
 
 ### Runtime
 
@@ -524,19 +524,47 @@ Post-Phase 1 manual acceptance:
 
 ### Phase 2 - Collapse the runtime
 
-- [ ] Start `CopilotAgent` directly in FastAPI lifespan.
-- [ ] Replace `FoundryAgentProxy` calls with in-process agent calls.
-- [ ] Remove hosted-agent session mapping and warm-pool behavior.
-- [ ] Preserve SSE, persistence, tool events, approval prompts, and cancellation.
-- [ ] Simplify configuration and authentication for AKS Workload Identity.
-- [ ] Make Blob-backed skill updates consistent across multiple API replicas.
-- [ ] Define skill admin authorization, validation, versioning, rollback, and
+- [x] Start `CopilotAgent` directly in FastAPI lifespan.
+- [x] Replace `FoundryAgentProxy` calls with in-process agent calls.
+- [x] Remove hosted-agent session mapping and warm-pool behavior.
+- [x] Preserve SSE, persistence, tool events, approval prompts, and cancellation.
+- [x] Simplify configuration and authentication for AKS Workload Identity.
+- [x] Make Blob-backed skill updates consistent across multiple API replicas.
+- [x] Define skill admin authorization, validation, versioning, rollback, and
   audit behavior.
-- [ ] Reduce the image to only required MCP servers and system dependencies.
-- [ ] Remove unused backend endpoints and services.
+- [x] Reduce the image to only required MCP servers and system dependencies.
+- [x] Remove unused backend runtime services and defer persona-facing endpoint
+  removal to Phase 3.
 
 Exit criteria: one application process runs chat end to end without the Foundry
 hosted-agent Invocations service.
+
+Implementation status:
+
+- FastAPI now owns the Copilot SDK lifecycle and direct model invocation. Chat,
+  Copilot Studio, and evals all use the same in-process runtime.
+- Explicit cancellation, SDK approval responses, detached execution, persistence,
+  attachments, OBO token injection, SSE event shapes, and tracing are preserved.
+- The active hosted-agent service, proxy, warm pool, deployment hooks, extension,
+  and hosted-only RBAC were removed. `src/hosted-agent` remains only as input to
+  the persona exporter scheduled for removal in Phase 3.
+- Runtime configuration mutations require the admin role, create immutable
+  Blob-backed versions with actor/action metadata, support rollback, reset local
+  sessions, and refresh peer replicas from a shared revision marker.
+- The custom Python tool surface is limited to the read-only Application Insights
+  investigation tool. The image installs only the ServiceNow and M365 Graph MCP
+  servers retained by the ARE use case.
+- Commits: `98d84fe`, `2874fe2`, `0517d1e`, and `5abee8a`.
+- Validation: 113 backend tests, Ruff lint/format, frontend lint/build, retained
+  ServiceNow and M365 Graph MCP builds, Bicep compilation, hook checks, and
+  Docker Compose configuration passed. The dependency lock was exercised with
+  `uv run --frozen` and contains no private feed endpoint.
+- Focused mypy remains blocked before application analysis by the installed
+  NumPy stub using Python 3.12 type-statement syntax while the project targets
+  Python 3.11; this is unchanged from Phase 1.
+- No deployment, provisioning, or live cloud mutation was performed. AKS
+  manifests, Workload Identity bindings, ingress, and production packaging remain
+  Phase 5 work.
 
 ### Phase 3 - Simplify the frontend and API
 
@@ -617,7 +645,7 @@ deployment path.
 | D-004 | Reduce to one personality/use-case | Confirmed | User goal. |
 | D-005 | Base the new agent on IT service desk | Confirmed | Evolve, do not preserve demo framing. |
 | D-006 | Name the product Agent Reliability Engineer and the use-case `agent-reliability-engineer` | Confirmed | Use this vocabulary in code, UI, docs, and operations. |
-| D-007 | Run Copilot SDK in the FastAPI process | Proposed | Largest runtime simplification. |
+| D-007 | Run Copilot SDK in the FastAPI process | Confirmed | Implemented in Phase 2. |
 | D-008 | Keep Blob Storage and the skills admin UI | Confirmed | Checked-in skills seed/recover the single live skill set; runtime changes need authorization, versioning, audit, and replica consistency. |
 | D-009 | Keep the current frontend largely unchanged in v1 | Confirmed | Remove or hide only controls invalidated by the single-use-case model unless separately approved. |
 | D-010 | Keep Azure Cosmos DB for v1 persistence | Confirmed | Avoid coupling AKS/runtime work to a data-model migration; revisit after simplification. |

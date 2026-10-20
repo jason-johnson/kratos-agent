@@ -51,19 +51,7 @@ async def update_system_prompt(
     """Update the system prompt for a use-case. Persists to Blob Storage / local disk."""
     registry = _get_registry(request, use_case)
 
-    registry.system_prompt = body.content
-
-    # Persist to blob storage or local disk
-    blob_service = getattr(registry, "_blob_service", None)
-    if blob_service and blob_service.is_available:
-        blob_path = f"use-cases/{use_case}/SYSTEM_PROMPT.md"
-        await blob_service.upload_file(blob_path, body.content.encode())
-    else:
-        from pathlib import Path
-
-        prompt_path = Path("use-cases") / use_case / "SYSTEM_PROMPT.md"
-        prompt_path.parent.mkdir(parents=True, exist_ok=True)
-        prompt_path.write_text(body.content)
+    await registry.update_system_prompt(body.content)
 
     logger.info("System prompt updated for use-case '%s' (%d chars)", use_case, len(body.content))
     runtime_config: RuntimeConfigService = request.app.state.runtime_config_service

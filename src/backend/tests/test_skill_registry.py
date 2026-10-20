@@ -1,6 +1,7 @@
 """Tests for the skill registry."""
 
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -66,6 +67,24 @@ async def test_get_enabled_skills(use_case_dir: Path, monkeypatch: pytest.Monkey
     assert "web-search" in names
     assert "rag-search" in names
     assert "disabled-skill" not in names
+
+
+@pytest.mark.asyncio
+async def test_update_system_prompt_keeps_blob_cache_current(tmp_path: Path):
+    blob_service = Mock()
+    blob_service.is_available = True
+    blob_service.local_dir.return_value = tmp_path / "cache" / "generic"
+    blob_service.upload_file = AsyncMock()
+    registry = SkillRegistry(use_case="generic", _blob_service=blob_service)
+
+    await registry.update_system_prompt("Updated prompt")
+
+    assert registry.system_prompt == "Updated prompt"
+    assert (tmp_path / "cache" / "generic" / "SYSTEM_PROMPT.md").read_text() == "Updated prompt"
+    blob_service.upload_file.assert_awaited_once_with(
+        "use-cases/generic/SYSTEM_PROMPT.md",
+        b"Updated prompt",
+    )
 
 
 @pytest.mark.asyncio

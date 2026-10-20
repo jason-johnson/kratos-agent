@@ -11,8 +11,9 @@ from azure.identity.aio import DefaultAzureCredential
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from app.auth import require_admin_user
+from app.auth import get_admin_actor, require_admin_user
 from app.constants import PRIMARY_USE_CASE
+from app.services.runtime_config_service import RuntimeConfigService
 from app.services.skill_registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
@@ -286,9 +287,13 @@ async def _call_llm(system_prompt: str, user_content: str, *, json_mode: bool = 
 # ─── Apply Fix endpoint ───
 
 
-def _reset_sessions(request: Request) -> None:
-    """No-op — sessions are managed by the Foundry hosted agent."""
-    logger.debug("Session reset skipped — Copilot SDK runs in hosted agent")
+async def _record_mutation(request: Request, use_case: str) -> None:
+    runtime_config: RuntimeConfigService = request.app.state.runtime_config_service
+    await runtime_config.record_version(
+        use_case,
+        action="analysis.apply-fix",
+        actor=get_admin_actor(request),
+    )
 
 
 @router.post("/apply-fix", response_model=ApplyFixResponse)
@@ -315,7 +320,7 @@ async def apply_fix(
                     )
                 )
         if changes:
-            _reset_sessions(request)
+            await _record_mutation(request, use_case)
             return ApplyFixResponse(success=True, changes=changes)
         return ApplyFixResponse(success=False, error="No matching enabled skills found to disable")
 
@@ -343,16 +348,7 @@ async def apply_fix(
                 fixed = re.sub(r"\n?```$", "", fixed)
 
             if fixed and fixed != prompt:
-                # Update in Cosmos and registry
-                cosmos = request.app.state.cosmos_service
-                await cosmos.upsert_setting(
-                    {
-                        "id": "system-prompt",
-                        "category": "system",
-                        "content": fixed,
-                    }
-                )
-                registry.system_prompt = fixed
+                await registry.update_system_prompt(fixed)
                 changes.append(
                     FixChange(
                         target="system-prompt",
@@ -387,7 +383,7 @@ async def apply_fix(
             )
 
     if changes:
-        _reset_sessions(request)
+        await _record_mutation(request, use_case)
         return ApplyFixResponse(success=True, changes=changes)
 
     return ApplyFixResponse(success=False, error="No changes were needed or the LLM returned identical content")

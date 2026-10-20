@@ -397,6 +397,23 @@ class SkillRegistry:
 
     # ─── Admin operations ─────────────────────────────────────────────────
 
+    async def update_system_prompt(self, content: str) -> None:
+        """Update the in-memory prompt and its local and Blob-backed copies."""
+        self.system_prompt = content
+        if self._blob_service and self._blob_service.is_available:
+            prompt_path = self._blob_service.local_dir(self.use_case) / "SYSTEM_PROMPT.md"
+            prompt_path.parent.mkdir(parents=True, exist_ok=True)
+            prompt_path.write_text(content)
+            await self._blob_service.upload_file(
+                f"use-cases/{self.use_case}/SYSTEM_PROMPT.md",
+                content.encode(),
+            )
+            return
+
+        prompt_path = Path("use-cases") / self.use_case / "SYSTEM_PROMPT.md"
+        prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        prompt_path.write_text(content)
+
     async def update_skill(self, name: str, updates: dict) -> SkillMetadata | None:
         """Update a skill in the registry and persist to blob via SKILL.md.
 

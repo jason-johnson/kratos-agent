@@ -1,12 +1,14 @@
-"""Coerce hosted-agent invocation request bodies into a normalized dict.
+"""Coerce standalone exported-agent invocation request bodies into a normalized dict.
 
-The Foundry hosted-agent receives invocations through several paths, each of
-which frames the request body differently:
+This module is retained for projects produced by the Phase 3 persona exporter;
+it is not used by the active in-process runtime. Exported Foundry hosted agents
+receive invocations through several paths, each of which frames the request body
+differently:
 
 * ``azd ai agent invoke "msg"`` — posts the raw message as ``text/plain``,
   **not** JSON. Naively calling ``request.json()`` on this raises and the agent
   used to reject it with a 400, breaking the primary CLI test path.
-* The Kratos backend proxy — posts a JSON object
+* A caller using the exported agent's JSON contract — posts an object
   (``{"message": ..., "useCase": ..., "conversationId": ...}``).
 * Platform keep-alive — posts ``{"warmup": true}`` (or an empty body) to reset
   the idle timer without invoking the model.

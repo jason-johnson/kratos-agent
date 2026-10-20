@@ -46,32 +46,26 @@ before deploying or destroying anything.
 
 ## Architecture
 
-### Dual compute: the backend is a proxy, the agent runs in Foundry
+### In-process agent runtime
 
-Two runtimes share the same engine code (`CopilotClient` + `SkillRegistry` + `CosmosService`):
+The FastAPI service owns the API and the Copilot SDK agent loop:
 
 | Layer | Entry point | Runtime |
 |---|---|---|
-| **Hosted agent** | [src/hosted-agent/main.py](src/hosted-agent/main.py) — `InvocationAgentServerHost`, port 8088 | Microsoft Foundry, auto-provisioned sandboxes |
-| **Backend proxy** | [src/backend/app/main.py](src/backend/app/main.py) — FastAPI, port 8000 | Azure Container Apps |
+| **Agent/API** | [src/backend/app/main.py](src/backend/app/main.py) — FastAPI, port 8000 | Azure Container Apps |
+| **Model host** | Microsoft Foundry model deployment | Azure AI Services |
 
-Chat does **not** execute in the backend. `POST /api/agent/chat` forwards to the Foundry hosted
-agent through the Invocations REST API ([foundry_agent_proxy.py](src/backend/app/services/foundry_agent_proxy.py))
-and streams SSE events back. The backend owns conversation persistence, file serving, skills/APM
-admin, evals and traces. When changing agent *behaviour*, the code usually lives in
-[copilot_agent.py](src/backend/app/services/copilot_agent.py) and runs in the hosted agent —
-so it needs `azd deploy kratos-agent`, not a backend deploy, to take effect.
+`POST /api/agent/chat` invokes [copilot_agent.py](src/backend/app/services/copilot_agent.py)
+in-process and streams SSE events back. The same service owns conversation persistence, file
+serving, skills/APM administration, evals, and traces. The API managed identity calls the Foundry
+model deployment directly.
 
-**Session pinning:** Foundry returns `x-agent-session-id` on first invocation; the backend stores
-the mapping in Cosmos (`sessions`, partitioned by `conversationId`) and appends
-`?agent_session_id=<id>` to later turns so multi-turn state survives. The backend also keeps a
-warm pool of unclaimed sandboxes (`keep_warm_enabled`, `warm_pool_size` in
-[config.py](src/backend/app/config.py)).
+**Session continuity:** the service stores the Copilot SDK session mapping in Cosmos (`sessions`,
+partitioned by `conversationId`) so multi-turn state can resume across API replicas. Active turns
+support explicit cancellation and SDK user-input requests.
 
-Foundry reserves all `FOUNDRY_*` env vars, so `hosted-agent/main.py` remaps injected platform
-names (`MODEL_DEPLOYMENT_NAME`, `FOUNDRY_PROJECT_ENDPOINT`) onto the `Settings` names at import
-time. Adding a Foundry-facing setting means touching that remap block **and** `azure.yaml`'s
-`kratos-agent.config.env`.
+The [src/hosted-agent/](src/hosted-agent/) tree remains only as source material for the standalone
+persona exporter and is not part of the active deployment runtime. Phase 3 removes that exporter.
 
 ### One agent, N personas
 
