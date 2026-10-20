@@ -7,12 +7,13 @@ import time
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from opentelemetry import context as otel_context
 from opentelemetry import trace
 from sse_starlette.sse import EventSourceResponse
 
+from app.auth import get_authenticated_user_id, require_authenticated_user
 from app.constants import PRIMARY_USE_CASE
 from app.models import (
     AgentCancelRequest,
@@ -28,7 +29,7 @@ from app.services.follow_up_service import generate_follow_ups
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authenticated_user)])
 
 # Runs are detached from the HTTP stream so a browser disconnect does not lose
 # the assistant response or its persistence record.
@@ -40,6 +41,9 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
     """Run the ARE in-process and stream typed events as SSE."""
     cosmos = request.app.state.cosmos_service
     copilot_agent = request.app.state.copilot_agent
+    user_id = get_authenticated_user_id(request)
+    if await cosmos.get_conversation(body.conversationId, user_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     eval_run_id = request.headers.get("x-kratos-eval-run-id") or ""
     request.state.eval_run_id = eval_run_id
@@ -91,6 +95,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                 attachments=attachments,
                 use_case=PRIMARY_USE_CASE,
                 eval_run_id=eval_run_id or None,
+                user_id=user_id,
             ):
                 event_data = event.model_dump()
                 event_name = event.type
@@ -196,6 +201,10 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
 @router.post("/user-input")
 async def user_input_response(body: UserInputResponseRequest, request: Request) -> JSONResponse:
     """Resolve an approval or other user-input request from the active turn."""
+    cosmos = request.app.state.cosmos_service
+    user_id = get_authenticated_user_id(request)
+    if await cosmos.get_conversation(body.conversationId, user_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
     copilot_agent = request.app.state.copilot_agent
     if not copilot_agent.resolve_user_input(body.requestId, body.answer, body.conversationId):
         raise HTTPException(status_code=404, detail="User input request is not active")
@@ -205,6 +214,10 @@ async def user_input_response(body: UserInputResponseRequest, request: Request) 
 @router.post("/cancel")
 async def cancel_agent(body: AgentCancelRequest, request: Request) -> JSONResponse:
     """Cancel the active agent turn for a conversation."""
+    cosmos = request.app.state.cosmos_service
+    user_id = get_authenticated_user_id(request)
+    if await cosmos.get_conversation(body.conversationId, user_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
     copilot_agent = request.app.state.copilot_agent
     if not copilot_agent.cancel(body.conversationId):
         raise HTTPException(status_code=404, detail="Conversation has no active agent session")

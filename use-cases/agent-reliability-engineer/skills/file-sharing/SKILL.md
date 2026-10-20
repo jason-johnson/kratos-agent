@@ -9,7 +9,7 @@ enabled: true
 When a retained workflow produces a file:
 
 1. Write it under `/tmp` with a stable incident-aware name such as
-   `/tmp/INC-7002-command-brief.pdf`.
+   `/tmp/INC7002-command-brief.pdf`.
 2. Reference the absolute path in the response so the frontend can provide a
    download link.
 3. Do not base64-encode the file into chat.

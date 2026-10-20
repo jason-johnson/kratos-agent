@@ -10,8 +10,9 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from app.auth import get_authenticated_user_id, require_authenticated_user
 from app.constants import PRIMARY_USE_CASE
 from app.models import (
     Conversation,
@@ -24,7 +25,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authenticated_user)])
 
 
 @router.post("/chat", response_model=CopilotStudioResponse)
@@ -38,6 +39,7 @@ async def copilot_studio_chat(
     """
     cosmos = request.app.state.cosmos_service
     copilot_agent = request.app.state.copilot_agent
+    user_id = get_authenticated_user_id(request)
 
     # Resolve or create conversation
     conversation_id = body.conversationId
@@ -45,7 +47,7 @@ async def copilot_studio_chat(
         now = datetime.now(UTC)
         conversation = Conversation(
             id=str(uuid.uuid4()),
-            userId="copilot-studio",
+            userId=user_id,
             title=body.message[:80],
             status=ConversationStatus.ACTIVE,
             createdAt=now,
@@ -53,6 +55,8 @@ async def copilot_studio_chat(
         )
         await cosmos.upsert_conversation(conversation)
         conversation_id = conversation.id
+    elif await cosmos.get_conversation(conversation_id, user_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Persist the incoming user message
     user_msg = Message(
@@ -71,6 +75,7 @@ async def copilot_studio_chat(
         message=body.message,
         conversation_id=conversation_id,
         use_case=PRIMARY_USE_CASE,
+        user_id=user_id,
     ):
         if event.type == "content":
             parts.append(event.content)

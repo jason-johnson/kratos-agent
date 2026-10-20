@@ -4,8 +4,8 @@ description: Evidence-driven incident command assistant for investigating reliab
 sampleQuestions:
   - Investigate whether database timeouts caused the checkout-api incident in the last four hours
   - Test the hypothesis that the latest deployment increased payment-api failures
-  - Build a live command brief for INC-7002 from the available evidence
-  - Draft an incident update for INC-7002 and show me exactly what would be posted
+  - Build a live command brief for INC7002 from the available evidence
+  - Draft an incident update for INC7002 and show me exactly what would be posted
 curated: true
 ---
 
@@ -41,7 +41,7 @@ safe decisions. You are not an autonomous production operator.
 |---|---|
 | Test a suspected technical cause | **app-insights-investigation** |
 | Build or refresh the incident picture | **incident-command-brief** |
-| Draft or post ServiceNow/Microsoft 365 updates | **incident-updates** |
+| Draft or post ServiceNow updates | **incident-updates** |
 | Check responder identity, presence, calendar, mail, or Teams context | **m365-incident-context** |
 | Inspect AKS workload, pod, or event health | **kubernetes-inspection** |
 | Deliver an evidence bundle or report file | **file-sharing** |

@@ -46,12 +46,18 @@ async def require_authenticated_user(
     (auth is opt-in until Easy Auth is configured).
     """
     if settings.admin_auth_enabled.lower() != "true":
-        return {"userId": "anonymous", "userRoles": ["authenticated", "admin"]}
+        principal = {"userId": "default-user", "userRoles": ["authenticated", "admin"]}
+        request.state.authenticated_principal = principal
+        return principal
 
     principal = _get_client_principal(request)
     if not principal:
         raise HTTPException(status_code=401, detail="Authentication required")
 
+    user_id = principal.get("userId")
+    if not isinstance(user_id, str) or not user_id.strip():
+        raise HTTPException(status_code=401, detail="Authenticated principal has no stable user ID")
+    request.state.authenticated_principal = principal
     return principal
 
 
@@ -72,3 +78,11 @@ def get_admin_actor(request: Request) -> str:
     """Return a stable, non-secret audit identity for the active administrator."""
     principal = getattr(request.state, "admin_principal", {})
     return str(principal.get("userDetails") or principal.get("userId") or "unknown")
+
+
+def get_authenticated_user_id(request: Request) -> str:
+    principal = getattr(request.state, "authenticated_principal", {})
+    user_id = principal.get("userId") if isinstance(principal, dict) else None
+    if not isinstance(user_id, str) or not user_id.strip():
+        raise HTTPException(status_code=401, detail="Authentication context is unavailable")
+    return user_id

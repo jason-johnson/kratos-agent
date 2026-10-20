@@ -42,6 +42,7 @@ from app.services.skill_tools import (
     _ctx_conversation_id,
     _ctx_eval_run_id,
     _ctx_use_case,
+    _ctx_user_id,
     get_enabled_custom_tools,
 )
 
@@ -910,6 +911,7 @@ class CopilotAgent:
         sdk_session_id: str | None = None,
         use_case: str = "",
         eval_run_id: str | None = None,
+        user_id: str = "",
     ) -> AsyncGenerator[
         ThoughtEvent | ToolCallEvent | ContentEvent | UsageEvent | ErrorEvent | UserInputRequestEvent,
         None,
@@ -922,6 +924,8 @@ class CopilotAgent:
             _ctx_use_case.set(use_case)
         if eval_run_id:
             _ctx_eval_run_id.set(eval_run_id)
+        if user_id:
+            _ctx_user_id.set(user_id)
 
         _content_recording = (
             os.environ.get("AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED", "").lower() == "true"

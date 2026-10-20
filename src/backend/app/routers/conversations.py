@@ -4,8 +4,9 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from app.auth import get_authenticated_user_id, require_authenticated_user
 from app.constants import PRIMARY_USE_CASE
 from app.models import (
     Conversation,
@@ -19,7 +20,7 @@ from app.services.skill_registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authenticated_user)])
 
 
 def _get_cosmos(request: Request):  # noqa: ANN202
@@ -48,7 +49,7 @@ async def create_conversation(body: ConversationCreate, request: Request) -> Con
     now = datetime.now(UTC)
     conversation = Conversation(
         id=str(uuid.uuid4()),
-        userId="default-user",  # Replaced by Entra ID user in production
+        userId=get_authenticated_user_id(request),
         title=body.title,
         status=ConversationStatus.ACTIVE,
         createdAt=now,
@@ -62,7 +63,7 @@ async def create_conversation(body: ConversationCreate, request: Request) -> Con
 async def list_conversations(request: Request) -> ConversationList:
     """List all conversations for the current user."""
     cosmos = _get_cosmos(request)
-    conversations = await cosmos.list_conversations("default-user")
+    conversations = await cosmos.list_conversations(get_authenticated_user_id(request))
     return ConversationList(conversations=conversations)
 
 
@@ -70,7 +71,7 @@ async def list_conversations(request: Request) -> ConversationList:
 async def get_conversation(conversation_id: str, request: Request) -> Conversation:
     """Get a single conversation."""
     cosmos = _get_cosmos(request)
-    conversation = await cosmos.get_conversation(conversation_id, "default-user")
+    conversation = await cosmos.get_conversation(conversation_id, get_authenticated_user_id(request))
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
@@ -80,6 +81,9 @@ async def get_conversation(conversation_id: str, request: Request) -> Conversati
 async def get_messages(conversation_id: str, request: Request) -> list[Message]:
     """Get all messages for a conversation."""
     cosmos = _get_cosmos(request)
+    conversation = await cosmos.get_conversation(conversation_id, get_authenticated_user_id(request))
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
     return await cosmos.list_messages(conversation_id)
 
 
@@ -87,7 +91,7 @@ async def get_messages(conversation_id: str, request: Request) -> list[Message]:
 async def update_conversation(conversation_id: str, body: ConversationUpdate, request: Request) -> Conversation:
     """Update a conversation's mutable fields (currently: title)."""
     cosmos = _get_cosmos(request)
-    conversation = await cosmos.get_conversation(conversation_id, "default-user")
+    conversation = await cosmos.get_conversation(conversation_id, get_authenticated_user_id(request))
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if body.title is not None:
@@ -101,4 +105,8 @@ async def update_conversation(conversation_id: str, body: ConversationUpdate, re
 async def delete_conversation(conversation_id: str, request: Request) -> None:
     """Delete a conversation and its messages."""
     cosmos = _get_cosmos(request)
-    await cosmos.delete_conversation(conversation_id, "default-user")
+    user_id = get_authenticated_user_id(request)
+    conversation = await cosmos.get_conversation(conversation_id, user_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    await cosmos.delete_conversation(conversation_id, user_id)

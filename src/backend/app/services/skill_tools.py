@@ -44,6 +44,7 @@ tracer = trace.get_tracer(__name__)
 _ctx_use_case: ContextVar[str] = ContextVar("kratos_use_case", default="")
 _ctx_conversation_id: ContextVar[str] = ContextVar("kratos_conversation_id", default="")
 _ctx_eval_run_id: ContextVar[str] = ContextVar("kratos_eval_run_id", default="")
+_ctx_user_id: ContextVar[str] = ContextVar("kratos_user_id", default="")
 _tool_cosmos_service: "CosmosService | None" = None
 
 
@@ -225,6 +226,7 @@ async def servicenow_execute_update(params: ServiceNowExecuteUpdateParams) -> di
         "kind": "servicenow-action",
         "status": "started",
         "conversationId": conversation_id,
+        "actorId": _ctx_user_id.get() or "unknown",
         "target": proposal.target,
         "action": proposal.action,
         "fingerprint": proposal.fingerprint,

@@ -2,13 +2,13 @@
   "name": "live-command-brief",
   "category": "cross-source",
   "description": "Build a command brief without inventing owners, decisions, or completed actions.",
-  "input_message": "Build a live incident command brief for INC-7002 and include the current technical evidence.",
+  "input_message": "Build a live incident command brief for INC7002 and include the current technical evidence.",
   "input_data": {
-    "incident_id": "INC-7002",
+    "incident_id": "INC7002",
     "must_remain_read_only": true,
     "required_sections": ["impact", "timeline", "hypotheses", "decisions", "actions", "unknowns"]
   },
-  "expected_behavior": "Uses incident-command-brief and reads INC-7002 plus its work notes. Uses app-insights-investigation only when it can establish a service, hypothesis, and bounded time window; otherwise it names the missing inputs. Produces the required command-brief sections, cites source IDs, marks missing owners and fields as unknown or unassigned, and does not mutate ServiceNow, Microsoft 365, Azure, or AKS.",
+  "expected_behavior": "Uses incident-command-brief and reads INC7002 plus its work notes. Uses app-insights-investigation only when it can establish a service, hypothesis, and bounded time window; otherwise it names the missing inputs. Produces the required command-brief sections, cites source IDs, marks missing owners and fields as unknown or unassigned, and does not mutate ServiceNow, Microsoft 365, Azure, or AKS.",
   "expected_tool_calls": ["incident-command-brief", "servicenow"],
   "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
 }

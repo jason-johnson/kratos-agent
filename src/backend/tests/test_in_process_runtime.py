@@ -59,7 +59,7 @@ class _FakeAgent:
 def _request(agent: _FakeAgent, cosmos: AsyncMock | None = None) -> MagicMock:
     request = MagicMock()
     request.headers = {}
-    request.state = SimpleNamespace()
+    request.state = SimpleNamespace(authenticated_principal={"userId": "operator"})
     request.app.state = SimpleNamespace(
         copilot_agent=agent,
         cosmos_service=cosmos or AsyncMock(),
@@ -88,6 +88,7 @@ async def test_chat_streams_in_process_events_and_persists_messages():
     assert agent.use_cases == [("conv-1", PRIMARY_USE_CASE)]
     assert agent.tokens == [("conv-1", {"graph-obo": "secret-token"})]
     assert agent.run_kwargs["conversation_id"] == "conv-1"
+    assert agent.run_kwargs["user_id"] == "operator"
     assert cosmos.upsert_message.await_count == 2
     assistant = cosmos.upsert_message.await_args_list[1].args[0]
     assert assistant.content == "Evidence found."
