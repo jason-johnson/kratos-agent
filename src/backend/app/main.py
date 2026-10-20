@@ -90,6 +90,7 @@ async def _apm_startup_sync(
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: initialize services on startup, cleanup on shutdown."""
+    application.state.ready = False
     settings = get_settings()
 
     # The in-process Copilot SDK calls the Foundry model directly.
@@ -177,10 +178,12 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     traces_service = TracesService(settings)
     application.state.traces_service = traces_service
 
+    application.state.ready = True
     logger.info("Kratos Agent Service started — environment=%s", settings.environment)
     yield
 
     # Cleanup
+    application.state.ready = False
     await eval_service.shutdown()
     runtime_config_task.cancel()
     with contextlib.suppress(asyncio.CancelledError):

@@ -15,6 +15,7 @@ def client():
     app.state.cosmos_service = MagicMock()
     app.state.skill_registry = MagicMock()
     app.state.copilot_agent = MagicMock()
+    app.state.ready = True
 
     return TestClient(app, raise_server_exceptions=False)
 
@@ -31,3 +32,11 @@ def test_readiness_check(client):
     response = client.get("/health/ready")
     assert response.status_code == 200
     assert response.json()["status"] == "ready"
+
+
+def test_readiness_check_rejects_incomplete_startup(client):
+    client.app.state.ready = False
+
+    response = client.get("/health/ready")
+
+    assert response.status_code == 503

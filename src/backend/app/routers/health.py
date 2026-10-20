@@ -1,6 +1,6 @@
 """Health check endpoints."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter()
 
@@ -11,5 +11,7 @@ async def health_check() -> dict[str, str]:
 
 
 @router.get("/health/ready")
-async def readiness_check() -> dict[str, str]:
+async def readiness_check(request: Request) -> dict[str, str]:
+    if not getattr(request.app.state, "ready", False):
+        raise HTTPException(status_code=503, detail="Service initialization is incomplete")
     return {"status": "ready"}
