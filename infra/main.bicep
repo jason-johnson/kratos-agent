@@ -118,7 +118,6 @@ module keyVault './modules/key-vault.bicep' = {
     name: !empty(keyVaultName) ? keyVaultName : '${namePrefix}${abbrs.keyVaultVaults}${resourceToken}'
     location: location
     tags: tags
-    principalId: principalId
     subnetId: network.outputs.privateEndpointSubnetId
     vnetId: network.outputs.id
   }
@@ -134,7 +133,6 @@ module cosmosDb './modules/cosmos-db.bicep' = {
     tags: tags
     subnetId: network.outputs.privateEndpointSubnetId
     vnetId: network.outputs.id
-    keyVaultName: keyVault.outputs.name
   }
 }
 

@@ -7,9 +7,6 @@ param location string
 @description('Tags')
 param tags object = {}
 
-@description('Principal ID for initial access')
-param principalId string = ''
-
 @description('Subnet ID for private endpoint')
 param subnetId string
 

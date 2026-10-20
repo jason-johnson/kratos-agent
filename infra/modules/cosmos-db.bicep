@@ -13,9 +13,6 @@ param subnetId string
 @description('VNet ID for DNS zone link')
 param vnetId string
 
-@description('Key Vault name for storing connection info')
-param keyVaultName string
-
 resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-preview' = {
   name: name
   location: location

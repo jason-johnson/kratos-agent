@@ -1,6 +1,6 @@
 # Kratos AKS Simplification Plan
 
-Last updated: 2026-10-15
+Last updated: 2026-10-20
 
 ## Purpose
 
@@ -748,15 +748,40 @@ Post-Phase 5 manual acceptance:
 
 ### Phase 6 - Delete obsolete architecture
 
-- [ ] Remove unused use-cases, skills, mocks, and fixtures.
-- [ ] Remove Foundry hosted-agent source and deployment configuration.
-- [ ] Remove obsolete Bicep modules and azd hooks.
-- [ ] Remove unused Azure resource dependencies.
-- [ ] Rewrite architecture, local-development, and deployment documentation.
-- [ ] Run repository-wide tests and confirm no obsolete terminology or routes remain.
+- [x] Remove unused use-cases, skills, mocks, and fixtures.
+- [x] Remove Foundry hosted-agent source and deployment configuration.
+- [x] Remove obsolete Bicep modules and azd hooks.
+- [x] Remove unused Azure resource dependencies.
+- [x] Rewrite architecture, local-development, and deployment documentation.
+- [x] Run repository-wide tests and confirm no obsolete terminology or routes remain.
 
 Exit criteria: the repository contains one supported architecture and no dead
 deployment path.
+
+Phase 6 outcome:
+
+- ARE is the only checked-in runtime configuration and M365 Graph is the only
+  retained synthetic MCP package.
+- AKS is the sole application compute target. Container Apps, Static Web Apps,
+  Bing, preview health-model resources, old deployment workflows, and azd
+  deployment hooks were removed.
+- `azure.yaml` provisions infrastructure only; application delivery is the
+  explicit manual Helm workflow in the AKS runbook.
+- The deployed smoke suite targets one authenticated AKS ingress and the
+  single-agent API.
+- Commits: `193f34f`, `7d23c93`, `7e835a5`, `7b787a7`, `20f4521`,
+  `b39c466`, and `d043691`.
+- Validation: 114 backend tests passed; Ruff lint/format passed; frontend lint
+  and production build passed with four existing warnings; smoke TypeScript,
+  Docker Compose, all three Dockerfile checks, Bicep compilation, and Helm
+  lint/render passed.
+- Private npm credentials were unavailable. The retained M365 package built
+  before the clean dependency cache was removed, and npm accepted the narrowed
+  lock; a clean `npm ci` and image execution/scan remain private-feed CI gates.
+- Mypy retains the pre-existing NumPy stub parser blocker (Python 3.12 type
+  statement in the selected Python 3.11 analysis target).
+- No deployment, provisioning, branch change, push, pull, image publication,
+  DNS/certificate change, or live cloud/resource deletion was performed.
 
 ## Validation strategy
 
@@ -799,7 +824,7 @@ deployment path.
 | D-023 | First vertical slice is suspected-cause investigation in Application Insights | Confirmed | Use bounded logs and traces to produce ranked, cited findings before adding write workflows. |
 | D-024 | V1 workflows are investigation, live command brief, and approved incident updates | Confirmed | These three workflows define release scope and acceptance. |
 | D-025 | Use Azure Monitor, Application Insights, and Log Analytics for application observability | Confirmed | Export via OpenTelemetry and retain trace exploration. |
-| D-026 | Run the Copilot SDK in the AKS agent/API service and register it as a Foundry external agent | Confirmed | Foundry retains model hosting, observability, and evaluation; AKS owns invocation and runtime operations. |
+| D-026 | Run the Copilot SDK in the AKS agent/API service; evaluate Foundry external-agent registration separately | Partially implemented | AKS owns invocation and Foundry retains model hosting/evaluation. External-agent registration is not implemented and must not be assumed. |
 
 ## Risks and mitigations
 
