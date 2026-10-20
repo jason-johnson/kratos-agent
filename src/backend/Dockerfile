@@ -9,19 +9,24 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Layer 2: Global npm packages (Copilot CLI + Faker MCP) ──
+# ── Layer 2: Copilot CLI ──
 # These intentionally track @latest and are NOT pinned, so two builds of the
 # same commit can produce different images. Pinning is preferable, but must be
 # done from a machine that can see the real npm registry.
-RUN npm install -g @github/copilot@latest faker-mcp-server@latest \
+RUN npm install -g @github/copilot@latest \
     && rm -rf /root/.npm /tmp/*
 
-# ── Layer 2b: In-repo mock MCP servers (Salesforce, etc.) ──
-COPY mocks/ /opt/mocks/
+# ── Layer 2b: ARE MCP servers only ──
+COPY mocks/package.json mocks/package-lock.json /opt/mocks/
+COPY mocks/packages/servicenow-mcp-server/ /opt/mocks/packages/servicenow-mcp-server/
+COPY mocks/packages/m365-graph-mcp-server/ /opt/mocks/packages/m365-graph-mcp-server/
 RUN cd /opt/mocks \
-    && npm install --workspaces \
-    && npm run build --workspaces --if-present \
-    && npm install -g ./packages/* \
+    && npm ci --ignore-scripts --no-audit --no-fund \
+        --workspace packages/servicenow-mcp-server \
+        --workspace packages/m365-graph-mcp-server \
+    && npm run build --workspace packages/servicenow-mcp-server \
+        --workspace packages/m365-graph-mcp-server \
+    && npm install -g ./packages/servicenow-mcp-server ./packages/m365-graph-mcp-server \
     && rm -rf /root/.npm /tmp/*
 
 # ── Layer 3: Playwright Chromium + system deps for PDF rendering ──
