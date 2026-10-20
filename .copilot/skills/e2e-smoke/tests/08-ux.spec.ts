@@ -7,11 +7,11 @@
  * Runs only when SKIP_BROWSER is unset (default).
  */
 import { test, expect, type Page } from "@playwright/test";
-import { FRONTEND_URL, USE_CASES } from "./helpers";
+import { FRONTEND_URL } from "./helpers";
 
 async function gotoHome(page: Page) {
   await page.goto(FRONTEND_URL, { waitUntil: "domcontentloaded" });
-  // Wait for runtime config + use-cases to land — landing input is the gate.
+  // Wait for runtime configuration to land — the input is the gate.
   await page
     .getByPlaceholder("Ask me anything...")
     .waitFor({ state: "visible", timeout: 30_000 });
@@ -41,40 +41,11 @@ async function openSkillsAdmin(page: Page) {
 }
 
 test.describe("UX — interactive flows", () => {
-  test("home loads with the configured use-cases in the persona selector", async ({ page }) => {
-    await gotoHome(page);
-    const persona = page.locator('select[aria-label="Select agent persona"]');
-    await expect(persona, "persona <select> visible").toBeVisible();
-    const optionValues = await persona.locator("option").evaluateAll((opts) =>
-      opts.map((o) => (o as HTMLOptionElement).value),
-    );
-    for (const uc of USE_CASES) {
-      expect(optionValues, `option for '${uc}' present`).toContain(uc);
-    }
-  });
-
-  test("switching persona updates the persona selector value", async ({ page }) => {
-    await gotoHome(page);
-    const persona = page.locator('select[aria-label="Select agent persona"]');
-    await expect(persona).toBeVisible();
-    const optionValues = await persona.locator("option").evaluateAll((opts) =>
-      opts.map((o) => (o as HTMLOptionElement).value).filter(Boolean),
-    );
-    expect(optionValues.length, "at least two personas to switch between").toBeGreaterThan(1);
-    for (const value of optionValues.slice(0, 2)) {
-      await persona.selectOption(value);
-      await expect(persona).toHaveValue(value);
-    }
-  });
-
   test("landing textarea + send button triggers a chat and an assistant reply renders", async ({
     page,
   }) => {
     test.setTimeout(180_000);
     await gotoHome(page);
-
-    const persona = page.locator('select[aria-label="Select agent persona"]');
-    await persona.selectOption("generic");
 
     const input = page.getByPlaceholder("Ask me anything...");
     const probe = `e2e-${Date.now().toString(36)} reply with exactly: ok`;
@@ -118,7 +89,8 @@ test.describe("UX — interactive flows", () => {
     const expectedTabs: { label: string; heading: RegExp }[] = [
       { label: "Skills", heading: /^Skills$|Create Skill/i },
       { label: "System Prompt", heading: /System Prompt/i },
-      { label: "APM", heading: /APM/i },
+      { label: "MCP Servers", heading: /MCP Servers/i },
+      { label: "Consistency", heading: /Consistency Analysis/i },
       { label: "Evals", heading: /Evaluations|Evals/i },
       { label: "Traces", heading: /Traces/i },
     ];

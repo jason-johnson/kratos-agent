@@ -2,16 +2,15 @@
  * Shared helpers + env-derived URLs used by every spec.
  *
  * No deployment endpoints are hardcoded here — this is a public repo. URLs are
- * resolved by `run.sh` from the local `azd` environment (`.azure/`, gitignored)
- * and exported as KRATOS_FRONTEND_URL / KRATOS_BACKEND_URL, or supplied
- * manually. Missing values fail fast rather than silently targeting a stale env.
+ * supplied explicitly to run.sh. Missing values fail fast rather than silently
+ * targeting a stale environment.
  */
 function requiredUrl(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
     throw new Error(
       `${name} is not set. Run this suite via ./run.sh (which resolves endpoints ` +
-        `from 'azd env get-values'), or export ${name} explicitly.`,
+        `from KRATOS_URL), or export ${name} explicitly.`,
     );
   }
   return value.replace(/\/+$/, "");
@@ -21,13 +20,12 @@ export const FRONTEND_URL = requiredUrl("KRATOS_FRONTEND_URL");
 
 export const BACKEND_URL = requiredUrl("KRATOS_BACKEND_URL");
 
-export const USE_CASES = (process.env.KRATOS_USE_CASES || "generic")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-
 export const CHAT_TIMEOUT_MS = Number(process.env.CHAT_TIMEOUT_MS || 60_000);
 export const TRACES_LOOKBACK_HOURS = Number(process.env.TRACES_LOOKBACK_HOURS || 6);
+const authCookie = process.env.KRATOS_AUTH_COOKIE;
+export const API_HEADERS: Record<string, string> = authCookie
+  ? { Cookie: authCookie }
+  : {};
 
 export type ChatEvent = {
   event: string;
@@ -43,7 +41,6 @@ export type ChatEvent = {
  */
 export async function chatOnce(
   prompt: string,
-  useCase: string,
   timeoutMs = CHAT_TIMEOUT_MS,
 ): Promise<{ text: string; ok: boolean; status: number; events: ChatEvent[] }> {
   const conversationId = `e2e-smoke-${Date.now()}`;
@@ -56,10 +53,10 @@ export async function chatOnce(
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
+        ...API_HEADERS,
       },
       body: JSON.stringify({
         message: prompt,
-        useCase: useCase,
         conversationId: conversationId,
       }),
       signal: ac.signal,

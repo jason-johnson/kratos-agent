@@ -67,6 +67,13 @@ spec:
     - host: {{ $host | quote }}
       http:
         paths:
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "kratos.fullname" . }}-backend
+                port:
+                  name: http
           - path: /api
             pathType: Prefix
             backend:

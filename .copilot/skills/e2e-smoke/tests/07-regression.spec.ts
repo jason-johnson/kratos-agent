@@ -1,7 +1,7 @@
 /**
  * Regression coverage for kratos-agent surfaces that pre-date the
  * evals + tracing branch. These specs assert that the existing
- * use-case catalogue, conversation CRUD, skills admin, and settings
+ * operational context, conversation CRUD, and skills administration
  * surfaces still behave correctly after the changes shipped in
  * `feat/evals-and-tracing`.
  *
@@ -10,57 +10,29 @@
  * core kratos-agent contract.
  */
 import { test, expect, request } from "@playwright/test";
-import { BACKEND_URL, USE_CASES } from "./helpers";
+import { API_HEADERS, BACKEND_URL } from "./helpers";
 
 test.describe("regression: core kratos-agent surfaces", () => {
-  test("GET /api/use-cases returns every configured use-case with schema", async () => {
-    const api = await request.newContext();
-    const resp = await api.get(`${BACKEND_URL}/api/use-cases`);
-    expect(resp.status(), "/api/use-cases status").toBe(200);
+  test("GET /api/context returns the ARE operational context", async () => {
+    const api = await request.newContext({ extraHTTPHeaders: API_HEADERS });
+    const resp = await api.get(`${BACKEND_URL}/api/context`);
+    expect(resp.status(), "/api/context status").toBe(200);
     const body = await resp.json();
-    expect(body, "shape").toHaveProperty("useCases");
-    const cases: any[] = body.useCases;
-    const names = cases.map((c) => c.name);
-    for (const expected of USE_CASES) {
-      expect(names, `use-case '${expected}' missing`).toContain(expected);
-    }
-    const first = cases[0];
-    expect(first.displayName, "displayName").toBeTruthy();
-    expect(first.description, "description").toBeTruthy();
-    expect(
-      typeof first.skillCount,
-      "skillCount type",
-    ).toBe("number");
-    expect(Array.isArray(first.sampleQuestions), "sampleQuestions array").toBe(true);
-  });
-
-  test("GET /api/settings returns Foundry config shape", async () => {
-    const api = await request.newContext();
-    const resp = await api.get(`${BACKEND_URL}/api/settings`);
-    expect(resp.status(), "/api/settings status").toBe(200);
-    const body = await resp.json();
-    expect(body, "settings shape").toHaveProperty("foundryEndpoint");
-    expect(body, "settings shape").toHaveProperty("foundryModelDeployment");
-    expect(
-      typeof body.configured,
-      "configured flag is boolean",
-    ).toBe("boolean");
-    expect(
-      body.foundryEndpoint.startsWith("https://"),
-      `foundryEndpoint should be https (got ${body.foundryEndpoint})`,
-    ).toBe(true);
+    expect(body, "context shape").toHaveProperty("environmentClass");
+    expect(body, "context shape").toHaveProperty("modelDeployment");
+    expect(body, "context shape").toHaveProperty("evidenceTarget");
   });
 
   test("conversation CRUD round-trip: POST -> GET -> list -> DELETE", async () => {
-    const api = await request.newContext();
+    const api = await request.newContext({ extraHTTPHeaders: API_HEADERS });
 
     const created = await api.post(`${BACKEND_URL}/api/conversations`, {
-      data: { useCase: "generic", title: "e2e-smoke regression" },
+      data: { title: "e2e-smoke regression" },
     });
     expect(created.status(), "create conversation status").toBeLessThan(300);
     const conv = await created.json();
     expect(conv.id, "conversation.id present").toBeTruthy();
-    expect(conv.useCase, "conversation.useCase preserved").toBe("generic");
+    expect(conv, "legacy useCase field is absent").not.toHaveProperty("useCase");
 
     const id = conv.id;
     try {
@@ -87,7 +59,7 @@ test.describe("regression: core kratos-agent surfaces", () => {
   });
 
   test("admin/skills catalogue returns >=1 skill with descriptor", async () => {
-    const api = await request.newContext();
+    const api = await request.newContext({ extraHTTPHeaders: API_HEADERS });
     const resp = await api.get(`${BACKEND_URL}/api/admin/skills`);
     expect(resp.status(), "admin/skills status").toBe(200);
     const body = await resp.json();
@@ -107,7 +79,7 @@ test.describe("regression: core kratos-agent surfaces", () => {
   });
 
   test("admin/system-prompt returns content", async () => {
-    const api = await request.newContext();
+    const api = await request.newContext({ extraHTTPHeaders: API_HEADERS });
     const resp = await api.get(`${BACKEND_URL}/api/admin/system-prompt`);
     expect(resp.status(), "system-prompt status").toBe(200);
     const body = await resp.json();

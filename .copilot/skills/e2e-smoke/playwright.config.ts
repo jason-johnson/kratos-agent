@@ -19,6 +19,7 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    storageState: process.env.KRATOS_STORAGE_STATE,
   },
   projects: SKIP_BROWSER
     ? [{ name: "api-only", testIgnore: /(06-ui|08-ux)\.spec\.ts$/ }]

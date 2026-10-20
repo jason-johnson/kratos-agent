@@ -1,9 +1,9 @@
 import { test, expect, request } from "@playwright/test";
-import { BACKEND_URL, TRACES_LOOKBACK_HOURS } from "./helpers";
+import { API_HEADERS, BACKEND_URL, TRACES_LOOKBACK_HOURS } from "./helpers";
 
 test.describe("traces", () => {
   test("operations list returns; per-op detail returns spans (skip if empty window)", async () => {
-    const api = await request.newContext();
+    const api = await request.newContext({ extraHTTPHeaders: API_HEADERS });
 
     const listResp = await api.get(
       `${BACKEND_URL}/api/traces/operations?hours=${TRACES_LOOKBACK_HOURS}`,

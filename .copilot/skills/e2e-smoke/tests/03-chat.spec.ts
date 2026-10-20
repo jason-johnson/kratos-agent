@@ -1,18 +1,17 @@
 import { test, expect, request } from "@playwright/test";
-import { BACKEND_URL, chatOnce, CHAT_TIMEOUT_MS, stringValue } from "./helpers";
+import { API_HEADERS, BACKEND_URL, chatOnce, CHAT_TIMEOUT_MS, stringValue } from "./helpers";
 
 const INTERNAL_TOOLS = new Set(["ask-user", "report-intent", "skill", "sql"]);
 
 test.describe("chat round-trip", () => {
   test.setTimeout(CHAT_TIMEOUT_MS * 2 + 30_000);
 
-  test("agent responds to a tiny prompt for the 'generic' use-case", async () => {
+  test("ARE responds to a tiny prompt", async () => {
     // Best-effort warmup; tolerate cold-start.
-    await chatOnce("ping", "generic", 30_000).catch(() => undefined);
+    await chatOnce("ping", 30_000).catch(() => undefined);
 
     const { text, ok, status } = await chatOnce(
       "Reply with exactly one short sentence confirming you are online.",
-      "generic",
     );
 
     expect(
@@ -26,16 +25,20 @@ test.describe("chat round-trip", () => {
   });
 
   test("agent emits a skill tool_call for a scenario that expects a tool", async () => {
-    const api = await request.newContext();
-    const scenariosResp = await api.get(`${BACKEND_URL}/api/use-cases/generic/evals/scenarios`);
-    expect(scenariosResp.status(), "generic scenarios status").toBe(200);
+    const api = await request.newContext({ extraHTTPHeaders: API_HEADERS });
+    const scenariosResp = await api.get(`${BACKEND_URL}/api/evals/scenarios`);
+    expect(scenariosResp.status(), "ARE scenarios status").toBe(200);
     const scenariosBody = await scenariosResp.json();
     const scenarios: Record<string, unknown>[] = scenariosBody.scenarios ?? [];
-    const scenario = scenarios.find((candidate) => stringValue(candidate.name) === "code-interpreter-math");
+    const scenario = scenarios.find(
+      (candidate) =>
+        Array.isArray(candidate.expected_tool_calls) &&
+        candidate.expected_tool_calls.length > 0,
+    );
 
     expect(
       scenario,
-      "generic should include the code-interpreter-math scenario",
+      "ARE should include a scenario with an expected tool call",
     ).toBeTruthy();
 
     const expectedTools = (scenario!.expected_tool_calls as unknown[])
@@ -48,7 +51,7 @@ test.describe("chat round-trip", () => {
       `skill scenario=${stringValue(scenario!.name)} expected=${expectedTools.join(",")}`,
     );
 
-    const { events, ok, status, text } = await chatOnce(prompt, "generic");
+    const { events, ok, status, text } = await chatOnce(prompt);
     const eventNames = events.map((event) => event.event);
     const toolNames = events
       .filter((event) => event.event === "tool_call")
