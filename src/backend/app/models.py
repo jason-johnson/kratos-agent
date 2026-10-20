@@ -268,7 +268,7 @@ class SkillFileList(BaseModel):
 
 
 class SkillFileUpsert(BaseModel):
-    content: str = ""
+    content: str = Field(default="", max_length=1_000_000)
 
 
 class SkillResponse(BaseModel):
@@ -298,6 +298,22 @@ class SkillUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     enabled: bool | None = None
     instructions: str | None = Field(default=None, max_length=10000)
+
+
+class RuntimeConfigVersion(BaseModel):
+    """Immutable runtime configuration version metadata."""
+
+    version: str
+    useCase: str
+    createdAt: datetime
+    actor: str
+    action: str
+
+
+class RuntimeConfigVersionList(BaseModel):
+    """Version history for a use-case."""
+
+    versions: list[RuntimeConfigVersion]
 
 
 class SkillList(BaseModel):
@@ -430,6 +446,25 @@ class MCPConfigUpdate(BaseModel):
     """Payload for updating the MCP servers config."""
 
     servers: dict
+
+    @field_validator("servers")
+    @classmethod
+    def validate_servers(cls, servers: dict) -> dict:
+        if len(servers) > 20:
+            raise ValueError("At most 20 MCP servers may be configured")
+        for name, config in servers.items():
+            if not isinstance(name, str) or not name or len(name) > 100:
+                raise ValueError("MCP server names must be non-empty strings of at most 100 characters")
+            if not isinstance(config, dict):
+                raise ValueError(f"MCP server '{name}' must be an object")
+            transport = config.get("type")
+            if transport not in {"local", "http", "sse"}:
+                raise ValueError(f"MCP server '{name}' has unsupported type '{transport}'")
+            if transport == "local" and not config.get("command"):
+                raise ValueError(f"Local MCP server '{name}' requires a command")
+            if transport in {"http", "sse"} and not config.get("url"):
+                raise ValueError(f"Remote MCP server '{name}' requires a URL")
+        return servers
 
 
 # ─── Evals ───────────────────────────────────────────────────────────────────

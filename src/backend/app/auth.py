@@ -53,3 +53,22 @@ async def require_authenticated_user(
         raise HTTPException(status_code=401, detail="Authentication required")
 
     return principal
+
+
+async def require_admin_user(
+    request: Request,
+    settings: Settings = _settings_dep,
+) -> dict:
+    """Require an authenticated principal carrying the ``admin`` app role."""
+    principal = await require_authenticated_user(request, settings)
+    roles = principal.get("userRoles") or principal.get("roles") or []
+    if not isinstance(roles, list) or "admin" not in {str(role).lower() for role in roles}:
+        raise HTTPException(status_code=403, detail="Administrator role required")
+    request.state.admin_principal = principal
+    return principal
+
+
+def get_admin_actor(request: Request) -> str:
+    """Return a stable, non-secret audit identity for the active administrator."""
+    principal = getattr(request.state, "admin_principal", {})
+    return str(principal.get("userDetails") or principal.get("userId") or "unknown")

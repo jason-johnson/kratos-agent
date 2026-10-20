@@ -9,15 +9,16 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from app.auth import require_authenticated_user
+from app.auth import get_admin_actor, require_admin_user
 from app.constants import PRIMARY_USE_CASE
 from app.models import SystemPromptResponse, SystemPromptUpdate
 from app.services.copilot_agent import DEFAULT_SYSTEM_PROMPT
+from app.services.runtime_config_service import RuntimeConfigService
 from app.services.skill_registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(dependencies=[Depends(require_authenticated_user)])
+router = APIRouter(dependencies=[Depends(require_admin_user)])
 
 
 def _get_registry(request: Request, use_case: str) -> SkillRegistry:
@@ -65,6 +66,12 @@ async def update_system_prompt(
         prompt_path.write_text(body.content)
 
     logger.info("System prompt updated for use-case '%s' (%d chars)", use_case, len(body.content))
+    runtime_config: RuntimeConfigService = request.app.state.runtime_config_service
+    await runtime_config.record_version(
+        use_case,
+        action="system-prompt.update",
+        actor=get_admin_actor(request),
+    )
     return SystemPromptResponse(content=body.content, isDefault=False)
 
 
@@ -81,4 +88,10 @@ async def reset_system_prompt(request: Request, use_case: str = Query(PRIMARY_US
         if prompt_path.exists():
             registry.system_prompt = prompt_path.read_text()
 
+    runtime_config: RuntimeConfigService = request.app.state.runtime_config_service
+    await runtime_config.record_version(
+        use_case,
+        action="system-prompt.reset",
+        actor=get_admin_actor(request),
+    )
     logger.info("System prompt reset for use-case '%s'", use_case)

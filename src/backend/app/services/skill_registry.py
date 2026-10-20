@@ -114,6 +114,8 @@ class SkillRegistry:
         """
         self.use_case = use_case
         self._blob_service = blob_service
+        self.skills = {}
+        self.mcp_servers = {}
         self.mcp_sources = {}
 
         if blob_service is not None and blob_service.is_available:
@@ -489,7 +491,7 @@ class SkillRegistry:
         del self.skills[name]
 
         if self._blob_service and self._blob_service.is_available:
-            await self._blob_service.delete_skill(name)
+            await self._blob_service.delete_skill(self.use_case, name)
 
         logger.info("Removed skill: %s", name)
         return True

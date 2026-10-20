@@ -1,5 +1,7 @@
 """FastAPI application entry point."""
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -35,6 +37,7 @@ from app.services.copilot_agent import CopilotAgent
 from app.services.cosmos_service import CosmosService
 from app.services.eval_service import EvalService
 from app.services.eval_storage import EvalStorage
+from app.services.runtime_config_service import RuntimeConfigService
 from app.services.skill_registry import SkillRegistry
 from app.services.traces_service import TracesService
 
@@ -152,6 +155,20 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     application.state.copilot_agent = copilot_agent
     application.state.settings = settings
 
+    runtime_config_service = RuntimeConfigService(
+        settings,
+        blob_skill_service,
+        registries,
+        copilot_agent,
+        apm_service,
+    )
+    await runtime_config_service.initialize(PRIMARY_USE_CASE)
+    application.state.runtime_config_service = runtime_config_service
+    runtime_config_task = asyncio.create_task(
+        runtime_config_service.watch(PRIMARY_USE_CASE),
+        name="runtime-config-refresh",
+    )
+
     # Initialize Eval storage + service (per-use-case scenarios, runs, results)
     eval_storage = EvalStorage(blob_skill_service, local_base_dir=settings.apm_use_cases_root)
     application.state.eval_storage = eval_storage
@@ -167,6 +184,9 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
 
     # Cleanup
     await eval_service.shutdown()
+    runtime_config_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await runtime_config_task
     await traces_service.close()
     await copilot_agent.stop()
     await blob_skill_service.close()

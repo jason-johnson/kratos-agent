@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from app.auth import get_admin_actor, require_admin_user
 from app.services.apm_service import ApmCommandResult, ApmDependency, ApmError, ApmMcpServer, ApmService
+from app.services.runtime_config_service import RuntimeConfigService
 from app.services.skill_registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin_user)])
 
 
 # ─── Request / response models ────────────────────────────────────────────────
@@ -141,17 +143,19 @@ async def _reload_use_case(request: Request, use_case: str) -> None:
     apm_service = getattr(request.app.state, "apm_service", None)
 
     if registry is not None:
-        try:
-            await registry.load(use_case, blob_service, apm_service=apm_service)
-        except Exception:  # noqa: BLE001 — logged, don't mask the APM result
-            logger.exception("Failed to reload registry for use-case '%s'", use_case)
+        await registry.load(use_case, blob_service, apm_service=apm_service)
 
     copilot_agent = getattr(request.app.state, "copilot_agent", None)
     if copilot_agent is not None:
-        try:
-            await copilot_agent.reset_sessions_for_use_case(use_case)
-        except Exception:  # noqa: BLE001
-            logger.debug("Session reset skipped — Copilot SDK runs in hosted agent")
+        await copilot_agent.reset_sessions_for_use_case(use_case)
+
+    runtime_config: RuntimeConfigService = request.app.state.runtime_config_service
+    await runtime_config.record_version(
+        use_case,
+        action="apm.update",
+        actor=get_admin_actor(request),
+        reset_sessions=False,
+    )
 
 
 async def _build_command_response(

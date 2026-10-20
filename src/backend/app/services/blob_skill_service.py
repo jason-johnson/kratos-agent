@@ -259,6 +259,16 @@ class BlobSkillService:
         blob = self._container_client.get_blob_client(blob_path)
         await blob.upload_blob(content, overwrite=True)
 
+    async def download_file(self, blob_path: str) -> bytes | None:
+        """Download an arbitrary blob path."""
+        return await self._download_file(blob_path)
+
+    async def list_files(self, prefix: str) -> list[str]:
+        """List blob names below an arbitrary prefix."""
+        if not self._container_client:
+            return []
+        return [blob.name async for blob in self._container_client.list_blobs(name_starts_with=prefix)]
+
     async def upload_skill_file(self, use_case: str, skill_name: str, relative_path: str, content: bytes) -> None:
         """Upload a single file to a skill folder within a use-case."""
         blob_path = f"{_USE_CASES_PREFIX}{use_case}/skills/{skill_name}/{relative_path}"

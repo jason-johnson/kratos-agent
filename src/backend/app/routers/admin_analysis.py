@@ -11,13 +11,13 @@ from azure.identity.aio import DefaultAzureCredential
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from app.auth import require_authenticated_user
+from app.auth import require_admin_user
 from app.constants import PRIMARY_USE_CASE
 from app.services.skill_registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(dependencies=[Depends(require_authenticated_user)])
+router = APIRouter(dependencies=[Depends(require_admin_user)])
 
 _credential: DefaultAzureCredential | None = None
 _http_client: httpx.AsyncClient | None = None

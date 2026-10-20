@@ -4,12 +4,13 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.auth import require_authenticated_user
+from app.auth import get_admin_actor, require_admin_user
 from app.models import MCPConfigResponse, MCPConfigUpdate
+from app.services.runtime_config_service import RuntimeConfigService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(dependencies=[Depends(require_authenticated_user)])
+router = APIRouter(dependencies=[Depends(require_admin_user)])
 
 
 @router.get("", response_model=MCPConfigResponse)
@@ -34,6 +35,12 @@ async def update_mcp_config(use_case: str, body: MCPConfigUpdate, request: Reque
         raise HTTPException(status_code=404, detail=f"Use-case '{use_case}' not found")
 
     await registry.update_mcp_servers(body.servers)
+    runtime_config: RuntimeConfigService = request.app.state.runtime_config_service
+    await runtime_config.record_version(
+        use_case,
+        action="mcp.update",
+        actor=get_admin_actor(request),
+    )
 
     logger.info("MCP config updated for use-case '%s': %d servers", use_case, len(body.servers))
     return MCPConfigResponse(
