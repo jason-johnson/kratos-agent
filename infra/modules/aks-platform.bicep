@@ -10,6 +10,9 @@ param tags object = {}
 @description('AKS node subnet resource ID')
 param subnetId string
 
+@description('Virtual network name containing the AKS subnet')
+param vnetName string
+
 @description('Log Analytics workspace resource ID')
 param logAnalyticsWorkspaceId string
 
@@ -55,6 +58,9 @@ param nodeVmSize string = 'Standard_D4ds_v5'
 @description('Optional Azure Monitor action group resource ID for AKS alerts')
 param alertActionGroupId string = ''
 
+@description('Principal granted Azure Kubernetes Service RBAC Cluster Admin for initial operation')
+param clusterAdminPrincipalId string = ''
+
 var backendIdentityName = '${name}-backend'
 var cosmosDbDataContributor = '00000000-0000-0000-0000-000000000002'
 var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
@@ -62,6 +68,8 @@ var cognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 var storageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var monitoringReader = '43d0d8ad-25c7-4714-9337-8ba259a9fe05'
 var acrPull = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+var networkContributor = '4d97b98b-1d4f-4787-a291-c67834d212e7'
+var aksRbacClusterAdmin = 'b1ff04bb-8a4e-4dc4-8eb5-8693973ce19b'
 
 resource backendIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: backendIdentityName
@@ -83,6 +91,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
   properties: {
     dnsPrefix: name
     enableRBAC: true
+    disableLocalAccounts: true
     nodeResourceGroup: '${name}-nodes'
     aadProfile: {
       managed: true
@@ -212,6 +221,10 @@ resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing =
   name: containerRegistryName
 }
 
+resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' existing = {
+  name: vnetName
+}
+
 resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' existing = {
   name: cosmosDbAccountName
 }
@@ -243,6 +256,25 @@ resource kubeletAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull)
     principalId: aks.properties.identityProfile.kubeletidentity.objectId
     principalType: 'ServicePrincipal'
+  }
+}
+
+resource controlPlaneNetworkRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(vnet.id, aks.name, networkContributor)
+  scope: vnet
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', networkContributor)
+    principalId: aks.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource clusterAdminRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(clusterAdminPrincipalId)) {
+  name: guid(aks.id, clusterAdminPrincipalId, aksRbacClusterAdmin)
+  scope: aks
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', aksRbacClusterAdmin)
+    principalId: clusterAdminPrincipalId
   }
 }
 

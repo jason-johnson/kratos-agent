@@ -9,6 +9,9 @@ metadata:
     {{- include "kratos.labels" . | nindent 4 }}
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    {{- with .Values.ingress.keyVaultCertificateUri }}
+    kubernetes.azure.com/tls-cert-keyvault-uri: {{ . | quote }}
+    {{- end }}
     {{- with .Values.ingress.clusterIssuer }}
     cert-manager.io/cluster-issuer: {{ . | quote }}
     {{- end }}
@@ -16,7 +19,7 @@ spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
     - hosts: [{{ $host | quote }}]
-      secretName: {{ .Values.ingress.tlsSecretName }}
+      secretName: {{ ternary (printf "keyvault-%s-auth" (include "kratos.fullname" .)) .Values.ingress.tlsSecretName (not (empty .Values.ingress.keyVaultCertificateUri)) }}
   rules:
     - host: {{ $host | quote }}
       http:
@@ -44,6 +47,9 @@ metadata:
     nginx.ingress.kubernetes.io/affinity: cookie
     nginx.ingress.kubernetes.io/session-cookie-name: kratos-route
     nginx.ingress.kubernetes.io/session-cookie-secure: "true"
+    {{- with .Values.ingress.keyVaultCertificateUri }}
+    kubernetes.azure.com/tls-cert-keyvault-uri: {{ . | quote }}
+    {{- end }}
     {{- if .Values.authProxy.enabled }}
     nginx.ingress.kubernetes.io/auth-url: {{ printf "http://%s-auth.%s.svc.cluster.local:4180/oauth2/auth" (include "kratos.fullname" .) .Release.Namespace | quote }}
     nginx.ingress.kubernetes.io/auth-signin: {{ printf "https://%s/oauth2/start?rd=$escaped_request_uri" $host | quote }}
@@ -56,7 +62,7 @@ spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
     - hosts: [{{ $host | quote }}]
-      secretName: {{ .Values.ingress.tlsSecretName }}
+      secretName: {{ ternary (printf "keyvault-%s" (include "kratos.fullname" .)) .Values.ingress.tlsSecretName (not (empty .Values.ingress.keyVaultCertificateUri)) }}
   rules:
     - host: {{ $host | quote }}
       http:

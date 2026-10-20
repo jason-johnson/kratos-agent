@@ -400,6 +400,7 @@ module aksPlatform './modules/aks-platform.bicep' = if (deployAks) {
     location: location
     tags: tags
     subnetId: network.outputs.aksSubnetId
+    vnetName: network.outputs.name
     logAnalyticsWorkspaceId: logAnalytics.outputs.id
     containerRegistryName: containerRegistry.outputs.name
     cosmosDbAccountName: cosmosDb.outputs.name
@@ -412,6 +413,7 @@ module aksPlatform './modules/aks-platform.bicep' = if (deployAks) {
     oboIdentityName: deployObo ? oboIdentity.outputs.name : ''
     deployObo: deployObo
     alertActionGroupId: aksAlertActionGroupId
+    clusterAdminPrincipalId: principalId
   }
 }
 
