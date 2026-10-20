@@ -206,7 +206,7 @@ app = FastAPI(
 # Uses global ProxyTracerProvider; real provider is set by setup_telemetry() in the lifespan.
 instrument_fastapi_app(app)
 
-# CORS — configured for Static Web App frontend
+# CORS — AKS ingress is same-origin; explicit origins support local development.
 _cors_settings = get_settings()
 _cors_origins = [o.strip() for o in _cors_settings.allowed_origins.split(",") if o.strip()]
 app.add_middleware(

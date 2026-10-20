@@ -70,7 +70,7 @@ class CosmosService:
 
         A configured endpoint that turns out to be *unreachable* also falls back
         to SQLite. Cosmos is private-endpoint-only, so any host outside its VNet
-        (notably the Foundry hosted-agent sandbox) blackholes every request.
+        (for example, a misconfigured private endpoint) blackholes every request.
         Without this fallback the service keeps a live client whose every call
         stalls ~40s before failing, which dominates cold-start time and adds
         dead time to each turn.

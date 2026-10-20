@@ -2,8 +2,8 @@
 
 An evidence-driven incident-command agent built with the GitHub Copilot SDK.
 
-The project is being reduced from a multi-persona accelerator into one focused
-Agent Reliability Engineer (ARE). The ARE helps an incident commander:
+The project provides one focused Agent Reliability Engineer (ARE). The ARE
+helps an incident commander:
 
 1. investigate suspected causes with attributed technical evidence;
 2. maintain an evidence-backed incident command brief; and
@@ -15,7 +15,7 @@ single-use, explicitly approved ServiceNow updates.
 See [PLAN.md](PLAN.md) for the migration decisions, phase status, and manual AKS
 acceptance gates.
 
-## Current architecture
+## Architecture
 
 The application currently runs the API and agent loop in one FastAPI service.
 The model remains hosted in Microsoft Foundry.
@@ -41,10 +41,10 @@ FastAPI agent/API
     +--> delegated Microsoft Graph OBO MCP service
 ```
 
-The currently deployed path remains Azure Container Apps plus Azure Static Web
-Apps. The AKS images, Helm chart, Workload Identity/RBAC infrastructure,
-ingress, policies, monitoring, and runbook are implemented but have not been
-deployed. Live acceptance requires an explicitly approved non-production target.
+AKS is the only supported application runtime. Bicep provisions AKS and the
+managed Azure dependencies; operators build immutable images and install the
+Helm chart manually. No CI workflow deploys, publishes images, changes DNS, or
+attaches certificates.
 
 ## Product model
 
@@ -55,7 +55,7 @@ There is one public agent identity: **Agent Reliability Engineer**.
   caller-selected use case.
 - `agent-reliability-engineer` remains an internal storage/configuration key.
 - Runtime skill and prompt changes are versioned, audited, and admin-only.
-- Persona import/export and hosted-agent packaging have been removed.
+- Import/export and alternate runtime packaging have been removed.
 
 The active configuration is under
 [`use-cases/agent-reliability-engineer/`](use-cases/agent-reliability-engineer/):
@@ -95,8 +95,8 @@ ServiceNow writes are conversation-bound, exact, expiring, and single-use.
 | [`src/frontend/`](src/frontend/) | Next.js user interface |
 | [`src/obo-mcp-server/`](src/obo-mcp-server/) | Optional Microsoft Graph On-Behalf-Of MCP service |
 | [`use-cases/agent-reliability-engineer/`](use-cases/agent-reliability-engineer/) | ARE prompt, skills, MCP config, and evals |
-| [`mocks/`](mocks/) | Synthetic development servers; ServiceNow is not on the active production path |
-| [`infra/`](infra/) | Parameterized Azure infrastructure, including optional AKS |
+| [`mocks/`](mocks/) | Synthetic local Microsoft 365 Graph server |
+| [`infra/`](infra/) | Parameterized AKS and managed Azure infrastructure |
 | [`deploy/helm/kratos-agent/`](deploy/helm/kratos-agent/) | Hardened AKS Helm chart |
 | [`deploy/aks/`](deploy/aks/) | Manual AKS build, deploy, acceptance, and rollback runbook |
 | [`scripts/`](scripts/) | Eval and trace utilities |
@@ -119,7 +119,7 @@ commands. Do not add private feed URLs or credentials to the repository.
 
 ```bash
 cp .env.local.example .env.local
-# Set COPILOT_GITHUB_TOKEN and any optional OBO values in .env.local.
+# Set COPILOT_GITHUB_TOKEN, PRIVATE_PYPI_INDEX_URL, and PRIVATE_NPMRC.
 
 ./run-local.sh
 # Windows: .\run-local.ps1
@@ -148,9 +148,8 @@ npm run dev
 
 ### Retained MCP mocks
 
-The local ARE configuration retains the synthetic Microsoft Graph package.
-ServiceNow production behavior uses the fixed Python client; its mock remains
-only as a repository fixture pending Phase 6 cleanup.
+The local ARE configuration retains one synthetic Microsoft Graph package.
+ServiceNow behavior uses the fixed Python client.
 
 ```bash
 cd mocks/packages/m365-graph-mcp-server
@@ -172,28 +171,20 @@ npm run build
 
 API JSON uses camelCase. On-disk eval scenarios use snake_case.
 
-## Deployment status
+## Deployment
 
 Deployment is manual. Do not attach deployment to push-based CI.
 
-The current `azure.yaml` still deploys:
-
-- the FastAPI agent/API to Azure Container Apps;
-- the optional OBO MCP server to Azure Container Apps; and
-- the static frontend to Azure Static Web Apps.
-
-Container images use ACR remote builds. Do not switch them back to local builds.
-
-The packaged target architecture uses AKS workloads in one namespace:
+`azure.yaml` provisions infrastructure only. The Helm release runs these
+workloads in one namespace:
 
 1. frontend; and
 2. agent/API;
 3. optional OBO service, isolated behind its own identity and policy boundary;
 4. OIDC authentication proxy.
 
-Provisioning is disabled by default (`DEPLOY_AKS=false`) and no CI job deploys.
 Follow the [AKS runbook](deploy/aks/README.md) only with an explicitly approved
-target and private values.
+target, private package feeds, and private Helm values.
 
 ## Validation policy
 
@@ -203,7 +194,7 @@ boundaries:
 - backend tests, Ruff lint, and Ruff format;
 - frontend lint and production build;
 - retained MCP package builds;
-- Bicep compilation and hook checks while Container Apps infrastructure exists;
+- Bicep compilation and Helm lint/render/schema validation;
 - Docker Compose configuration;
 - diff whitespace and public-repository sensitive-data scans.
 

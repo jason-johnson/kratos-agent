@@ -14,7 +14,6 @@ class Settings(BaseSettings):
 
     # Azure service endpoints (set by Bicep / azd)
     cosmos_db_endpoint: str = ""
-    azure_ai_search_endpoint: str = ""
     key_vault_uri: str = ""
 
     # Microsoft Foundry (deployed by Bicep)
@@ -51,9 +50,8 @@ class Settings(BaseSettings):
     # CORS — comma-separated allowed origins; "*" for development only
     allowed_origins: str = "*"
 
-    # Authentication is enforced when admin_auth_enabled is true. Container Apps
-    # uses Easy Auth's x-ms-client-principal header. AKS uses a trusted ingress
-    # auth proxy; the backend service must remain cluster-internal when enabled.
+    # Authentication is enforced when admin_auth_enabled is true. AKS uses a
+    # trusted ingress auth proxy; the backend must remain cluster-internal.
     admin_auth_enabled: str = "false"
     trusted_auth_proxy_enabled: bool = False
     trusted_auth_proxy_admin_group: str = ""
@@ -62,7 +60,7 @@ class Settings(BaseSettings):
     cosmos_db_database: str = "kratos-agent"
 
     # APM (Agent Package Manager) — materialises remote skills / prompts /
-    # instructions / agents into each use-case via the `apm` CLI.
+    # instructions / agents into the ARE configuration via the `apm` CLI.
     apm_enabled: bool = True
     apm_binary: str = "apm"
     apm_default_target: str = "copilot"

@@ -1,11 +1,10 @@
 """Authentication dependencies for user and administrative endpoints.
 
-Container Apps uses the platform-provided ``x-ms-client-principal`` header.
 AKS uses an ingress authentication proxy and keeps the backend ClusterIP
 unreachable except through that ingress path.
 
 Auth enforcement is opt-in via the ADMIN_AUTH_ENABLED env var.  Set it to
-"true" after configuring Easy Auth on your Container App or SWA.
+"true" after configuring the trusted ingress proxy.
 """
 
 import base64

@@ -2,7 +2,7 @@
 
 The kratos agent connects to this server as a *remote* MCP server and injects
 the signed-in user's Entra access token into the ``Authorization`` request
-header (see kratos hosted-agent ``main.py``). This server validates that token,
+header. This server validates that token,
 performs a secret-less On-Behalf-Of exchange, and returns the user's Graph
 profile — so the tool runs **as the signed-in user**, not as the agent.
 
