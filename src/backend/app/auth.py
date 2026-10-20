@@ -1,8 +1,8 @@
-"""Lightweight authentication dependency for admin endpoints.
+"""Authentication dependencies for user and administrative endpoints.
 
-In production, Azure Static Web Apps (Easy Auth) injects the
-``x-ms-client-principal`` header for authenticated users.  Container Apps
-can also be configured with Easy Auth.
+Container Apps uses the platform-provided ``x-ms-client-principal`` header.
+AKS uses an ingress authentication proxy and keeps the backend ClusterIP
+unreachable except through that ingress path.
 
 Auth enforcement is opt-in via the ADMIN_AUTH_ENABLED env var.  Set it to
 "true" after configuring Easy Auth on your Container App or SWA.
@@ -32,6 +32,23 @@ def _get_client_principal(request: Request) -> dict | None:
         return None
 
 
+def _get_trusted_proxy_principal(request: Request, settings: Settings) -> dict | None:
+    if not settings.trusted_auth_proxy_enabled:
+        return None
+    user_id = request.headers.get("x-auth-request-user", "").strip()
+    if not user_id:
+        return None
+    groups = {group.strip() for group in request.headers.get("x-auth-request-groups", "").split(",") if group.strip()}
+    roles = ["authenticated"]
+    if settings.trusted_auth_proxy_admin_group and settings.trusted_auth_proxy_admin_group in groups:
+        roles.append("admin")
+    return {
+        "userId": user_id,
+        "userDetails": request.headers.get("x-auth-request-email", "").strip() or user_id,
+        "userRoles": roles,
+    }
+
+
 _settings_dep = Depends(get_settings)
 
 
@@ -50,7 +67,11 @@ async def require_authenticated_user(
         request.state.authenticated_principal = principal
         return principal
 
-    principal = _get_client_principal(request)
+    principal = (
+        _get_trusted_proxy_principal(request, settings)
+        if settings.trusted_auth_proxy_enabled
+        else _get_client_principal(request)
+    )
     if not principal:
         raise HTTPException(status_code=401, detail="Authentication required")
 

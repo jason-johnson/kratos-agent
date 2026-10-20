@@ -59,3 +59,40 @@ async def test_authenticated_user_requires_stable_user_id():
         await require_authenticated_user(request, Settings(admin_auth_enabled="true"))
 
     assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_trusted_proxy_identity_ignores_spoofed_easy_auth_header():
+    request = _request(["admin"])
+    request.headers.update(
+        {
+            "x-auth-request-user": "aks-operator",
+            "x-auth-request-email": "operator@example.invalid",
+            "x-auth-request-groups": "responders,are-admins",
+        }
+    )
+
+    principal = await require_admin_user(
+        request,
+        Settings(
+            admin_auth_enabled="true",
+            trusted_auth_proxy_enabled=True,
+            trusted_auth_proxy_admin_group="are-admins",
+        ),
+    )
+
+    assert principal["userId"] == "aks-operator"
+    assert principal["userDetails"] == "operator@example.invalid"
+
+
+@pytest.mark.asyncio
+async def test_trusted_proxy_requires_user_header():
+    request = _request(["admin"])
+
+    with pytest.raises(HTTPException) as exc:
+        await require_authenticated_user(
+            request,
+            Settings(admin_auth_enabled="true", trusted_auth_proxy_enabled=True),
+        )
+
+    assert exc.value.status_code == 401

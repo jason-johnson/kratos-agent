@@ -51,8 +51,12 @@ class Settings(BaseSettings):
     # CORS — comma-separated allowed origins; "*" for development only
     allowed_origins: str = "*"
 
-    # Admin auth — set to "true" after configuring Easy Auth on Container Apps / SWA
+    # Authentication is enforced when admin_auth_enabled is true. Container Apps
+    # uses Easy Auth's x-ms-client-principal header. AKS uses a trusted ingress
+    # auth proxy; the backend service must remain cluster-internal when enabled.
     admin_auth_enabled: str = "false"
+    trusted_auth_proxy_enabled: bool = False
+    trusted_auth_proxy_admin_group: str = ""
 
     # Cosmos DB database
     cosmos_db_database: str = "kratos-agent"
