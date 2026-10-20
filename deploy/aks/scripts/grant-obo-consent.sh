@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Grant tenant-wide admin consent for the OBO server app's delegated Microsoft
-# Graph `User.Read` permission.
+# Explicit operator utility for granting tenant-wide admin consent to the OBO
+# server app's delegated Microsoft Graph permissions.
 #
-# Why this is a hook and not Bicep
-# --------------------------------
-# The app registration *requests* User.Read declaratively in
+# Why this is separate from Bicep
+# -------------------------------
+# The app registration requests delegated Graph permissions declaratively in
 # infra/modules/obo-entra-app.bicep (`requiredResourceAccess`) — that needs no
 # special rights. Actually *granting* it is a different operation: an
 # `oauth2PermissionGrants` with consentType `AllPrincipals` consents on behalf of
@@ -20,34 +20,35 @@
 # resource and continue when it is forbidden, so the grant moved here, where a
 # 403 can be reported clearly and the deployment allowed to finish.
 #
-# Consequence of a skipped grant: OBO still works, but the first user to sign in
-# is prompted to consent to User.Read themselves, or an administrator grants it
-# once (see the instructions this script prints on failure).
+# Consequence of a skipped grant: OBO still works, but users may be prompted to
+# consent to permissions individually, or an administrator grants them once
+# (see the instructions this script prints on failure).
 #
-# Idempotent and best-effort: re-running is safe (an existing grant is detected
-# and left alone) and no failure mode aborts the deploy — this script always
-# exits 0.
+# The utility is idempotent. Unlike the former azd hook, it reports failures with
+# a non-zero exit status because an operator invoked it explicitly.
 
 set -uo pipefail
 
 MS_GRAPH_APP_ID="00000003-0000-0000-c000-000000000000"
-SCOPE="User.Read"
+SCOPES="User.Read User.ReadBasic.All Presence.Read.All Calendars.Read Mail.Read Chat.Read"
 
-# Only meaningful when the OBO stack was actually provisioned. Mirrors the
-# `condition:`/`if (deployObo)` gating in azure.yaml and infra/main.bicep.
+# Only meaningful when the OBO stack was provisioned.
 case "$(printf '%s' "${DEPLOY_OBO:-true}" | tr '[:upper:]' '[:lower:]')" in
   1|true|yes) ;;
   *) exit 0 ;;
 esac
 
 APP_ID="${OBO_SERVER_APP_CLIENT_ID:-}"
+if [ -z "$APP_ID" ] && command -v azd >/dev/null 2>&1; then
+  APP_ID="$(azd env get-value OBO_SERVER_APP_CLIENT_ID 2>/dev/null || true)"
+fi
 if [ -z "$APP_ID" ]; then
-  # Provisioning was skipped or the output is not in the environment. Nothing to
-  # consent to; staying quiet avoids noise on every non-OBO deploy.
-  exit 0
+  echo "ERROR: OBO_SERVER_APP_CLIENT_ID is unavailable." >&2
+  echo "Select the provisioned azd environment or export the value explicitly." >&2
+  exit 1
 fi
 
-echo "🔑 Granting admin consent for the OBO server app's Graph $SCOPE ..."
+echo "🔑 Granting admin consent for the OBO server app's delegated Graph permissions ..."
 
 # The grant references service principal OBJECT ids, not app ids.
 CLIENT_SP_ID="$(az ad sp show --id "$APP_ID" --query id -o tsv 2>/dev/null || true)"
@@ -60,28 +61,48 @@ if [ -z "$CLIENT_SP_ID" ] || [ -z "$GRAPH_SP_ID" ]; then
 fi
 
 if [ -n "$CLIENT_SP_ID" ]; then
-  # Already consented? Re-granting would create a duplicate grant object rather
-  # than failing, so check first to keep repeat deploys genuinely idempotent.
-  EXISTING="$(az rest --method GET \
+  EXISTING_ID="$(az rest --method GET \
     --url "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?\$filter=clientId eq '${CLIENT_SP_ID}' and resourceId eq '${GRAPH_SP_ID}'" \
-    --query "value[].scope" -o tsv 2>/dev/null || true)"
+    --query "value[0].id" -o tsv 2>/dev/null || true)"
+  EXISTING_SCOPES="$(az rest --method GET \
+    --url "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?\$filter=clientId eq '${CLIENT_SP_ID}' and resourceId eq '${GRAPH_SP_ID}'" \
+    --query "value[0].scope" -o tsv 2>/dev/null || true)"
 
-  # Each grant's scope is a space-separated list; match whole words only so
-  # User.ReadWrite.All is never mistaken for User.Read.
-  for granted in $EXISTING; do
-    if [ "$granted" = "$SCOPE" ]; then
-      echo "   ✅ Admin consent already in place (nothing to do)."
-      exit 0
+  ALL_GRANTED=true
+  for required in $SCOPES; do
+    FOUND=false
+    for granted in $EXISTING_SCOPES; do
+      if [ "$granted" = "$required" ]; then
+        FOUND=true
+        break
+      fi
+    done
+    if [ "$FOUND" = false ]; then
+      ALL_GRANTED=false
+      break
     fi
   done
+  if [ "$ALL_GRANTED" = true ]; then
+    echo "   ✅ Admin consent already in place (nothing to do)."
+    exit 0
+  fi
 
   CONSENT_ERR="$(mktemp)"
   trap 'rm -f "$CONSENT_ERR"' EXIT
 
-  if az rest --method POST \
-      --url "https://graph.microsoft.com/v1.0/oauth2PermissionGrants" \
+  METHOD="POST"
+  URL="https://graph.microsoft.com/v1.0/oauth2PermissionGrants"
+  BODY="{\"clientId\":\"${CLIENT_SP_ID}\",\"consentType\":\"AllPrincipals\",\"resourceId\":\"${GRAPH_SP_ID}\",\"scope\":\"${SCOPES}\"}"
+  if [ -n "$EXISTING_ID" ]; then
+    METHOD="PATCH"
+    URL="${URL}/${EXISTING_ID}"
+    BODY="{\"scope\":\"${SCOPES}\"}"
+  fi
+
+  if az rest --method "$METHOD" \
+      --url "$URL" \
       --headers "Content-Type=application/json" \
-      --body "{\"clientId\":\"${CLIENT_SP_ID}\",\"consentType\":\"AllPrincipals\",\"resourceId\":\"${GRAPH_SP_ID}\",\"scope\":\"${SCOPE}\"}" \
+      --body "$BODY" \
       >/dev/null 2>"$CONSENT_ERR"; then
     echo "   ✅ Admin consent granted."
     exit 0
@@ -105,7 +126,7 @@ fi
 # whether consent was forbidden, errored, or the lookups failed.
 cat <<EOF
       Until someone grants it, OBO still works: the first user to sign in is
-      asked to consent to Graph $SCOPE themselves.
+      asked to consent to the delegated Graph permissions themselves.
 
       To grant it once, an administrator can run:
         az ad app permission admin-consent --id $APP_ID
@@ -114,4 +135,4 @@ cat <<EOF
       "API permissions", and choose "Grant admin consent".
 EOF
 
-exit 0
+exit 1

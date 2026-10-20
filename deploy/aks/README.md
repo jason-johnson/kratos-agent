@@ -8,12 +8,12 @@ Never commit rendered values, endpoints, IDs, credentials, `.npmrc`, feed URLs,
 TLS material, or Kubernetes Secrets. Keep environment-specific values outside
 the repository.
 
-## What Phase 5 provides
+## Supported architecture
 
 - `Dockerfile.aks` images for the backend and OBO service, plus the static
   frontend image. Production dependencies and tool versions are pinned.
-- An optional AKS platform in the existing Bicep deployment, disabled by
-  default with `DEPLOY_AKS=false`.
+- An AKS-only Bicep deployment. Application deployment remains a separate,
+  manual Helm operation.
 - Workload Identity federation for the backend and OBO service accounts.
 - Least-privilege Azure roles for Cosmos DB, Blob Storage, Foundry, Key Vault,
   Application Insights, and Log Analytics.
@@ -68,14 +68,18 @@ changing anything:
 
 ```bash
 azd env get-value AZURE_ENV_NAME
-azd env set DEPLOY_AKS true
 azd env set AKS_NAMESPACE kratos-agent
+azd env set FRONTEND_URL https://<host>
 azd provision
 ```
 
-`DEPLOY_AKS` defaults to `false`; CI never changes it. The deployment outputs
-the cluster name and Workload Identity client IDs for a private Helm values
-file.
+The deployment outputs the cluster name and Workload Identity client IDs for a
+private Helm values file. `FRONTEND_URL` registers the production origin on the
+OBO SPA client; omit it only when provisioning a local-only environment.
+
+For an environment created by the former Container Apps template, decommission
+the live Container Apps resources before applying this template. Removing the
+delegated Container Apps subnet from a VNet still in use will fail safely.
 
 If Key Vault supplies the ingress certificate, explicitly attach the vault to
 the application-routing add-on using the approved target resource IDs:
@@ -90,6 +94,17 @@ az aks approuting update \
 
 Attach an Azure DNS zone separately when managed DNS is required. These are live
 cloud mutations and must not be run by an unattended agent.
+
+If OBO is enabled, an Entra administrator must grant the requested delegated
+Graph permissions after provisioning:
+
+```bash
+./deploy/aks/scripts/grant-obo-consent.sh
+```
+
+On Windows, run `./deploy/aks/scripts/grant-obo-consent.ps1`. The utilities use
+the selected azd environment output unless `OBO_SERVER_APP_CLIENT_ID` is already
+set, are idempotent, and fail non-zero when consent is incomplete.
 
 ## 3. Build and publish immutable images
 
@@ -178,5 +193,5 @@ helm history kratos-agent --namespace kratos-agent
 helm rollback kratos-agent <revision> --namespace kratos-agent --wait
 ```
 
-Resource deletion and migration away from Container Apps/Static Web Apps remain
-Phase 6 manual decisions.
+Deleting retired cloud resources and managed data is always a separate,
+explicit operator decision.

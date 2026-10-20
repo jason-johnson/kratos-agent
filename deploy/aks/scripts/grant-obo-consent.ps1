@@ -1,13 +1,13 @@
 #!/usr/bin/env pwsh
 #
-# Windows counterpart of grant-obo-consent.sh (azd postprovision hook).
+# Windows counterpart of grant-obo-consent.sh.
 #
-# Grant tenant-wide admin consent for the OBO server app's delegated Microsoft
-# Graph `User.Read` permission.
+# Explicit operator utility for granting tenant-wide admin consent to the OBO
+# server app's delegated Microsoft Graph permissions.
 #
-# Why this is a hook and not Bicep
-# --------------------------------
-# The app registration *requests* User.Read declaratively in
+# Why this is separate from Bicep
+# -------------------------------
+# The app registration requests delegated Graph permissions declaratively in
 # infra/modules/obo-entra-app.bicep (`requiredResourceAccess`) — that needs no
 # special rights. Actually *granting* it is a different operation: an
 # `oauth2PermissionGrants` with consentType `AllPrincipals` consents on behalf of
@@ -22,37 +22,38 @@
 # resource and continue when it is forbidden, so the grant moved here, where a
 # 403 can be reported clearly and the deployment allowed to finish.
 #
-# Consequence of a skipped grant: OBO still works, but the first user to sign in
-# is prompted to consent to User.Read themselves, or an administrator grants it
-# once (see the instructions this script prints on failure).
+# Consequence of a skipped grant: OBO still works, but users may be prompted to
+# consent to permissions individually, or an administrator grants them once
+# (see the instructions this script prints on failure).
 #
-# Idempotent and best-effort: re-running is safe (an existing grant is detected
-# and left alone) and no failure mode aborts the deploy — this script always
-# exits 0.
+# The utility is idempotent. Unlike the former azd hook, it reports failures with
+# a non-zero exit status because an operator invoked it explicitly.
 
 $ErrorActionPreference = 'Continue'
-# Keep expected non-zero Azure CLI exits non-terminating; this best-effort hook
-# inspects $LASTEXITCODE itself.
+# Keep expected non-zero Azure CLI exits non-terminating; the utility inspects
+# $LASTEXITCODE itself.
 $PSNativeCommandUseErrorActionPreference = $false
 
 $MsGraphAppId = '00000003-0000-0000-c000-000000000000'
-$Scope = 'User.Read'
+$Scopes = @('User.Read', 'User.ReadBasic.All', 'Presence.Read.All', 'Calendars.Read', 'Mail.Read', 'Chat.Read')
+$ScopeValue = $Scopes -join ' '
 
-# Only meaningful when the OBO stack was actually provisioned. Mirrors the
-# `condition:`/`if (deployObo)` gating in azure.yaml and infra/main.bicep.
+# Only meaningful when the OBO stack was provisioned.
 $DeployObo = if ($env:DEPLOY_OBO) { $env:DEPLOY_OBO.ToLowerInvariant() } else { 'true' }
 if ($DeployObo -notin @('1', 'true', 'yes')) {
     exit 0
 }
 
 $AppId = $env:OBO_SERVER_APP_CLIENT_ID
+if (-not $AppId -and (Get-Command azd -ErrorAction SilentlyContinue)) {
+    $AppId = (azd env get-value OBO_SERVER_APP_CLIENT_ID 2>$null | Out-String).Trim()
+}
 if (-not $AppId) {
-    # Provisioning was skipped or the output is not in the environment. Nothing to
-    # consent to; staying quiet avoids noise on every non-OBO deploy.
-    exit 0
+    Write-Error 'OBO_SERVER_APP_CLIENT_ID is unavailable. Select the provisioned azd environment or export the value explicitly.'
+    exit 1
 }
 
-Write-Host "Granting admin consent for the OBO server app's Graph $Scope ..."
+Write-Host 'Granting admin consent for the OBO server app delegated Graph permissions ...'
 
 # The grant references service principal OBJECT ids, not app ids.
 $ClientSpId = (az ad sp show --id $AppId --query id -o tsv 2>$null | Out-String).Trim()
@@ -65,32 +66,34 @@ if (-not $ClientSpId -or -not $GraphSpId) {
 }
 
 if ($ClientSpId) {
-    # Already consented? Re-granting would create a duplicate grant object rather
-    # than failing, so check first to keep repeat deploys genuinely idempotent.
+    # Update an existing grant instead of creating a duplicate.
     $FilterUrl = "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=clientId eq '$ClientSpId' and resourceId eq '$GraphSpId'"
-    $Existing = (az rest --method GET --url $FilterUrl --query 'value[].scope' -o tsv 2>$null | Out-String)
-
-    # Each grant's scope is a space-separated list; match whole words only so
-    # User.ReadWrite.All is never mistaken for User.Read.
-    $AlreadyGranted = $false
-    foreach ($Granted in ($Existing -split '\s+')) {
-        if ($Granted.Trim() -eq $Scope) { $AlreadyGranted = $true; break }
-    }
+    $ExistingId = (az rest --method GET --url $FilterUrl --query 'value[0].id' -o tsv 2>$null | Out-String).Trim()
+    $ExistingScopes = (az rest --method GET --url $FilterUrl --query 'value[0].scope' -o tsv 2>$null | Out-String) -split '\s+'
+    $AlreadyGranted = -not ($Scopes | Where-Object { $_ -notin $ExistingScopes })
 
     if ($AlreadyGranted) {
         Write-Host '   [ok] Admin consent already in place (nothing to do).'
-        exit 0
+        exit 1
     }
 
-    $Body = @{
-        clientId    = $ClientSpId
+    $Method = 'POST'
+    $Url = 'https://graph.microsoft.com/v1.0/oauth2PermissionGrants'
+    $BodyFields = @{
+        clientId = $ClientSpId
         consentType = 'AllPrincipals'
-        resourceId  = $GraphSpId
-        scope       = $Scope
-    } | ConvertTo-Json -Compress
+        resourceId = $GraphSpId
+        scope = $ScopeValue
+    }
+    if ($ExistingId) {
+        $Method = 'PATCH'
+        $Url = "$Url/$ExistingId"
+        $BodyFields = @{ scope = $ScopeValue }
+    }
+    $Body = $BodyFields | ConvertTo-Json -Compress
 
-    $ConsentOutput = (az rest --method POST `
-        --url 'https://graph.microsoft.com/v1.0/oauth2PermissionGrants' `
+    $ConsentOutput = (az rest --method $Method `
+        --url $Url `
         --headers 'Content-Type=application/json' `
         --body $Body `
         --output none 2>&1 | Out-String)
@@ -120,7 +123,7 @@ if ($ClientSpId) {
 # whether consent was forbidden, errored, or the lookups failed.
 Write-Host @"
          Until someone grants it, OBO still works: the first user to sign in is
-         asked to consent to Graph $Scope themselves.
+         asked to consent to the delegated Graph permissions themselves.
 
          To grant it once, an administrator can run:
            az ad app permission admin-consent --id $AppId
