@@ -1,7 +1,7 @@
 {
   "name": "m365-graph-mcp-server",
   "version": "0.1.0",
-  "description": "Mock Microsoft 365 (Graph API surface) as a stdio MCP server — users, presence, mail, calendar, OneDrive/SharePoint files, Teams chats. Cross-references workday EMP-* employee ids.",
+  "description": "Mock Microsoft 365 Graph surface for users, presence, mail, calendar, files, and Teams chats.",
   "license": "MIT",
   "type": "module",
   "bin": {
