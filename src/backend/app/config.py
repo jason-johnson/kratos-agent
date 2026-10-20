@@ -95,6 +95,14 @@ class Settings(BaseSettings):
     servicenow_client_secret: str = ""
     integration_timeout_seconds: float = 15.0
 
+    # Read-only in-cluster Kubernetes API access. Phase 5 supplies the service
+    # account and RBAC; the Phase 4 client refuses namespaces outside this list.
+    kubernetes_api_url: str = ""
+    kubernetes_allowed_namespaces: str = ""
+    kubernetes_token_file: str = "/var/run/secrets/kubernetes.io/serviceaccount/token"  # noqa: S105
+    kubernetes_ca_file: str = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    kubernetes_namespace_file: str = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+
     @property
     def is_local_mode(self) -> bool:
         """True when the backend should run without Azure services."""

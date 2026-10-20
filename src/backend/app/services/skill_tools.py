@@ -19,6 +19,14 @@ from app.services.incident_command_brief import (
     brief_document,
     with_staleness,
 )
+from app.services.kubernetes_inspection import (
+    KubernetesEventsParams,
+    KubernetesInspectionClient,
+    KubernetesPodsParams,
+    KubernetesWorkloadParams,
+    classify_kubernetes_error,
+    kubernetes_result,
+)
 from app.services.servicenow_incidents import (
     ServiceNowClient,
     ServiceNowExecuteUpdateParams,
@@ -323,6 +331,50 @@ async def incident_brief_update(params: IncidentBriefUpdateParams) -> dict:
     return {"status": "saved", **with_staleness(document)}
 
 
+async def _kubernetes_read(operation: str, reader) -> dict:  # noqa: ANN001
+    client = KubernetesInspectionClient(Settings())
+    try:
+        return kubernetes_result(operation, await reader(client))
+    except Exception as exc:  # noqa: BLE001
+        code, message = classify_kubernetes_error(exc)
+        return {
+            "status": "error",
+            "code": code,
+            "message": message,
+            "source": "in-cluster-kubernetes-api",
+            "readOnly": True,
+        }
+    finally:
+        await client.close()
+
+
+@define_tool(description="Read rollout and readiness status for one exact allowlisted Kubernetes workload")
+async def kubernetes_get_workload(params: KubernetesWorkloadParams) -> dict:
+    with tracer.start_as_current_span("skill.kubernetes_get_workload") as span:
+        _set_kratos_attrs(span)
+        span.set_attribute("k8s.namespace.name", params.namespace)
+        span.set_attribute("k8s.workload.name", params.name)
+        return await _kubernetes_read("get_workload", lambda client: client.get_workload(params))
+
+
+@define_tool(description="Read bounded pod health for one service in an allowlisted Kubernetes namespace")
+async def kubernetes_list_service_pods(params: KubernetesPodsParams) -> dict:
+    with tracer.start_as_current_span("skill.kubernetes_list_service_pods") as span:
+        _set_kratos_attrs(span)
+        span.set_attribute("k8s.namespace.name", params.namespace)
+        span.set_attribute("service.name", params.service_name)
+        return await _kubernetes_read("list_service_pods", lambda client: client.list_pods(params))
+
+
+@define_tool(description="Read bounded Kubernetes events for one exact object in an allowlisted namespace")
+async def kubernetes_list_object_events(params: KubernetesEventsParams) -> dict:
+    with tracer.start_as_current_span("skill.kubernetes_list_object_events") as span:
+        _set_kratos_attrs(span)
+        span.set_attribute("k8s.namespace.name", params.namespace)
+        span.set_attribute("k8s.object.name", params.object_name)
+        return await _kubernetes_read("list_object_events", lambda client: client.list_events(params))
+
+
 ALL_TOOLS = [
     app_insights_investigation,
     servicenow_get_major_incident,
@@ -331,6 +383,9 @@ ALL_TOOLS = [
     servicenow_execute_update,
     incident_brief_get,
     incident_brief_update,
+    kubernetes_get_workload,
+    kubernetes_list_service_pods,
+    kubernetes_list_object_events,
 ]
 TOOL_SKILL_MAP = {
     "servicenow_get_major_incident": "incident_updates",
@@ -339,6 +394,9 @@ TOOL_SKILL_MAP = {
     "servicenow_execute_update": "incident_updates",
     "incident_brief_get": "incident_command_brief",
     "incident_brief_update": "incident_command_brief",
+    "kubernetes_get_workload": "kubernetes_inspection",
+    "kubernetes_list_service_pods": "kubernetes_inspection",
+    "kubernetes_list_object_events": "kubernetes_inspection",
 }
 TOOL_MAP = {tool.name: tool for tool in ALL_TOOLS}
 

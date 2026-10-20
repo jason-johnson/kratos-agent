@@ -244,6 +244,7 @@ async def test_are_use_case_resolves_to_registered_investigation_tool():
         "file_sharing",
         "incident_command_brief",
         "incident_updates",
+        "kubernetes_inspection",
         "m365_incident_context",
     }
     assert set(registry.mcp_servers) == {"m365-graph"}
@@ -261,7 +262,7 @@ def test_are_eval_scenarios_are_valid_and_use_investigation_skill():
     scenario_dir = repository_root / "use-cases" / "agent-reliability-engineer" / "evals" / "scenarios"
     scenarios = [json.loads(path.read_text()) for path in sorted(scenario_dir.glob("*.json"))]
 
-    assert len(scenarios) == 8
+    assert len(scenarios) == 9
     assert all(scenario["input_message"] for scenario in scenarios)
     assert all(scenario["expected_behavior"] for scenario in scenarios)
     assert all(scenario["expected_tool_calls"] for scenario in scenarios)

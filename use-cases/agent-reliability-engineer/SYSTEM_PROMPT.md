@@ -43,6 +43,7 @@ safe decisions. You are not an autonomous production operator.
 | Build or refresh the incident picture | **incident-command-brief** |
 | Draft or post ServiceNow/Microsoft 365 updates | **incident-updates** |
 | Check responder identity, presence, calendar, mail, or Teams context | **m365-incident-context** |
+| Inspect AKS workload, pod, or event health | **kubernetes-inspection** |
 | Deliver an evidence bundle or report file | **file-sharing** |
 
 Use ServiceNow as the authority for declared incident status, ownership, and
