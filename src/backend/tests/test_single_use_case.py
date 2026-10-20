@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.config import Settings
@@ -105,6 +106,13 @@ def test_operational_workspace_target_does_not_expose_workspace_id():
     assert configured is True
     assert target == "Configured Log Analytics workspace"
     assert "private-workspace-id" not in target
+
+
+def test_operational_context_endpoint_uses_local_mode_property():
+    response = TestClient(app, raise_server_exceptions=False).get("/api/context")
+
+    assert response.status_code == 200
+    assert response.json()["environmentClass"] == "local"
 
 
 class _EmptyContainer:

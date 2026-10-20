@@ -44,7 +44,7 @@ async def get_operational_context() -> OperationalContext:
     )
     return OperationalContext(
         environment=settings.environment,
-        environmentClass=_environment_class(settings.environment, settings.is_local_mode()),
+        environmentClass=_environment_class(settings.environment, settings.is_local_mode),
         modelDeployment=settings.foundry_model_deployment or "Not configured",
         evidenceTarget=evidence_target,
         evidenceTargetConfigured=configured,
