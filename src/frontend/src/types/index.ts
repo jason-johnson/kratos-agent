@@ -6,6 +6,16 @@ export interface Conversation {
   updatedAt: string;
 }
 
+export interface OperationalContext {
+  environment: string;
+  environmentClass: "local" | "non-production" | "production" | "unknown";
+  modelDeployment: string;
+  evidenceTarget: string;
+  evidenceTargetConfigured: boolean;
+  evidenceAccess: "read-only";
+  mutationPolicy: string;
+}
+
 export interface ChatMessage {
   id: string;
   conversationId: string;

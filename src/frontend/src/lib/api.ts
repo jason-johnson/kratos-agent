@@ -7,6 +7,7 @@ import type {
   EvalMode,
   TraceList,
   TraceOperation,
+  OperationalContext,
 } from "@/types";
 
 /**
@@ -133,6 +134,14 @@ export async function respondToUserInput(
   if (!response.ok) {
     throw new Error(`Failed to respond to user input: ${response.status}`);
   }
+}
+
+export async function getOperationalContext(): Promise<OperationalContext> {
+  const response = await fetch(`${getApiUrl()}/api/context`);
+  if (!response.ok) {
+    throw new Error(`Failed to load operational context: ${response.status}`);
+  }
+  return response.json();
 }
 
 /**

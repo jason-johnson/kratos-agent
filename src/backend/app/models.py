@@ -223,20 +223,16 @@ class CopilotStudioResponse(BaseModel):
 # ─── Settings ───
 
 
-class AIServiceSettings(BaseModel):
-    """AI service configuration submitted by the user."""
+class OperationalContext(BaseModel):
+    """Non-secret deployment and incident-evidence context shown in the UI."""
 
-    foundryEndpoint: str = Field(default="", description="Microsoft Foundry endpoint URL")
-    foundryModelDeployment: str = Field(default="gpt-52", description="Model deployment name")
-
-
-class AIServiceStatus(BaseModel):
-    """Current AI service config status."""
-
-    configured: bool = False
-    foundryEndpoint: str = ""
-    foundryModelDeployment: str = ""
-    code: str = "INTERNAL_ERROR"
+    environment: str
+    environmentClass: Literal["local", "non-production", "production", "unknown"]
+    modelDeployment: str
+    evidenceTarget: str
+    evidenceTargetConfigured: bool
+    evidenceAccess: Literal["read-only"] = "read-only"
+    mutationPolicy: str = "Explicit approval required for each ServiceNow update"
 
 
 # ─── Skills Admin ───

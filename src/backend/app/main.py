@@ -216,7 +216,7 @@ app.add_middleware(
 app.include_router(health.router, tags=["health"])
 app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
-app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+app.include_router(settings.router, prefix="/api/context", tags=["context"])
 app.include_router(admin_skills.router, prefix="/api/admin/skills", tags=["admin"])
 app.include_router(admin_prompt.router, prefix="/api/admin/system-prompt", tags=["admin"])
 app.include_router(admin_mcp.router, prefix="/api/admin/mcp-servers", tags=["admin"])

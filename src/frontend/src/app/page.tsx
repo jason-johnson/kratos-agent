@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { ChatWindow } from "@/components/ChatWindow";
 import { Sidebar } from "@/components/Sidebar";
 import { SkillsAdminPanel } from "@/components/SkillsAdminPanel";
+import { OperationalContextBar } from "@/components/OperationalContextBar";
 import { Conversation, Skill } from "@/types";
 import { listConversations, createConversation, deleteConversation, listSkills } from "@/lib/api";
 import { loadRuntimeConfig } from "@/lib/config";
@@ -248,6 +249,10 @@ export default function Home() {
                   <p className="text-muted text-sm sm:text-base leading-relaxed max-w-lg mx-auto">
                     {AGENT.description}
                   </p>
+                </div>
+
+                <div className="mb-6">
+                  <OperationalContextBar />
                 </div>
 
                 {/* Chat input bar */}

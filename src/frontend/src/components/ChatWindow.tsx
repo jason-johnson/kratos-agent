@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Conversation, ChatMessage, ToolCallInfo, RunStats, Attachment } from "@/types";
-import { streamAgentChat, getConversationMessages, updateConversation } from "@/lib/api";
+import { streamAgentChat, getConversationMessages, respondToUserInput, updateConversation } from "@/lib/api";
 import { MessageBubble } from "./MessageBubble";
+import { OperationalContextBar } from "./OperationalContextBar";
 import { ThoughtChain } from "./ThoughtChain";
 
 interface UserInputPrompt {
@@ -20,6 +21,68 @@ interface Props {
   onOpenSidebar?: () => void;
 }
 
+const MUTATION_TOOL_PATTERN = /(update|post|send|create|write|add[_ -]?(work[_ -]?note|comment)|assign)/i;
+const VERIFICATION_TOOL_PATTERN = /(get|list|query|search|read|retrieve|fetch|lookup)/i;
+const isApprovalQuestion = (question: string) =>
+  /(approv|confirm|authorize|proceed|execute|post|send|update)/i.test(question);
+
+function ActionStatus({
+  toolCalls,
+  approvalRequired,
+  approvalRecorded,
+  isStreaming,
+}: {
+  toolCalls: ToolCallInfo[];
+  approvalRequired: boolean;
+  approvalRecorded: boolean;
+  isStreaming: boolean;
+}) {
+  const mutationIndex = toolCalls.findLastIndex((tool) => MUTATION_TOOL_PATTERN.test(tool.skillName));
+  if (!approvalRequired && mutationIndex < 0 && !approvalRecorded) return null;
+
+  const mutation = mutationIndex >= 0 ? toolCalls[mutationIndex] : null;
+  const verification = toolCalls
+    .slice(mutationIndex + 1)
+    .findLast((tool) => VERIFICATION_TOOL_PATTERN.test(tool.skillName));
+
+  let execution = "Waiting for approved execution";
+  if (mutation?.status === "started") execution = "Executing approved action";
+  if (mutation?.status === "completed") execution = "Execution completed";
+  if (mutation?.status === "failed") execution = "Execution failed";
+
+  let verificationText = "Verification starts after execution";
+  if (mutation?.status === "completed") {
+    if (verification?.status === "completed") verificationText = "Verification evidence collected; review the result";
+    else if (verification?.status === "failed") verificationText = "Verification failed";
+    else if (isStreaming) verificationText = "Awaiting independent verification";
+    else verificationText = "Verification not demonstrated; review the agent receipt";
+  } else if (mutation?.status === "failed") {
+    verificationText = "Verification blocked by execution failure";
+  }
+
+  return (
+    <div className="ml-11 max-w-2xl rounded-xl border border-border-soft bg-surface px-4 py-3" aria-label="Action lifecycle">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-muted mb-2">Action lifecycle</div>
+      <div className="grid gap-2 sm:grid-cols-3 text-xs">
+        <div>
+          <div className="font-semibold text-text">Approval</div>
+          <div className="text-muted">{approvalRecorded ? "Scoped approval recorded" : "Approval required"}</div>
+        </div>
+        <div>
+          <div className="font-semibold text-text">Execution</div>
+          <div className={mutation?.status === "failed" ? "text-red-600 dark:text-red-400" : "text-muted"}>{execution}</div>
+        </div>
+        <div>
+          <div className="font-semibold text-text">Verification</div>
+          <div className={verification?.status === "failed" ? "text-red-600 dark:text-red-400" : "text-muted"}>
+            {verificationText}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpenSidebar }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -31,6 +94,9 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [userInputPrompt, setUserInputPrompt] = useState<UserInputPrompt | null>(null);
   const [userInputAnswer, setUserInputAnswer] = useState("");
+  const [userInputSubmitting, setUserInputSubmitting] = useState(false);
+  const [userInputError, setUserInputError] = useState("");
+  const [approvalRecorded, setApprovalRecorded] = useState(false);
   const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
   // True when an answer is being generated on the backend but is not being
   // streamed into this view (e.g. after navigating back to a conversation
@@ -67,6 +133,11 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
     setRunStats(null);
     setMessageStats({});
     setAwaitingResponse(false);
+    setUserInputPrompt(null);
+    setUserInputAnswer("");
+    setUserInputSubmitting(false);
+    setUserInputError("");
+    setApprovalRecorded(false);
 
     const applyLoaded = (loaded: ChatMessage[]) => {
       setMessages(loaded);
@@ -151,6 +222,10 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
     setActiveToolCalls([]);
     setRunStats(null);
     setFollowUpQuestions([]);
+    setUserInputPrompt(null);
+    setUserInputAnswer("");
+    setUserInputError("");
+    setApprovalRecorded(false);
     thoughtsRef.current = [];
     toolCallsRef.current = [];
     runStatsRef.current = null;
@@ -272,6 +347,8 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
           }
 
           case "user_input_request": {
+            setUserInputAnswer("");
+            setUserInputError("");
             setUserInputPrompt({
               requestId: data.requestId as string,
               question: data.question as string,
@@ -372,15 +449,24 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
   };
 
   const handleUserInputSubmit = async (answer: string) => {
-    if (!userInputPrompt) return;
-    // In hosted-agent mode there is no side-channel to push an answer into a
-    // running Foundry invocation, so the answer is sent as a normal follow-up
-    // message. The backend reuses the persisted gateway session for this
-    // conversation, which resumes the same hosted-agent container.
-    setUserInputPrompt(null);
-    setUserInputAnswer("");
-    await handleSend(answer);
+    if (!userInputPrompt || userInputSubmitting || !answer.trim()) return;
+    setUserInputSubmitting(true);
+    setUserInputError("");
+    try {
+      await respondToUserInput(conversation.id, userInputPrompt.requestId, answer.trim());
+      setApprovalRecorded(isApprovalQuestion(userInputPrompt.question));
+      setUserInputPrompt(null);
+      setUserInputAnswer("");
+    } catch (error) {
+      setUserInputError(error instanceof Error ? error.message : "The approval response could not be recorded.");
+    } finally {
+      setUserInputSubmitting(false);
+    }
   };
+
+  const isApprovalRequest =
+    userInputPrompt !== null &&
+    isApprovalQuestion(userInputPrompt.question);
 
   return (
     <div className="flex flex-col h-full bg-bg">
@@ -403,6 +489,9 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
               {conversation.title}
             </h2>
           </div>
+        </div>
+        <div className="max-w-5xl mx-auto mt-2">
+          <OperationalContextBar compact />
         </div>
       </header>
 
@@ -438,6 +527,15 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
             </div>
           )}
 
+          {isStreaming && (
+            <ActionStatus
+              toolCalls={activeToolCalls}
+              approvalRequired={isApprovalRequest}
+              approvalRecorded={approvalRecorded}
+              isStreaming={isStreaming}
+            />
+          )}
+
           {/* Nothing has come back from the agent yet. This covers both
               rejoining a run already in flight and the wait for the first
               event of a fresh one, which can include SDK session startup.
@@ -459,16 +557,25 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
           {/* User input request from agent — themed with ask-* tokens */}
           {userInputPrompt && (
             <div className="ml-11 bg-ask-bg border border-ask-border border-l-[3px] border-l-ask rounded-xl p-4 max-w-2xl">
-              <p className="text-sm font-medium text-text-strong mb-3">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-ask mb-1">
+                {isApprovalRequest ? "Approval required" : "Input required"}
+              </div>
+              <p className="text-sm font-medium text-text-strong mb-2">
                 {userInputPrompt.question}
               </p>
+              {isApprovalRequest && (
+                <p className="text-xs text-muted mb-3">
+                  Your response applies only to the exact action shown above and cannot be reused for another write.
+                </p>
+              )}
               {userInputPrompt.choices.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-3">
                   {userInputPrompt.choices.map((choice) => (
                     <button
                       key={choice}
                       onClick={() => handleUserInputSubmit(choice)}
-                      className="px-3.5 py-1.5 text-sm bg-surface text-text border border-border rounded-lg hover:bg-hover hover:border-ask transition-all"
+                      disabled={userInputSubmitting}
+                      className="px-3.5 py-1.5 text-sm bg-surface text-text border border-border rounded-lg hover:bg-hover hover:border-ask disabled:opacity-50 transition-all"
                     >
                       {choice}
                     </button>
@@ -482,21 +589,27 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
                     value={userInputAnswer}
                     onChange={(e) => setUserInputAnswer(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && userInputAnswer.trim()) {
+                      if (e.key === "Enter" && userInputAnswer.trim() && !userInputSubmitting) {
                         handleUserInputSubmit(userInputAnswer.trim());
                       }
                     }}
+                    disabled={userInputSubmitting}
                     placeholder="Type your answer..."
                     className="flex-1 text-sm text-text bg-surface border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ask placeholder:text-muted"
                   />
                   <button
                     onClick={() => handleUserInputSubmit(userInputAnswer.trim())}
-                    disabled={!userInputAnswer.trim()}
+                    disabled={!userInputAnswer.trim() || userInputSubmitting}
                     className="px-4 py-2 text-sm bg-ask text-accent-fg rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity font-medium"
                   >
-                    Send
+                    {userInputSubmitting ? "Recording…" : isApprovalRequest ? "Approve" : "Submit"}
                   </button>
                 </div>
+              )}
+              {userInputError && (
+                <p className="mt-3 text-xs font-medium text-red-600 dark:text-red-400" role="alert">
+                  {userInputError}
+                </p>
               )}
             </div>
           )}

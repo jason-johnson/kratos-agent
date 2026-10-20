@@ -11,6 +11,7 @@ from app.config import Settings
 from app.constants import PRIMARY_USE_CASE
 from app.main import app
 from app.models import AgentRequest, Conversation, ConversationCreate, CopilotStudioRequest
+from app.routers.settings import _environment_class, _evidence_target
 from app.services.blob_skill_service import BlobSkillService
 from app.services.copilot_agent import DEFAULT_USE_CASE
 from app.services.skill_registry import SkillRegistry
@@ -64,9 +65,46 @@ def test_openapi_exposes_only_single_agent_routes():
 
     assert "/api/evals/scenarios" in paths
     assert "/api/admin/skills" in paths
+    assert "/api/context" in paths
+    assert "/api/settings" not in paths
     assert "/api/use-cases" not in paths
     assert "/api/admin/apm" not in paths
     assert all("use-case" not in path and "use_case" not in path for path in paths)
+
+
+@pytest.mark.parametrize(
+    ("environment", "local_mode", "expected"),
+    [
+        ("production", False, "production"),
+        ("prod-east", False, "production"),
+        ("staging", False, "non-production"),
+        ("custom", False, "unknown"),
+        ("production", True, "local"),
+    ],
+)
+def test_operational_environment_classification(environment, local_mode, expected):
+    assert _environment_class(environment, local_mode) == expected
+
+
+def test_operational_evidence_target_redacts_resource_identifiers():
+    target, configured = _evidence_target(
+        "/subscriptions/private-subscription/resourceGroups/private-rg/providers/"
+        "microsoft.insights/components/incident-observability",
+        "",
+    )
+
+    assert configured is True
+    assert target == "Application Insights: incident-observability"
+    assert "private-subscription" not in target
+    assert "private-rg" not in target
+
+
+def test_operational_workspace_target_does_not_expose_workspace_id():
+    target, configured = _evidence_target("", "private-workspace-id")
+
+    assert configured is True
+    assert target == "Configured Log Analytics workspace"
+    assert "private-workspace-id" not in target
 
 
 class _EmptyContainer:
