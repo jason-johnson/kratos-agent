@@ -40,21 +40,17 @@ repo are disruptive and the data is already exposed.
 |------|-----------|
 | `src/backend` | Python agent service (FastAPI), deployed as Container App `agent-service` |
 | `src/frontend` | Next.js UI, deployed to Azure Static Web Apps |
-| `src/hosted-agent` | Foundry hosted-agent variant |
 | `src/obo-mcp-server` | On-behalf-of MCP server (optional, `DEPLOY_OBO` flag) |
-| `use-cases/` | Persona definitions, skills and synthetic assets |
+| `use-cases/agent-reliability-engineer` | The single ARE prompt, skills, MCP config, and evals |
 | `infra/` | Bicep templates |
 | `.copilot/skills/` | Repo-local agent skills, incl. `e2e-smoke` |
 
-## Personas: curated vs. non-curated
+## Single Agent Reliability Engineer
 
-`/api/use-cases` returns every persona, but the frontend selector only shows
-those with `curated: true`. Non-curated personas exist in the API and are
-deliberately hidden in the UI, and may have no eval scenarios generated.
-
-Don't hardcode persona lists in tests or tooling — discover them from
-`/api/use-cases` and filter on `curated`. A test demanding a non-curated
-persona in the UI is a broken test, not a broken app.
+There is one public agent identity and no persona selector, discovery endpoint,
+or caller-selected `useCase` field. `agent-reliability-engineer` remains an
+internal storage/configuration key. Technical systems are read-only; each
+ServiceNow write needs exact, single-use approval and post-write verification.
 
 ## Validation
 
@@ -168,7 +164,7 @@ Gotchas that have bitten before:
 
 ## Container images build in ACR, not locally
 
-All three container services set `remoteBuild: true` under `docker:` in
+Both container services set `remoteBuild: true` under `docker:` in
 `azure.yaml`. Their images install from pypi and the npm registry at build
 time, and some corporate networks filter `files.pythonhosted.org` and
 `registry.npmjs.org`, which makes a local `docker build` impossible. Building

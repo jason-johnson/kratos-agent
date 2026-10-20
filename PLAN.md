@@ -568,14 +568,47 @@ Implementation status:
 
 ### Phase 3 - Simplify the frontend and API
 
-- [ ] Remove persona discovery and selection.
-- [ ] Remove persona import/export and unused admin panels.
-- [ ] Rename UI language from support/persona terminology to ARE terminology.
-- [ ] Keep or redesign conversation history for one agent.
-- [ ] Add clear environment, target, approval, execution, and verification UX.
-- [ ] Remove API fields and routes made obsolete by the single-agent model.
+- [x] Remove persona discovery and selection.
+- [x] Remove persona import/export and unused admin panels.
+- [x] Rename UI language from support/persona terminology to ARE terminology.
+- [x] Keep or redesign conversation history for one agent.
+- [x] Add clear environment, target, approval, execution, and verification UX.
+- [x] Remove API fields and routes made obsolete by the single-agent model.
 
 Exit criteria: no user-visible or API-level multi-persona concepts remain.
+
+Phase 3 status: **Complete (2026-10-20).**
+
+- Persona discovery, selection, import, export, hosted-agent packaging, arbitrary
+  APM administration, deployment/export UI, BYOK settings, and the obsolete
+  architecture explainer were removed.
+- Chat, conversation, Copilot Studio, eval, trace, prompt, skill, MCP, analysis,
+  and runtime-version APIs now expose one fixed ARE and reject obsolete
+  caller-selected `useCase` fields.
+- Conversation history is one unified ARE history. Eval records expose
+  `agent_id`, while retaining backward loading compatibility for persisted
+  `use_case` metadata.
+- The UI displays a redacted operational context: environment classification,
+  configured evidence target, read-only technical access, and the approved
+  ServiceNow-only write boundary.
+- SDK user-input responses now resolve the active request through
+  `/api/agent/user-input`; approval is shown as exact-action, single-use, and is
+  not converted into a new chat instruction.
+- The action lifecycle distinguishes approval, execution, and verification
+  evidence without treating tool completion as proof of verification.
+- Commits: `f498d5e`, `7b0e725`, `231e734`, and `2d83e8d`.
+- Validation: 76 backend tests, Ruff lint/format, frontend lint/build, retained
+  ServiceNow and M365 Graph MCP builds, Bicep compilation, hook checks, and
+  Docker Compose configuration passed.
+- Frontend validation retains four known warnings: three hook dependency
+  warnings and one raw-image optimization warning. Bicep retains existing
+  non-blocking type/linter warnings.
+- Focused mypy remains blocked before application analysis by the installed
+  NumPy stub using Python 3.12 type-statement syntax while the project targets
+  Python 3.11; this is unchanged from prior phases.
+- No deployment, provisioning, branch change, push, pull, or live cloud
+  mutation was performed. Production integration work remains Phase 4 and AKS
+  packaging remains Phase 5.
 
 ### Phase 4 - Add production reliability integrations
 

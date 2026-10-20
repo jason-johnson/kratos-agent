@@ -35,8 +35,8 @@ cd .copilot/skills/e2e-smoke && ./run.sh
 SKIP_BROWSER=1 ./run.sh                # API-only, skips the Chromium download
 
 # Evals / traces CLI
-python scripts/run_evals.py --use-case insurance --mode validation   # or --mode foundry
-python scripts/generate_evals.py --use-case insurance --count 5 --save
+python scripts/run_evals.py --use-case agent-reliability-engineer --mode validation
+python scripts/generate_evals.py --use-case agent-reliability-engineer --count 5 --save
 python scripts/fetch_traces.py --conversation-id abc123
 ```
 
@@ -57,28 +57,24 @@ The FastAPI service owns the API and the Copilot SDK agent loop:
 
 `POST /api/agent/chat` invokes [copilot_agent.py](src/backend/app/services/copilot_agent.py)
 in-process and streams SSE events back. The same service owns conversation persistence, file
-serving, skills/APM administration, evals, and traces. The API managed identity calls the Foundry
+serving, versioned skills administration, evals, and traces. The API managed identity calls the Foundry
 model deployment directly.
 
 **Session continuity:** the service stores the Copilot SDK session mapping in Cosmos (`sessions`,
 partitioned by `conversationId`) so multi-turn state can resume across API replicas. Active turns
 support explicit cancellation and SDK user-input requests.
 
-The [src/hosted-agent/](src/hosted-agent/) tree remains only as source material for the standalone
-persona exporter and is not part of the active deployment runtime. Phase 3 removes that exporter.
+### One ARE, N skills
 
-### One agent, N personas
-
-A "use case" is a persona directory under [use-cases/](use-cases/): `SYSTEM_PROMPT.md`,
-`skills/*/SKILL.md`, `.mcp.json`, `apm.yml`, `evals/`. There is no multi-agent orchestration —
-one agent swaps skills and prompt per conversation, selected by the `useCase` request field.
+The public product has one Agent Reliability Engineer configuration under
+[use-cases/agent-reliability-engineer/](use-cases/agent-reliability-engineer/). Its
+`SYSTEM_PROMPT.md`, `skills/*/SKILL.md`, `.mcp.json`, `apm.yml`, and `evals/` are fixed for every
+conversation. `agent-reliability-engineer` remains an internal Blob/Cosmos key, not a caller-selectable
+API field.
 
 Skills load in priority order (see [skill_registry.py](src/backend/app/services/skill_registry.py)):
-blob storage → local filesystem → APM packages, with local/blob winning name conflicts. New skills
-go live via `POST /api/admin/skills?use_case=...` with **no redeploy**.
-
-Personas are marked `curated: true/false`. `/api/use-cases` returns all of them; the UI only shows
-curated ones. Discover personas from the API and filter on `curated` — never hardcode the list.
+blob storage → local filesystem → APM packages, with local/blob winning name conflicts. Authorized
+runtime changes go through `/api/admin/skills`, create immutable versions, and refresh replicas.
 
 ### Local mode
 
@@ -89,22 +85,12 @@ the existing `is_local_mode()` checks.
 
 ### Mocks
 
-[mocks/packages/](mocks/packages/) holds in-repo stdio MCP servers (Salesforce, Workday,
-ServiceNow, core banking, Epic FHIR, SAP, M365 Graph, Azure IoT) that back the demo personas
-with **synthetic** fixtures. Both backend Dockerfiles `npm install -g ./mocks/packages/*` so the
-binaries land on PATH; a persona opts in via its `.mcp.json`.
-
-### Export
-
-`GET /api/use-cases/{uc}/export` packages a persona as a standalone, deployable Foundry hosted
-agent ZIP. The templates live in [src/backend/app/exporter_templates/](src/backend/app/exporter_templates/)
-and ship inside the wheel via `package-data` — they are `.template` files excluded from ruff, so
-changes there need [test_project_exporter.py](src/backend/tests/test_project_exporter.py) to pass,
-not lint.
+[mocks/packages/](mocks/packages/) contains synthetic development servers. The active backend image
+installs only the ServiceNow and M365 Graph MCP packages retained by the ARE.
 
 ## Conventions
 
-- **API JSON is camelCase** (Pydantic alias generator): `{message, useCase, conversationId}`.
+- **API JSON is camelCase** (Pydantic alias generator): `{message, conversationId}`.
   The exception is the on-disk eval scenario format, which is snake_case
   (`input_message`, `expected_behavior`, `expected_tool_calls`) so it stays readable in git.
 - Python: `ruff` (lint + format, line length 120) and `mypy` are both gating in CI. Per-module
