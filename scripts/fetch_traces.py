@@ -3,7 +3,7 @@
 
 Usage:
     python scripts/fetch_traces.py                                 # list recent ops
-    python scripts/fetch_traces.py --use-case insurance --hours 24
+    python scripts/fetch_traces.py --hours 24
     python scripts/fetch_traces.py --conversation-id abc123
     python scripts/fetch_traces.py --run-id 20260101T120000Z
     python scripts/fetch_traces.py --operation-id 9fe9...           # full waterfall
@@ -48,7 +48,6 @@ def get_op(operation_id: str, hours: int) -> dict:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--use-case")
     p.add_argument("--conversation-id")
     p.add_argument("--run-id")
     p.add_argument("--operation-id", help="Fetch full waterfall for this op id")
@@ -61,7 +60,6 @@ def main() -> int:
             data = get_op(args.operation_id, args.hours)
         else:
             data = list_ops(
-                use_case=args.use_case,
                 conversation_id=args.conversation_id,
                 run_id=args.run_id,
                 hours=args.hours,

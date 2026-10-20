@@ -43,10 +43,6 @@ logger = logging.getLogger(__name__)
 _INTERNAL_TOOLS: frozenset[str] = frozenset({"report_intent", "skill", "sql", "ask_user"})
 _MCP_PREFIX = "mcp-tools-"
 
-# Use-case → industry canon mapping (FSI covers insurance/banking/wealth)
-_FSI_USE_CASES = {"insurance", "retail-banking", "wealth-management"}
-_CANON_BASE = Path("/Users/ricchi/Repos/awesome-gbb/skills/threadlight-demo-data-factory/references")
-
 # Request timeout for the Foundry OpenAI client (seconds)
 # Bumped to 300s — complex multi-tool scenarios (PDF report generation, multi-step
 # triage flows) routinely exceed 120s; gateway throttle bursts also push tail latency.
@@ -64,15 +60,13 @@ def _now() -> datetime:
 
 
 def _load_canon(use_case: str) -> str:
-    """Return the industry realism canon text, or empty string if absent."""
-    industry = "fsi" if use_case in _FSI_USE_CASES else None
-    if industry:
-        canon_path = _CANON_BASE / f"{industry}.md"
-        if canon_path.is_file():
-            try:
-                return canon_path.read_text(encoding="utf-8")
-            except Exception as exc:
-                logger.warning("Could not read canon %s: %s", canon_path, exc)
+    """Return optional agent-specific scenario guidance."""
+    canon_path = Path(__file__).resolve().parents[4] / "use-cases" / use_case / "evals" / "CANON.md"
+    if canon_path.is_file():
+        try:
+            return canon_path.read_text(encoding="utf-8")
+        except Exception as exc:
+            logger.warning("Could not read canon %s: %s", canon_path, exc)
     return ""
 
 

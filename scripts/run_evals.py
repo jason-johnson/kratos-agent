@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Run evals for a use-case against the running backend.
+"""Run ARE evals against the running backend.
 
 Usage:
     # Validation mode (in-process invoke + score, fast):
-    python scripts/run_evals.py --use-case insurance --mode validation
+    python scripts/run_evals.py --mode validation
 
     # Foundry mode (cloud eval, slower):
-    python scripts/run_evals.py --use-case insurance --mode foundry
+    python scripts/run_evals.py --mode foundry
 
     # Run only specific scenarios:
-    python scripts/run_evals.py --use-case insurance --scenarios load-customer-profile,policy-wording-lookup
+    python scripts/run_evals.py --scenarios bounded-app-insights-investigation,kubernetes-read-only-inspection
 
 Polls until the run completes and prints a summary table.
 """
@@ -37,8 +37,8 @@ def _headers() -> dict[str, str]:
     return h
 
 
-def start_run(use_case: str, mode: str, scenario_names: list[str] | None) -> dict[str, Any]:
-    url = f"{BACKEND_URL}/api/use-cases/{use_case}/evals/run"
+def start_run(mode: str, scenario_names: list[str] | None) -> dict[str, Any]:
+    url = f"{BACKEND_URL}/api/evals/run"
     payload: dict[str, Any] = {"mode": mode}
     if scenario_names:
         payload["scenario_names"] = scenario_names
@@ -48,19 +48,19 @@ def start_run(use_case: str, mode: str, scenario_names: list[str] | None) -> dic
     return r.json()
 
 
-def get_run(use_case: str, run_id: str) -> dict[str, Any]:
-    url = f"{BACKEND_URL}/api/use-cases/{use_case}/evals/runs/{run_id}"
+def get_run(run_id: str) -> dict[str, Any]:
+    url = f"{BACKEND_URL}/api/evals/runs/{run_id}"
     with httpx.Client(timeout=30.0) as client:
         r = client.get(url, headers=_headers())
     r.raise_for_status()
     return r.json()
 
 
-def poll(use_case: str, run_id: str) -> dict[str, Any]:
+def poll(run_id: str) -> dict[str, Any]:
     deadline = time.time() + POLL_TIMEOUT_S
     last_status = ""
     while time.time() < deadline:
-        run = get_run(use_case, run_id)
+        run = get_run(run_id)
         status = run.get("status", "")
         if status != last_status:
             print(f"  status={status}")
@@ -74,7 +74,7 @@ def poll(use_case: str, run_id: str) -> dict[str, Any]:
 def print_summary(run: dict[str, Any]) -> None:
     print()
     print(f"Run:      {run.get('run_id')}")
-    print(f"Use-case: {run.get('use_case')}")
+    print(f"Agent:    {run.get('use_case')}")
     print(f"Mode:     {run.get('mode')}")
     print(f"Status:   {run.get('status')}")
 
@@ -100,16 +100,15 @@ def print_summary(run: dict[str, Any]) -> None:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--use-case", required=True)
     p.add_argument("--mode", choices=["validation", "foundry"], default="validation")
     p.add_argument("--scenarios", help="Comma-separated scenario names. Default: all.")
     args = p.parse_args()
 
     scenario_names = [s.strip() for s in args.scenarios.split(",")] if args.scenarios else None
 
-    print(f"→ Starting {args.mode} run for '{args.use_case}'…")
+    print(f"→ Starting ARE {args.mode} run…")
     try:
-        run = start_run(args.use_case, args.mode, scenario_names)
+        run = start_run(args.mode, scenario_names)
     except httpx.HTTPStatusError as e:
         print(f"✗ HTTP {e.response.status_code}: {e.response.text[:400]}", file=sys.stderr)
         return 1
@@ -121,7 +120,7 @@ def main() -> int:
     print(f"  run_id={run_id}")
 
     try:
-        final = poll(args.use_case, run_id)
+        final = poll(run_id)
     except TimeoutError as e:
         print(f"✗ {e}", file=sys.stderr)
         return 1
