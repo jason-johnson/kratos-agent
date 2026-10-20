@@ -37,6 +37,12 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
           privateEndpointNetworkPolicies: 'Disabled'
         }
       }
+      {
+        name: 'aks'
+        properties: {
+          addressPrefix: '10.0.4.0/22'
+        }
+      }
     ]
   }
 }
@@ -45,3 +51,4 @@ output id string = vnet.id
 output name string = vnet.name
 output containerAppsSubnetId string = vnet.properties.subnets[0].id
 output privateEndpointSubnetId string = vnet.properties.subnets[1].id
+output aksSubnetId string = vnet.properties.subnets[2].id

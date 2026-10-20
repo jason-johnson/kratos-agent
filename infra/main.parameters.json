@@ -17,6 +17,18 @@
     "deployObo": {
       "value": "${DEPLOY_OBO=true}"
     },
+    "deployAks": {
+      "value": "${DEPLOY_AKS=false}"
+    },
+    "aksClusterName": {
+      "value": "${AKS_CLUSTER_NAME=}"
+    },
+    "aksNamespace": {
+      "value": "${AKS_NAMESPACE=kratos-agent}"
+    },
+    "aksAlertActionGroupId": {
+      "value": "${AKS_ALERT_ACTION_GROUP_ID=}"
+    },
     "deployHealthModel": {
       "value": "${DEPLOY_HEALTH_MODEL=false}"
     },

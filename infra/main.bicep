@@ -45,6 +45,18 @@ param agentApiPath string = 'kratos-agent'
 @description('Deploy the OBO MCP server and its Entra app registrations. Requires directory permission to register Entra applications. Set to false in tenants/subscriptions where the deploying identity cannot create app registrations.')
 param deployObo bool = true
 
+@description('Provision the AKS target platform. Deployment remains manual and this defaults to false.')
+param deployAks bool = false
+
+@description('Optional AKS cluster name override')
+param aksClusterName string = ''
+
+@description('Namespace used by the ARE Helm release')
+param aksNamespace string = 'kratos-agent'
+
+@description('Optional Azure Monitor action group resource ID for AKS alerts')
+param aksAlertActionGroupId string = ''
+
 @description('Deploy the Azure Monitor health model resources')
 param deployHealthModel bool = false
 
@@ -380,6 +392,29 @@ module oboMcpServer './modules/obo-mcp-server.bicep' = if (deployObo) {
   }
 }
 
+module aksPlatform './modules/aks-platform.bicep' = if (deployAks) {
+  name: 'aks-platform'
+  scope: rg
+  params: {
+    name: !empty(aksClusterName) ? aksClusterName : '${namePrefix}aks-${resourceToken}'
+    location: location
+    tags: tags
+    subnetId: network.outputs.aksSubnetId
+    logAnalyticsWorkspaceId: logAnalytics.outputs.id
+    containerRegistryName: containerRegistry.outputs.name
+    cosmosDbAccountName: cosmosDb.outputs.name
+    aiServicesName: aiFoundry.outputs.name
+    keyVaultName: keyVault.outputs.name
+    storageAccountName: blobStorage.outputs.name
+    appInsightsName: appInsights.outputs.name
+    logAnalyticsName: logAnalytics.outputs.name
+    kubernetesNamespace: aksNamespace
+    oboIdentityName: deployObo ? oboIdentity.outputs.name : ''
+    deployObo: deployObo
+    alertActionGroupId: aksAlertActionGroupId
+  }
+}
+
 // ─── Role Assignments ───
 module roleAssignments './modules/role-assignments.bicep' = {
   name: 'role-assignments'
@@ -413,6 +448,11 @@ output FOUNDRY_ENDPOINT string = aiFoundry.outputs.endpoint
 output FOUNDRY_MODEL_DEPLOYMENT string = aiFoundry.outputs.modelDeploymentName
 output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint
 output AZURE_BLOB_STORAGE_ACCOUNT_NAME string = blobStorage.outputs.name
+output AKS_CLUSTER_NAME string = deployAks ? aksPlatform.outputs.clusterName : ''
+output AKS_BACKEND_IDENTITY_CLIENT_ID string = deployAks ? aksPlatform.outputs.backendIdentityClientId : ''
+output AKS_OBO_IDENTITY_CLIENT_ID string = deployAks && deployObo ? aksPlatform.outputs.oboIdentityClientId : ''
+output AKS_OIDC_ISSUER_URL string = deployAks ? aksPlatform.outputs.oidcIssuerUrl : ''
+output AKS_OPERATIONS_WORKBOOK_ID string = deployAks ? aksPlatform.outputs.operationsWorkbookId : ''
 output AZURE_HEALTH_MODEL_ID string = deployHealthModel ? healthModel.outputs.id : ''
 output AZURE_HEALTH_MODEL_NAME string = deployHealthModel ? healthModel.outputs.name : ''
 

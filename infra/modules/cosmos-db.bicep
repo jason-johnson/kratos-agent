@@ -38,6 +38,12 @@ resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-preview' = {
     consistencyPolicy: {
       defaultConsistencyLevel: 'Session'
     }
+    backupPolicy: {
+      type: 'Continuous'
+      continuousModeProperties: {
+        tier: 'Continuous7Days'
+      }
+    }
     publicNetworkAccess: 'Disabled'
     disableLocalAuth: true
   }
