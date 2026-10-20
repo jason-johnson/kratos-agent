@@ -12,6 +12,8 @@ permissions:
 env:
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
+  PRIVATE_PYPI_INDEX_URL: ${{ secrets.PRIVATE_PYPI_INDEX_URL }}
+  PRIVATE_NPMRC: ${{ secrets.PRIVATE_NPMRC }}
 
 jobs:
   # ─── Stage 1: Lint & Static Analysis ───
@@ -29,6 +31,8 @@ jobs:
       - name: Install backend dependencies
         working-directory: src/backend
         run: |
+          test -n "$PRIVATE_PYPI_INDEX_URL" || { echo "::error::PRIVATE_PYPI_INDEX_URL is required"; exit 1; }
+          export PIP_INDEX_URL="$PRIVATE_PYPI_INDEX_URL"
           pip install -e ".[dev]"
 
       - name: Run Ruff (lint + format check)
@@ -48,7 +52,11 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: src/frontend
-        run: npm ci
+        run: |
+          test -n "$PRIVATE_NPMRC" || { echo "::error::PRIVATE_NPMRC is required"; exit 1; }
+          printf '%s' "$PRIVATE_NPMRC" > "$RUNNER_TEMP/.npmrc"
+          chmod 0600 "$RUNNER_TEMP/.npmrc"
+          npm ci --userconfig "$RUNNER_TEMP/.npmrc"
 
       - name: Lint frontend
         working-directory: src/frontend
@@ -69,7 +77,9 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: src/backend
-        run: pip install -e ".[dev]"
+        run: |
+          test -n "$PRIVATE_PYPI_INDEX_URL" || { echo "::error::PRIVATE_PYPI_INDEX_URL is required"; exit 1; }
+          PIP_INDEX_URL="$PRIVATE_PYPI_INDEX_URL" pip install -e ".[dev]"
 
       - name: Run tests with coverage
         working-directory: src/backend
@@ -91,25 +101,96 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Build backend Docker image
-      # Context must be the repo root: the Dockerfile copies from mocks/,
-      # use-cases/, and src/backend/ (matches docker-compose.yml / azure.yaml).
-      - name: Build backend Docker image
-        run: docker build -f src/backend/Dockerfile -t kratos-agent-service:${{ github.sha }} .
+      - name: Configure private package feeds
+        run: |
+          test -n "$PRIVATE_PYPI_INDEX_URL" || { echo "::error::PRIVATE_PYPI_INDEX_URL is required"; exit 1; }
+          test -n "$PRIVATE_NPMRC" || { echo "::error::PRIVATE_NPMRC is required"; exit 1; }
+          printf '%s' "$PRIVATE_NPMRC" > "$RUNNER_TEMP/.npmrc"
+          chmod 0600 "$RUNNER_TEMP/.npmrc"
 
-      # The other two images are built here too, because CI used to build only
-      # the backend. That let a dependency update land on main with a
-      # requirements.txt that could not be resolved at all (pydantic pinned
-      # pydantic-core to a version the pinned pydantic did not accept), and
-      # nothing caught it until a real deploy failed. Building every image is
-      # what makes that class of break visible before it merges.
-      - name: Build hosted-agent Docker image
-        run: docker build -f src/hosted-agent/Dockerfile -t kratos-hosted-agent:${{ github.sha }} .
+      - name: Build AKS backend image
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker build \
+            --secret id=pip_index_url,env=PRIVATE_PYPI_INDEX_URL \
+            --secret id=npmrc,src="$RUNNER_TEMP/.npmrc" \
+            -f src/backend/Dockerfile.aks \
+            -t kratos-agent-service:${{ github.sha }} .
 
-      # Context is the service directory: this Dockerfile copies requirements.txt
-      # relative to itself, not from the repo root (matches azure.yaml).
-      - name: Build obo-mcp-server Docker image
-        run: docker build -f src/obo-mcp-server/Dockerfile -t kratos-obo-mcp-server:${{ github.sha }} src/obo-mcp-server
+      - name: Build AKS OBO image
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker build \
+            --secret id=pip_index_url,env=PRIVATE_PYPI_INDEX_URL \
+            -f src/obo-mcp-server/Dockerfile.aks \
+            -t kratos-obo-mcp-server:${{ github.sha }} src/obo-mcp-server
+
+      - name: Build AKS frontend image
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker build \
+            --secret id=npmrc,src="$RUNNER_TEMP/.npmrc" \
+            -f src/frontend/Dockerfile \
+            -t kratos-frontend:${{ github.sha }} src/frontend
+
+      - name: Smoke-test AKS images
+        run: |
+          docker run --rm kratos-agent-service:${{ github.sha }} python -c "import app.main"
+          docker run --rm kratos-obo-mcp-server:${{ github.sha }} python -c "import server"
+          container_id="$(docker run -d -p 127.0.0.1::8080 \
+            -e SKIP_RUNTIME_CONFIG_WRITE=true kratos-frontend:${{ github.sha }})"
+          trap 'docker rm -f "$container_id"' EXIT
+          port="$(docker port "$container_id" 8080/tcp | sed 's/.*://')"
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent "http://127.0.0.1:${port}/healthz"; then break; fi
+            if [ "$attempt" -eq 20 ]; then docker logs "$container_id"; exit 1; fi
+            sleep 1
+          done
+
+      - name: Scan AKS images
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: kratos-agent-service:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan AKS OBO image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: kratos-obo-mcp-server:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan AKS frontend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: kratos-frontend:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan deployment configuration
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: deploy/helm/kratos-agent
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@b7246b12e77f7134dc2d460a3d5bad15bbe29390 # v4.1.0
+
+      - name: Validate Helm chart
+        run: |
+          helm lint deploy/helm/kratos-agent -f deploy/helm/kratos-agent/values-ci.yaml
+          helm template validation deploy/helm/kratos-agent \
+            --namespace kratos-agent \
+            -f deploy/helm/kratos-agent/values-ci.yaml > "$RUNNER_TEMP/kratos-agent.yaml"
 
       # Build frontend
       - name: Set up Node.js
@@ -119,7 +200,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: src/frontend
-        run: npm ci
+        run: npm ci --userconfig "$RUNNER_TEMP/.npmrc"
 
       - name: Build frontend
         working-directory: src/frontend

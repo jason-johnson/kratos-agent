@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+env:
+  PRIVATE_PYPI_INDEX_URL: ${{ secrets.PRIVATE_PYPI_INDEX_URL }}
+  PRIVATE_NPMRC: ${{ secrets.PRIVATE_NPMRC }}
+
 jobs:
   backend-lint-test:
     runs-on: ubuntu-latest
@@ -23,7 +27,9 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install --no-cache-dir ".[dev]"
+        run: |
+          test -n "$PRIVATE_PYPI_INDEX_URL" || { echo "::error::PRIVATE_PYPI_INDEX_URL is required"; exit 1; }
+          PIP_INDEX_URL="$PRIVATE_PYPI_INDEX_URL" pip install --no-cache-dir ".[dev]"
 
       - name: Lint (ruff)
         run: ruff check app/ tests/
@@ -52,7 +58,11 @@ jobs:
           cache-dependency-path: src/frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          test -n "$PRIVATE_NPMRC" || { echo "::error::PRIVATE_NPMRC is required"; exit 1; }
+          printf '%s' "$PRIVATE_NPMRC" > "$RUNNER_TEMP/.npmrc"
+          chmod 0600 "$RUNNER_TEMP/.npmrc"
+          npm ci --userconfig "$RUNNER_TEMP/.npmrc"
 
       - name: Lint
         run: npm run lint
@@ -82,7 +92,8 @@ jobs:
 
       - name: Check hook structure
         run: |
-          pip install --no-cache-dir pyyaml
+          test -n "$PRIVATE_PYPI_INDEX_URL" || { echo "::error::PRIVATE_PYPI_INDEX_URL is required"; exit 1; }
+          PIP_INDEX_URL="$PRIVATE_PYPI_INDEX_URL" pip install --no-cache-dir pyyaml
           python .github/scripts/check-hooks.py "$RUNNER_TEMP/hooks-inline"
 
       - name: Shellcheck
