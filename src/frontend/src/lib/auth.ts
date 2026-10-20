@@ -4,7 +4,7 @@
  * The user signs in with their Entra account and we acquire an access token
  * scoped to the Entra-protected OBO MCP server (`api://<server>/access_as_user`).
  * That token is attached to the chat request (see `lib/api.ts`), forwarded by
- * the backend to the hosted agent, and injected as the `Authorization` header on
+ * the backend to the in-process agent, and injected as the `Authorization` header on
  * the OBO MCP server so its tools (e.g. Microsoft Graph `/me`) run as the user.
  *
  * This wraps `@azure/msal-browser` directly (no MsalProvider) to keep the

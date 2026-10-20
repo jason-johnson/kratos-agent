@@ -1,7 +1,6 @@
 export interface Conversation {
   id: string;
   title: string;
-  useCase: string;
   status: "active" | "archived";
   createdAt: string;
   updatedAt: string;
@@ -177,18 +176,6 @@ export interface SystemPrompt {
   isDefault: boolean;
 }
 
-// ─── Use Cases ───
-
-export interface UseCase {
-  name: string;
-  displayName: string;
-  description: string;
-  skillCount: number;
-  sampleQuestions: string[];
-  /** True when the persona has been hand-curated and approved for demos. Defaults to false. */
-  curated?: boolean;
-}
-
 // ─── MCP Servers Admin ───
 
 export interface MCPLocalServer {
@@ -246,41 +233,6 @@ export interface ApplyFixResult {
   success: boolean;
   changes: FixChange[];
   error: string;
-}
-
-// ─── APM (Agent Package Manager) Admin ───
-
-export interface ApmDependency {
-  name: string;
-  ref: string | null;
-  resolved: string | null;
-  source: string;
-}
-
-export interface ApmMcpServer {
-  name: string;
-  transport: string;
-  command?: string | null;
-  args?: string[];
-  url?: string | null;
-  env?: Record<string, string>;
-  registry?: boolean;
-}
-
-export interface ApmStatusResponse {
-  dependencies: ApmDependency[];
-  materialised_skill_dirs: string[];
-  mcp_servers?: ApmMcpServer[];
-  version: string;
-}
-
-export interface ApmCommandResponse {
-  success: boolean;
-  returncode: number;
-  stdout: string;
-  stderr: string;
-  duration_ms: number;
-  dependencies: ApmDependency[];
 }
 
 // ─── Evals ───
@@ -346,7 +298,7 @@ export interface FoundryEvalSummary {
 
 export interface EvalRun {
   run_id: string;
-  use_case: string;
+  agent_id: string;
   mode: EvalMode;
   status: EvalRunStatus;
   scenarios: string[];
@@ -400,7 +352,6 @@ export interface TraceOperation {
   timestamp: string;
   total_duration_ms: number;
   span_count: number;
-  use_case: string;
   conversation_id: string;
   eval_run_id: string;
   spans: TraceSpan[];

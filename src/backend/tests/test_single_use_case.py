@@ -63,8 +63,9 @@ def test_openapi_exposes_only_single_agent_routes():
     paths = app.openapi()["paths"]
 
     assert "/api/evals/scenarios" in paths
-    assert "/api/admin/apm" in paths
+    assert "/api/admin/skills" in paths
     assert "/api/use-cases" not in paths
+    assert "/api/admin/apm" not in paths
     assert all("use-case" not in path and "use_case" not in path for path in paths)
 
 

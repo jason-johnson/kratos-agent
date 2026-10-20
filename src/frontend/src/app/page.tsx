@@ -3,19 +3,19 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ChatWindow } from "@/components/ChatWindow";
 import { Sidebar } from "@/components/Sidebar";
-import { SettingsModal } from "@/components/SettingsModal";
 import { SkillsAdminPanel } from "@/components/SkillsAdminPanel";
-import AgentLoop from "@/components/AgentLoop";
-import { Conversation, UseCase, Skill } from "@/types";
-import { listUseCases, listConversations, createConversation, deleteConversation, listSkills, importPersona } from "@/lib/api";
+import { Conversation, Skill } from "@/types";
+import { listConversations, createConversation, deleteConversation, listSkills } from "@/lib/api";
 import { loadRuntimeConfig } from "@/lib/config";
-import { readEmbedParams, takeImportManifest, settlePersonaUrl, type EmbedParams } from "@/lib/embed";
-import { PRIMARY_USE_CASE, PRIMARY_USE_CASE_FALLBACK } from "@/lib/useCase";
+import { readEmbedParams, type EmbedParams } from "@/lib/embed";
 import { useTheme, THEMES, type ThemeName, type Mode } from "@/components/ThemeProvider";
 
-type ImportStatus = "idle" | "importing" | "error" | "done";
-
 const THEME_NAMES = new Set(THEMES.map((t) => t.id));
+const AGENT = {
+  displayName: "Agent Reliability Engineer",
+  description: "Evidence-driven incident command assistant",
+  sampleQuestions: [] as string[],
+};
 
 export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -23,23 +23,16 @@ export default function Home() {
     useState<Conversation | null>(null);
   const [landingInput, setLandingInput] = useState("");
   const landingInputRef = useRef<HTMLTextAreaElement>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
-  const [useCases, setUseCases] = useState<UseCase[]>([]);
-  const [selectedUseCase, setSelectedUseCase] = useState<string>(PRIMARY_USE_CASE);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [agenticLoopOpen, setAgenticLoopOpen] = useState(false);
   const [configReady, setConfigReady] = useState(false);
 
   // Embed mode (chromeless hosting under another origin — design spec §C)
   const [embed, setEmbed] = useState<EmbedParams>({
-    embed: false, theme: null, mode: null, persona: null, prompt: null, doImport: false, back: null,
+    embed: false, theme: null, mode: null, prompt: null, back: null,
   });
-  const [importStatus, setImportStatus] = useState<ImportStatus>("idle");
-  const [importError, setImportError] = useState<string | null>(null);
-  const importManifestRef = useRef<unknown>(null);
   const bootstrappedRef = useRef(false);
   const { setTheme, setMode } = useTheme();
 
@@ -52,17 +45,6 @@ export default function Home() {
     // Load runtime config (resolves API URL from /config.json if present)
     loadRuntimeConfig().then(() => {
     setConfigReady(true);
-    // Load use-cases
-    listUseCases()
-      .then((ucs) => {
-        setUseCases(ucs);
-        if (ucs.length > 0 && !ucs.find((uc) => uc.name === selectedUseCase)) {
-          setSelectedUseCase(ucs[0].name);
-        }
-      })
-      .catch(() => {
-        setUseCases([PRIMARY_USE_CASE_FALLBACK]);
-      });
 
     // Load existing conversations from Cosmos so the sidebar persists across reloads
     listConversations()
@@ -76,16 +58,16 @@ export default function Home() {
     }); // end loadRuntimeConfig
   }, []);
 
-  // Fetch skills whenever the selected use-case changes (only after config is loaded)
+  // Fetch the ARE skills after runtime configuration is loaded.
   useEffect(() => {
     if (!configReady) return;
-    listSkills(selectedUseCase)
+    listSkills()
       .then((s) => setSkills(s))
       .catch(() => setSkills([]));
-  }, [selectedUseCase, configReady]);
+  }, [configReady]);
 
   const handleNewConversation = () => {
-    // Navigate to the landing page for the current use case
+    // Navigate to the ARE landing page.
     setActiveConversation(null);
     setPendingMessage(null);
     setSidebarOpen(false);
@@ -93,13 +75,11 @@ export default function Home() {
   };
 
   // Create a conversation and optionally pre-fill a message
-  const startConversation = async (message?: string, useCaseOverride?: string) => {
-    const useCase = useCaseOverride ?? selectedUseCase;
+  const startConversation = async (message?: string) => {
     const tempId = crypto.randomUUID();
     const optimistic: Conversation = {
       id: tempId,
       title: "New Conversation",
-      useCase,
       status: "active",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -109,7 +89,7 @@ export default function Home() {
     setLandingInput("");
 
     try {
-      const saved = await createConversation("New Conversation", useCase) as Conversation;
+      const saved = await createConversation("New Conversation") as Conversation;
       const real = { ...optimistic, id: saved.id };
       setConversations((prev) =>
         prev.map((c) => (c.id === tempId ? real : c))
@@ -146,7 +126,6 @@ export default function Home() {
 
   const handleSelectConversation = (conv: Conversation) => {
     setActiveConversation(conv);
-    setSelectedUseCase(PRIMARY_USE_CASE);
     setPendingMessage(null);
     setSidebarOpen(false);
   };
@@ -157,47 +136,7 @@ export default function Home() {
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
-  // Run the relayed manifest import (separated so the error UI can retry it).
-  const runImport = useCallback(async () => {
-    const manifest = importManifestRef.current;
-    if (!manifest) {
-      setImportStatus("error");
-      setImportError("No persona manifest was found to import. Please start again from the host.");
-      return;
-    }
-    setImportStatus("importing");
-    setImportError(null);
-    const promptText = readEmbedParams().prompt;
-    try {
-      const result = await importPersona(manifest);
-      // Make the freshly-imported persona selectable and refresh the catalog.
-      setUseCases((prev) =>
-        prev.find((uc) => uc.name === result.name)
-          ? prev
-          : [...prev, {
-              name: result.name,
-              displayName: result.displayName,
-              description: result.description,
-              skillCount: result.skillCount,
-              sampleQuestions: [],
-            }],
-      );
-      listUseCases().then(setUseCases).catch(() => {});
-      setSelectedUseCase(result.name);
-      settlePersonaUrl(result.name);
-      setImportStatus("done");
-      if (promptText) {
-        startConversation(promptText, result.name);
-      }
-    } catch (err) {
-      setImportStatus("error");
-      setImportError(err instanceof Error ? err.message : "Import failed. Please try again.");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Embed bootstrap: apply theme, then import / open persona / auto-prompt.
-  // Runs once after runtime config + use-cases are ready.
+  // Embed bootstrap: apply theme and optionally auto-start a prompt.
   useEffect(() => {
     if (!configReady || bootstrappedRef.current) return;
     const params = readEmbedParams();
@@ -218,21 +157,11 @@ export default function Home() {
       setMode(params.mode as Mode);
     }
 
-    if (params.doImport) {
-      importManifestRef.current = takeImportManifest();
-      runImport();
-      return;
-    }
-    if (params.persona) {
-      setSelectedUseCase(params.persona);
-      if (params.prompt) startConversation(params.prompt, params.persona);
-      return;
-    }
     if (params.prompt) {
       startConversation(params.prompt);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configReady, runImport, setMode, setTheme]);
+  }, [configReady, setMode, setTheme]);
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -265,22 +194,11 @@ export default function Home() {
           onNew={handleNewConversation}
           onSelect={handleSelectConversation}
           onDelete={handleDeleteConversation}
-          onOpenSettings={() => { setSettingsOpen(true); setSidebarOpen(false); }}
           onOpenSkills={() => { setSkillsOpen(true); setSidebarOpen(false); setPendingMessage(null); }}
-          onOpenAgenticLoop={() => { setAgenticLoopOpen(true); setSidebarOpen(false); }}
-          useCases={useCases}
-          selectedUseCase={selectedUseCase}
-          onSelectUseCase={setSelectedUseCase}
           onCloseMobile={closeSidebar}
           embedBackHref={embed.embed ? (embed.back || "/reference/kratos") : null}
         />
       </div>
-
-      {/* Settings modal */}
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-
-      {/* Agentic Loop modal */}
-      <AgentLoop open={agenticLoopOpen} onClose={() => setAgenticLoopOpen(false)} />
 
       {/* Main chat area */}
       <main id="main-content" className="flex-1 flex flex-col min-w-0">
@@ -304,7 +222,7 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                 </svg>
               </button>
-              <span className="ml-2 text-sm font-semibold text-text">Kratos Agent</span>
+              <span className="ml-2 text-sm font-semibold text-text">Agent Reliability Engineer</span>
             </div>
 
             {/* Landing page */}
@@ -324,13 +242,11 @@ export default function Home() {
 
                   <h1 className="text-3xl sm:text-4xl font-bold mb-3 tracking-tight">
                     <span className="gradient-text">
-                      {useCases.find((uc) => uc.name === selectedUseCase)?.displayName || "Kratos Agent"}
+                      {AGENT.displayName}
                     </span>
                   </h1>
                   <p className="text-muted text-sm sm:text-base leading-relaxed max-w-lg mx-auto">
-                    {useCases.find((uc) => uc.name === selectedUseCase)?.description || (
-                      <>Enterprise AI Agent powered by GitHub Copilot SDK &amp; Microsoft Foundry</>
-                    )}
+                    {AGENT.description}
                   </p>
                 </div>
 
@@ -374,9 +290,9 @@ export default function Home() {
                 </div>
 
                 {/* Sample questions */}
-                {(useCases.find((uc) => uc.name === selectedUseCase)?.sampleQuestions ?? []).length > 0 && (
+                {AGENT.sampleQuestions.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8 stagger-children">
-                    {useCases.find((uc) => uc.name === selectedUseCase)!.sampleQuestions.map((q, i) => (
+                    {AGENT.sampleQuestions.map((q, i) => (
                       <button
                         key={i}
                         onClick={() => handleSampleQuestion(q)}
@@ -412,48 +328,11 @@ export default function Home() {
         )}
       </main>
 
-      {/* Persona-import overlay (embed Variant B): shows while the relayed
-          manifest is being imported, with an inline retry on failure. */}
-      {embed.embed && (importStatus === "importing" || importStatus === "error") && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-bg/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-sm mx-4 p-6 rounded-2xl border border-border-soft bg-surface shadow-xl text-center">
-            {importStatus === "importing" ? (
-              <>
-                <div className="mx-auto mb-4 w-10 h-10 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-                <h2 className="text-base font-semibold text-text mb-1">Creating your persona…</h2>
-                <p className="text-sm text-muted">Importing the agent definition into Kratos.</p>
-              </>
-            ) : (
-              <>
-                <div className="mx-auto mb-4 w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <h2 className="text-base font-semibold text-text mb-1">Couldn&apos;t create the persona</h2>
-                <p className="text-sm text-muted mb-4 break-words">{importError}</p>
-                <button
-                  onClick={runImport}
-                  className="px-4 py-2 rounded-xl bg-accent text-accent-fg text-sm font-medium shadow-md hover:shadow-lg active:scale-95 transition-all"
-                >
-                  Try again
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Full-screen Agent Manager overlay — rendered on top so the active
+      {/* Full-screen runtime configuration overlay — rendered on top so the active
           ChatWindow stays mounted and any in-flight stream keeps running. */}
       {skillsOpen && (
         <div className="fixed inset-0 z-[60]">
-          <SkillsAdminPanel
-            onClose={() => setSkillsOpen(false)}
-            useCase={selectedUseCase}
-            useCases={useCases}
-            onSelectUseCase={setSelectedUseCase}
-          />
+          <SkillsAdminPanel onClose={() => setSkillsOpen(false)} />
         </div>
       )}
     </div>

@@ -15,7 +15,6 @@ from app.constants import PRIMARY_USE_CASE
 from app.observability import instrument_fastapi_app, setup_telemetry
 from app.routers import (
     admin_analysis,
-    admin_apm,
     admin_mcp,
     admin_prompt,
     admin_skills,
@@ -221,7 +220,6 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(admin_skills.router, prefix="/api/admin/skills", tags=["admin"])
 app.include_router(admin_prompt.router, prefix="/api/admin/system-prompt", tags=["admin"])
 app.include_router(admin_mcp.router, prefix="/api/admin/mcp-servers", tags=["admin"])
-app.include_router(admin_apm.router, prefix="/api/admin/apm", tags=["admin"])
 app.include_router(admin_analysis.router, prefix="/api/admin/analysis", tags=["admin"])
 app.include_router(evals.router, prefix="/api/evals", tags=["evals"])
 app.include_router(traces.router, prefix="/api/traces", tags=["traces"])

@@ -5,13 +5,12 @@ import { generateEvalScenarios, upsertEvalScenario } from "@/lib/api";
 import type { EvalScenario } from "@/types";
 
 interface Props {
-  useCase: string;
   open: boolean;
   onClose: () => void;
   onGenerated: (scenarios: EvalScenario[]) => void;
 }
 
-export function GenerateScenariosModal({ useCase, open, onClose, onGenerated }: Props): JSX.Element | null {
+export function GenerateScenariosModal({ open, onClose, onGenerated }: Props): JSX.Element | null {
   const [count, setCount] = useState(10);
   const [instructions, setInstructions] = useState("");
   const [drafts, setDrafts] = useState<EvalScenario[]>([]);
@@ -26,7 +25,7 @@ export function GenerateScenariosModal({ useCase, open, onClose, onGenerated }: 
     setError("");
     setDrafts([]);
     try {
-      const result = await generateEvalScenarios(useCase, { count, instructions: instructions || undefined, persist: false });
+      const result = await generateEvalScenarios({ count, instructions: instructions || undefined, persist: false });
       setDrafts(result.scenarios);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate scenarios");
@@ -50,7 +49,7 @@ export function GenerateScenariosModal({ useCase, open, onClose, onGenerated }: 
     try {
       const saved: EvalScenario[] = [];
       for (const scenario of drafts) {
-        const s = await upsertEvalScenario(useCase, scenario);
+        const s = await upsertEvalScenario(scenario);
         saved.push(s);
       }
       onGenerated(saved);
@@ -92,7 +91,7 @@ export function GenerateScenariosModal({ useCase, open, onClose, onGenerated }: 
             </div>
             <div>
               <h2 className="text-base font-semibold text-text">Generate Scenarios</h2>
-              <p className="text-xs text-muted">AI-generated eval scenarios for <span className="font-mono">{useCase}</span></p>
+              <p className="text-xs text-muted">AI-generated eval scenarios for the Agent Reliability Engineer</p>
             </div>
           </div>
           <button

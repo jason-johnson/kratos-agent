@@ -318,8 +318,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
         setIsStreaming(false);
         setUserInputPrompt(null);
       },
-      currentAttachments,
-      conversation.useCase
+      currentAttachments
     );
   };
 
@@ -400,16 +399,9 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
             </button>
           )}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-sm font-semibold text-text truncate">
-                {conversation.title}
-              </h2>
-              {conversation.useCase && conversation.useCase !== "generic" && (
-                <span className="text-[10px] px-2 py-0.5 bg-accent-soft text-accent rounded-full font-medium flex-shrink-0">
-                  {conversation.useCase.replace(/-/g, " ")}
-                </span>
-              )}
-            </div>
+            <h2 className="text-sm font-semibold text-text truncate">
+              {conversation.title}
+            </h2>
           </div>
         </div>
       </header>
@@ -448,8 +440,8 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
 
           {/* Nothing has come back from the agent yet. This covers both
               rejoining a run already in flight and the wait for the first
-              event of a fresh one, which on a new conversation includes the
-              hosted agent's cold start. Without it the turn renders as an
+              event of a fresh one, which can include SDK session startup.
+              Without it the turn renders as an
               empty page and looks like a failure. */}
           {(isStreaming || awaitingResponse) &&
             thoughts.length === 0 &&

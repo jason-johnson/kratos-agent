@@ -52,7 +52,7 @@ export function getApiUrl(): string {
  * MSAL / OBO sign-in config for the agent.
  *
  * The signed-in user's token (scoped to the Entra-protected OBO MCP server) is
- * sent to the backend, forwarded to the hosted agent, and injected as the
+ * sent to the backend and injected by the in-process agent as the
  * `Authorization` header on the OBO MCP server so its tools run On-Behalf-Of
  * the user. When this config is absent the OBO feature is simply disabled and
  * the rest of the app keeps working (e.g. SWA EasyAuth-only deployments / local

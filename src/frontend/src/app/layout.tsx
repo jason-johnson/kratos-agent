@@ -3,7 +3,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
-  title: "Kratos Agent",
+  title: "Agent Reliability Engineer",
   description:
     "Enterprise AI Agent powered by GitHub Copilot SDK & Microsoft Foundry",
 };

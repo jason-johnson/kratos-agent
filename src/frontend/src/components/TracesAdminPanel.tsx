@@ -4,10 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { listTraceOperations, getTraceOperation } from "@/lib/api";
 import type { SpanCategory, TraceList, TraceOperation, TraceSpan } from "@/types";
 
-interface Props {
-  useCase: string;
-}
-
 const spanCategoryColors: Record<SpanCategory, string> = {
   llm: "bg-blue-500",
   agent: "bg-indigo-500",
@@ -54,7 +50,7 @@ const SPAN_HIGHLIGHT_KEYS: Array<{ key: string; label: string }> = [
   { key: "gen_ai.tool.name", label: "Tool" },
   { key: "gen_ai.tool.kind", label: "Tool kind" },
   { key: "kratos.skill.name", label: "Skill" },
-  { key: "kratos.use_case", label: "Use case" },
+  { key: "kratos.use_case", label: "Agent configuration" },
   { key: "kratos.conversation_id", label: "Conversation" },
   { key: "kratos.eval_run_id", label: "Eval run" },
   { key: "error.type", label: "Error" },
@@ -409,7 +405,7 @@ function OperationRow({ op, lookbackHours }: { op: TraceOperation; lookbackHours
   );
 }
 
-export function TracesAdminPanel({ useCase }: Props): JSX.Element {
+export function TracesAdminPanel(): JSX.Element {
   const [conversationId, setConversationId] = useState("");
   const [evalRunId, setEvalRunId] = useState("");
   const [lookbackHours, setLookbackHours] = useState(24);
@@ -422,7 +418,6 @@ export function TracesAdminPanel({ useCase }: Props): JSX.Element {
     setError("");
     try {
       const data = await listTraceOperations({
-        useCase,
         conversationId: conversationId || undefined,
         evalRunId: evalRunId || undefined,
         lookbackHours,
@@ -433,7 +428,7 @@ export function TracesAdminPanel({ useCase }: Props): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [useCase, conversationId, evalRunId, lookbackHours]);
+  }, [conversationId, evalRunId, lookbackHours]);
 
   useEffect(() => {
     handleRefresh();
@@ -569,7 +564,7 @@ export function TracesAdminPanel({ useCase }: Props): JSX.Element {
             <p className="text-xs text-muted max-w-xs leading-relaxed">
               {summary?.error
                 ? "App Insights is not configured or returned no data."
-                : `No operations found in the last ${lookbackHours}h for this use-case.`}
+                : `No ARE operations found in the last ${lookbackHours}h.`}
             </p>
           </div>
         ) : (

@@ -12,23 +12,11 @@ import {
 import type { EvalScenario, EvalRun, EvalRunStatus, ScenarioResult } from "@/types";
 import { GenerateScenariosModal } from "./GenerateScenariosModal";
 
-interface Props {
-  useCase: string;
-}
-
 const ACTIVE_STATUSES: EvalRunStatus[] = ["pending", "invoking", "scoring"];
 const ALL_EVALUATORS = ["task_adherence", "tool_selection", "response_quality", "safety"];
 const FOUNDRY_PORTAL_URL =
   (typeof process !== "undefined" && process.env.NEXT_PUBLIC_FOUNDRY_PORTAL_URL) ||
   "https://ai.azure.com";
-
-const PERSONA_LABELS: Record<string, string> = {
-  generic: "Generalist",
-  insurance: "Insurance Claim Specialist",
-  "retail-banking": "Retail Banking Advisor",
-  "wealth-management": "Wealth Management Advisor",
-  "sales-account-review": "Sales Account Reviewer",
-};
 
 const categoryColors: Record<string, string> = {
   standard: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
@@ -587,7 +575,7 @@ function EditScenarioModal({ scenario, onSave, onClose }: EditScenarioModalProps
   );
 }
 
-export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
+export function EvalsAdminPanel(): JSX.Element {
   const [scenarios, setScenarios] = useState<EvalScenario[]>([]);
   const [runs, setRuns] = useState<EvalRun[]>([]);
   const [latestRun, setLatestRun] = useState<EvalRun | null>(null);
@@ -606,8 +594,8 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
     setError("");
     try {
       const [scenarioList, runList] = await Promise.all([
-        listEvalScenarios(useCase),
-        listEvalRuns(useCase),
+        listEvalScenarios(),
+        listEvalRuns(),
       ]);
       setScenarios(scenarioList);
       setRuns(runList);
@@ -615,7 +603,7 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
         const latest = runList[0];
         setLatestRun(latest);
       } else {
-        // No runs for this persona — clear the stale ghost from a previous tab.
+        // No runs yet — clear any stale local selection.
         setLatestRun(null);
       }
     } catch (err) {
@@ -623,7 +611,7 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [useCase]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -633,7 +621,7 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
-        const run = await getEvalRun(useCase, runId);
+        const run = await getEvalRun(runId);
         setLatestRun(run);
         setRuns((prev) => {
           const idx = prev.findIndex((r) => r.run_id === run.run_id);
@@ -652,7 +640,7 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
         // ignore poll errors
       }
     }, 10000);
-  }, [useCase]);
+  }, []);
 
   useEffect(() => {
     if (latestRun && ACTIVE_STATUSES.includes(latestRun.status)) {
@@ -667,7 +655,7 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
     setRunningValidation(true);
     setRunError("");
     try {
-      const run = await startEvalRun(useCase, { mode: "validation", scenarios: [] });
+      const run = await startEvalRun({ mode: "validation", scenarios: [] });
       setLatestRun(run);
       setRuns((prev) => [run, ...prev]);
       startPolling(run.run_id);
@@ -682,7 +670,7 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
     setRunningFoundry(true);
     setRunError("");
     try {
-      const run = await startEvalRun(useCase, { mode: "foundry", scenarios: [] });
+      const run = await startEvalRun({ mode: "foundry", scenarios: [] });
       setLatestRun(run);
       setRuns((prev) => [run, ...prev]);
       startPolling(run.run_id);
@@ -695,7 +683,7 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
 
   const handleDeleteScenario = async (name: string) => {
     try {
-      await deleteEvalScenario(useCase, name);
+      await deleteEvalScenario(name);
       setScenarios((prev) => prev.filter((s) => s.name !== name));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete scenario");
@@ -704,7 +692,7 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
 
   const handleSaveScenario = async (updated: EvalScenario) => {
     try {
-      const saved = await upsertEvalScenario(useCase, updated);
+      const saved = await upsertEvalScenario(updated);
       setScenarios((prev) => {
         const idx = prev.findIndex((s) => s.name === saved.name);
         if (idx >= 0) {
@@ -722,7 +710,6 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
 
   const foundryUrl = latestRun?.foundry?.report_url || FOUNDRY_PORTAL_URL;
   const rollup = latestRun ? rollupRun(latestRun) : null;
-  const personaLabel = PERSONA_LABELS[useCase] ?? useCase;
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -906,7 +893,7 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
                   </span>
                   <span className="text-[10px] text-muted bg-surface-2 px-2 py-0.5 rounded-full uppercase font-medium">{latestRun.mode}</span>
                   <span className="text-[11px] text-muted truncate">
-                    Persona: <span className="font-medium text-text">{personaLabel}</span>
+                    Agent: <span className="font-medium text-text">Agent Reliability Engineer</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -1051,7 +1038,6 @@ export function EvalsAdminPanel({ useCase }: Props): JSX.Element {
 
       {/* Modals */}
       <GenerateScenariosModal
-        useCase={useCase}
         open={showGenerateModal}
         onClose={() => setShowGenerateModal(false)}
         onGenerated={(newScenarios) => {

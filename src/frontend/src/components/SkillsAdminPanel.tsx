@@ -1,30 +1,20 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt, listSkillFiles, upsertSkillFile, deleteSkillFile, getMCPConfig, updateMCPConfig, analyzeConsistency, applyAnalysisFix, exportUseCase } from "@/lib/api";
-import { PRIMARY_USE_CASE } from "@/lib/useCase";
-import type { AnalysisResult, AnalysisIssue, ApplyFixResult, MCPConfig, Skill, SkillFile, UseCase } from "@/types";
+import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt, listSkillFiles, upsertSkillFile, deleteSkillFile, getMCPConfig, updateMCPConfig, analyzeConsistency, applyAnalysisFix } from "@/lib/api";
+import type { AnalysisResult, AnalysisIssue, ApplyFixResult, MCPConfig, Skill, SkillFile } from "@/types";
 import { useTheme } from "./ThemeProvider";
-import { ApmAdminPanel } from "./ApmAdminPanel";
 import { EvalsAdminPanel } from "./EvalsAdminPanel";
 import { TracesAdminPanel } from "./TracesAdminPanel";
 import { SourceBadge } from "./SourceBadge";
 
-type Tab = "skills" | "prompt" | "mcp" | "consistency" | "apm" | "evals" | "traces" | "deploy";
+type Tab = "skills" | "prompt" | "mcp" | "consistency" | "evals" | "traces";
 
 interface Props {
   onClose: () => void;
-  useCase?: string;
-  useCases?: UseCase[];
-  onSelectUseCase?: (name: string) => void;
 }
 
-export function SkillsAdminPanel({
-  onClose,
-  useCase = PRIMARY_USE_CASE,
-  useCases = [],
-  onSelectUseCase,
-}: Props) {
+export function SkillsAdminPanel({ onClose }: Props) {
   const [tab, setTab] = useState<Tab>("skills");
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(false);
@@ -74,11 +64,6 @@ export function SkillsAdminPanel({
   const [uploadPath, setUploadPath] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Deploy / export state
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
-
   // Consistency analysis state
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -92,7 +77,7 @@ export function SkillsAdminPanel({
     setLoading(true);
     setError("");
     try {
-      const data = await listSkills(useCase);
+      const data = await listSkills();
       setSkills(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load skills");
@@ -105,7 +90,7 @@ export function SkillsAdminPanel({
     setPromptLoading(true);
     setError("");
     try {
-      const data = await getSystemPrompt(useCase);
+      const data = await getSystemPrompt();
       setPromptContent(data.content);
       setPromptDraft(data.content);
       setPromptIsDefault(data.isDefault);
@@ -121,7 +106,7 @@ export function SkillsAdminPanel({
     setMcpLoading(true);
     setMcpError("");
     try {
-      const data = await getMCPConfig(useCase);
+      const data = await getMCPConfig();
       setMcpServers(data.servers);
       setMcpSources(data.sources ?? {});
     } catch (err) {
@@ -187,7 +172,7 @@ export function SkillsAdminPanel({
     if ((mcpType === "http" || mcpType === "sse") && !mcpUrl.trim()) { setMcpError("URL is required for remote servers."); return; }
     const updated = { ...mcpServers, [name]: buildMcpConfig() };
     try {
-      const data = await updateMCPConfig(useCase, updated);
+      const data = await updateMCPConfig(updated);
       setMcpServers(data.servers);
       setMcpSources(data.sources ?? {});
       setEditingMcp(null);
@@ -204,7 +189,7 @@ export function SkillsAdminPanel({
     const updated = { ...mcpServers };
     delete updated[name];
     try {
-      const data = await updateMCPConfig(useCase, updated);
+      const data = await updateMCPConfig(updated);
       setMcpServers(data.servers);
       setMcpSources(data.sources ?? {});
     } catch (err) {
@@ -216,11 +201,11 @@ export function SkillsAdminPanel({
     loadSkills();
     loadPrompt();
     loadMCPConfig();
-  }, [useCase]);
+  }, []);
 
   const handleToggle = async (skill: Skill) => {
     try {
-      const updated = await updateSkill(skill.name, { enabled: !skill.enabled }, useCase);
+      const updated = await updateSkill(skill.name, { enabled: !skill.enabled });
       setSkills((prev) => prev.map((s) => (s.name === updated.name ? updated : s)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update skill");
@@ -236,7 +221,7 @@ export function SkillsAdminPanel({
         description: newDescription,
         enabled: true,
         instructions: newInstructions,
-      }, useCase);
+      });
       setSkills((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
       setShowCreate(false);
       setNewName("");
@@ -254,7 +239,7 @@ export function SkillsAdminPanel({
       const updated = await updateSkill(editingSkill.name, {
         description: editingSkill.description,
         instructions: editingSkill.instructions,
-      }, useCase);
+      });
       setSkills((prev) => prev.map((s) => (s.name === updated.name ? updated : s)));
       setEditingSkill(null);
     } catch (err) {
@@ -266,7 +251,7 @@ export function SkillsAdminPanel({
     if (!confirm(`Delete skill "${name}"? This cannot be undone.`)) return;
     setError("");
     try {
-      await deleteSkill(name, useCase);
+      await deleteSkill(name);
       setSkills((prev) => prev.filter((s) => s.name !== name));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete skill");
@@ -276,7 +261,7 @@ export function SkillsAdminPanel({
   const handleSavePrompt = async () => {
     setError("");
     try {
-      const data = await updateSystemPrompt(promptDraft, useCase);
+      const data = await updateSystemPrompt(promptDraft);
       setPromptContent(data.content);
       setPromptIsDefault(data.isDefault);
       setPromptDirty(false);
@@ -289,7 +274,7 @@ export function SkillsAdminPanel({
     if (!confirm("Reset to the default system prompt? Your custom prompt will be deleted.")) return;
     setError("");
     try {
-      await resetSystemPrompt(useCase);
+      await resetSystemPrompt();
       await loadPrompt();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reset system prompt");
@@ -305,7 +290,7 @@ export function SkillsAdminPanel({
       setShowUploadForm(false);
       setUploadPath("");
       setFilesLoading(true);
-      listSkillFiles(editingSkill.name, useCase)
+      listSkillFiles(editingSkill.name)
         .then((d) => setSkillFiles(d.files))
         .catch(() => setSkillFiles([]))
         .finally(() => setFilesLoading(false));
@@ -324,7 +309,7 @@ export function SkillsAdminPanel({
       // Build final path: strip trailing slash from prefix, join with filename
       const prefix = uploadPath.trim().replace(/\/+$/, "");
       const filePath = prefix ? `${prefix}/${file.name}` : file.name;
-      await upsertSkillFile(editingSkill.name, filePath, content, useCase);
+      await upsertSkillFile(editingSkill.name, filePath, content);
       const existing = skillFiles.findIndex((f) => f.path === filePath);
       const updated: SkillFile = { path: filePath, name: file.name, content };
       setSkillFiles((prev) =>
@@ -353,7 +338,7 @@ export function SkillsAdminPanel({
     if (!confirm(`Delete file "${filePath}"? This cannot be undone.`)) return;
     setError("");
     try {
-      await deleteSkillFile(editingSkill.name, filePath, useCase);
+      await deleteSkillFile(editingSkill.name, filePath);
       setSkillFiles((prev) => prev.filter((f) => f.path !== filePath));
       if (expandedFile === filePath) setExpandedFile(null);
       setSkills((prev) =>
@@ -375,7 +360,7 @@ export function SkillsAdminPanel({
     setExpandedIssue(null);
     setFixResults({});
     try {
-      const result = await analyzeConsistency(useCase, includeDisabled);
+      const result = await analyzeConsistency(includeDisabled);
       setAnalysisResult(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");
@@ -387,7 +372,7 @@ export function SkillsAdminPanel({
   const handleApplyFix = async (issue: AnalysisIssue, issueIdx: number) => {
     setFixingIssue(issueIdx);
     try {
-      const result = await applyAnalysisFix(issue, useCase);
+      const result = await applyAnalysisFix(issue);
       setFixResults((prev) => ({ ...prev, [issueIdx]: result }));
       if (result.success) {
         // Refresh skills list since a skill may have been modified/disabled
@@ -403,49 +388,13 @@ export function SkillsAdminPanel({
     }
   };
 
-  const currentUseCaseMeta = useCases.find((uc) => uc.name === useCase);
-  const currentDisplayName = currentUseCaseMeta?.displayName ?? useCase;
-
-  const handleExport = async () => {
-    if (!useCase || exporting) return;
-    setExporting(true);
-    setExportError(null);
-    try {
-      const blob = await exportUseCase(useCase);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${useCase}-foundry-agent.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setExportError(err instanceof Error ? err.message : "Export failed");
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const copyCmd = async (text: string, id: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedCmd(id);
-      setTimeout(() => setCopiedCmd((cur) => (cur === id ? null : cur)), 1500);
-    } catch {
-      // Clipboard unavailable (insecure context) — silently no-op.
-    }
-  };
-
   const navItems: { id: Tab; label: string; icon: string }[] = [
     { id: "skills", label: "Skills", icon: "puzzle" },
     { id: "prompt", label: "System Prompt", icon: "document" },
     { id: "mcp", label: "MCP Servers", icon: "server" },
-    { id: "apm", label: "APM", icon: "package" },
     { id: "consistency", label: "Consistency", icon: "shield" },
     { id: "evals", label: "Evals", icon: "chart" },
     { id: "traces", label: "Traces", icon: "activity" },
-    { id: "deploy", label: "Deploy", icon: "rocket" },
   ];
 
   const renderNavIcon = (icon: string) => {
@@ -454,10 +403,8 @@ export function SkillsAdminPanel({
       case "document": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>;
       case "server": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" /></svg>;
       case "shield": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>;
-      case "package": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" /></svg>;
       case "chart": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>;
       case "activity": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h2.25l2.25-6 3 12 3-9 2.25 3h3.75" /></svg>;
-      case "rocket": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" /></svg>;
       default: return null;
     }
   };
@@ -492,7 +439,7 @@ export function SkillsAdminPanel({
               </svg>
             </button>
             <div className="flex-1 min-w-0">
-              <h1 className="font-semibold text-text-strong text-sm tracking-tight">Agent Manager</h1>
+              <h1 className="font-semibold text-text-strong text-sm tracking-tight">Runtime Configuration</h1>
               <p className="text-[11px] text-muted">Configure skills, prompts &amp; MCP</p>
             </div>
             {/* Mobile close */}
@@ -506,33 +453,6 @@ export function SkillsAdminPanel({
             </button>
           </div>
         </div>
-
-        {/* Use case selector */}
-        {useCases.length > 1 && (
-          <div className="px-4 pb-3">
-            <label className="block text-[10px] font-semibold text-muted uppercase tracking-wider mb-1.5 px-1">
-              Agent Persona
-            </label>
-            <div className="relative">
-              <select
-                value={useCase}
-                onChange={(e) => onSelectUseCase?.(e.target.value)}
-                className="w-full text-sm text-text-strong bg-hover border border-border-soft rounded-lg pl-3 pr-9 py-2.5 focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent appearance-none cursor-pointer hover:bg-hover hover:border-border transition-all"
-              >
-                {useCases.map((uc) => (
-                  <option key={uc.name} value={uc.name} className="bg-surface-2">
-                    {uc.displayName} ({uc.skillCount} skills)
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5">
-                <svg className="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="mx-4 my-1 border-t border-border-soft" />
 
@@ -590,7 +510,7 @@ export function SkillsAdminPanel({
           <div className="pt-2 px-3 flex items-center justify-between">
             <p className="text-[10px] text-muted flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-slow"></span>
-              {useCase.replace(/-/g, " ")}
+              Agent Reliability Engineer
             </p>
             <button
               onClick={toggleMode}
@@ -627,10 +547,10 @@ export function SkillsAdminPanel({
             </button>
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-semibold text-text">
-                {tab === "skills" ? (showCreate ? "Create Skill" : "Skills") : tab === "prompt" ? "System Prompt" : tab === "consistency" ? "Consistency Analysis" : tab === "apm" ? "APM Packages" : tab === "evals" ? "Evaluations" : tab === "traces" ? "Traces" : tab === "deploy" ? "Deploy as Foundry Agent" : (editingMcp ? `Edit: ${editingMcp.name}` : showMcpCreate ? "Add MCP Server" : "MCP Servers")}
+                {tab === "skills" ? (showCreate ? "Create Skill" : "Skills") : tab === "prompt" ? "System Prompt" : tab === "consistency" ? "Consistency Analysis" : tab === "evals" ? "Evaluations" : tab === "traces" ? "Traces" : (editingMcp ? `Edit: ${editingMcp.name}` : showMcpCreate ? "Add MCP Server" : "MCP Servers")}
               </h2>
               <p className="text-xs text-muted mt-0.5">
-                {tab === "skills" ? `${skills.filter(s => s.enabled).length} of ${skills.length} active` : tab === "prompt" ? "Configure the system prompt for all conversations" : tab === "consistency" ? "Detect contradictions, overlaps, and gaps in your agent configuration" : tab === "apm" ? "Manage Agent Package Manager dependencies for this use-case" : tab === "evals" ? "Validate agent behavior with automated eval scenarios" : tab === "traces" ? "App Insights waterfall view for recent operations" : tab === "deploy" ? "Package this persona as a standalone Microsoft Foundry Hosted Agent" : `${Object.keys(mcpServers).length} server${Object.keys(mcpServers).length !== 1 ? "s" : ""} configured`}
+                {tab === "skills" ? `${skills.filter(s => s.enabled).length} of ${skills.length} active` : tab === "prompt" ? "Configure the system prompt for all conversations" : tab === "consistency" ? "Detect contradictions, overlaps, and gaps in your agent configuration" : tab === "evals" ? "Validate agent behavior with automated eval scenarios" : tab === "traces" ? "App Insights waterfall view for recent operations" : `${Object.keys(mcpServers).length} server${Object.keys(mcpServers).length !== 1 ? "s" : ""} configured`}
               </p>
             </div>
             {/* Action buttons */}
@@ -914,167 +834,12 @@ export function SkillsAdminPanel({
                 </p>
               </div>
             )
-          ) : tab === "apm" ? (
-            /* ── APM tab ── */
-            <div className="max-w-4xl">
-              <ApmAdminPanel useCase={useCase} onMcpChange={loadMCPConfig} />
-            </div>
           ) : tab === "evals" ? (
             /* ── Evals tab ── */
-            <EvalsAdminPanel useCase={useCase} />
+            <EvalsAdminPanel />
           ) : tab === "traces" ? (
             /* ── Traces tab ── */
-            <TracesAdminPanel useCase={useCase} />
-          ) : tab === "deploy" ? (
-            /* ── Deploy tab ── */
-            <div className="max-w-3xl space-y-6">
-              {/* Hero / explainer */}
-              <div className="rounded-2xl border border-border-soft bg-surface p-5 sm:p-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-11 h-11 rounded-xl bg-accent-soft text-accent flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-base font-semibold text-text-strong">
-                      Ship <span className="text-accent">{currentDisplayName}</span> as a Foundry Hosted Agent
-                    </h3>
-                    <p className="mt-1 text-sm text-muted leading-relaxed">
-                      Download a self-contained <code className="font-mono text-[12px] bg-hover px-1.5 py-0.5 rounded">azd</code> project that
-                      deploys this persona — skills, prompt, MCP config, and infra — as a standalone
-                      Microsoft Foundry Hosted Agent in any Azure subscription. Kratos is not required at runtime.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-col sm:flex-row gap-3 sm:items-center">
-                  <button
-                    onClick={handleExport}
-                    disabled={exporting || !useCase}
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-accent-fg bg-accent hover:bg-accent-hover rounded-xl transition-all shadow-card disabled:opacity-50 disabled:cursor-wait"
-                  >
-                    {exporting ? (
-                      <>
-                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={3} className="opacity-25" />
-                          <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth={3} className="opacity-75" strokeLinecap="round" />
-                        </svg>
-                        Packing&hellip;
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                        </svg>
-                        Download {useCase}-foundry-agent.zip
-                      </>
-                    )}
-                  </button>
-                  <p className="text-[11px] text-muted">
-                    Typical bundle: ~150 files, ~300 KB. Generated on demand from the live persona configuration.
-                  </p>
-                </div>
-
-                {exportError && (
-                  <div className="mt-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs border border-red-100 dark:border-red-500/20">
-                    {exportError}
-                  </div>
-                )}
-              </div>
-
-              {/* What's inside */}
-              <section>
-                <h4 className="text-sm font-semibold text-text-strong mb-3">What&apos;s inside the ZIP</h4>
-                <ul className="space-y-2 text-sm text-text">
-                  {[
-                    { path: "infra/", desc: "Bicep for Foundry account, project, ACR, monitoring, and RBAC." },
-                    { path: "src/hosted-agent/", desc: "MAF orchestrator container — pinned to agent-framework-core ~=1.7.0." },
-                    { path: "src/backend/app/", desc: "Persona runtime: skills, system prompt, MCP config, SkillsProvider wiring." },
-                    { path: "use-cases/" + useCase + "/", desc: "This persona's curated skills + assets (frozen at download time)." },
-                    { path: "azure.yaml + agent.yaml", desc: "azd service map + ContainerAgent schema for the azure.ai.agents extension." },
-                    { path: "README.md", desc: "Step-by-step deploy + invoke walkthrough." },
-                  ].map((row) => (
-                    <li key={row.path} className="flex items-start gap-3">
-                      <code className="font-mono text-[12px] bg-hover text-text-strong px-2 py-0.5 rounded shrink-0">{row.path}</code>
-                      <span className="text-muted">{row.desc}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-
-              {/* Prerequisites */}
-              <section>
-                <h4 className="text-sm font-semibold text-text-strong mb-3">Prerequisites</h4>
-                <ul className="space-y-1.5 text-sm text-muted list-disc pl-5">
-                  <li>Azure subscription with Microsoft Foundry preview features enabled.</li>
-                  <li>
-                    <code className="font-mono text-[12px] bg-hover text-text px-1.5 py-0.5 rounded">azd</code> CLI ≥ 1.20
-                    with the <code className="font-mono text-[12px] bg-hover text-text px-1.5 py-0.5 rounded">azure.ai.agents</code> extension.
-                  </li>
-                  <li>
-                    <strong className="text-text">Foundry Project Manager</strong> role on the target Foundry project
-                    (so the postdeploy hook can auto-assign <em>Foundry User</em> to the agent identity).
-                  </li>
-                  <li>
-                    A supported region: <code className="font-mono text-[12px] bg-hover text-text px-1.5 py-0.5 rounded">northcentralus</code>,
-                    {" "}<code className="font-mono text-[12px] bg-hover text-text px-1.5 py-0.5 rounded">eastus</code>,
-                    {" "}<code className="font-mono text-[12px] bg-hover text-text px-1.5 py-0.5 rounded">swedencentral</code>,
-                    or <code className="font-mono text-[12px] bg-hover text-text px-1.5 py-0.5 rounded">westus</code>.
-                  </li>
-                </ul>
-              </section>
-
-              {/* Deploy steps */}
-              <section>
-                <h4 className="text-sm font-semibold text-text-strong mb-3">Deploy</h4>
-                <ol className="space-y-3">
-                  {[
-                    { id: "unzip", label: "Unzip + enter the project", cmd: `unzip ${useCase}-foundry-agent.zip && cd ${useCase}-foundry-agent` },
-                    { id: "auth", label: "Authenticate with Azure", cmd: "azd auth login" },
-                    { id: "up", label: "Provision infra + deploy the agent", cmd: `azd up -e ${useCase}-prod` },
-                    { id: "invoke", label: "Smoke test the deployed agent", cmd: 'azd ai agent invoke "Hello!"' },
-                  ].map((step, idx) => (
-                    <li key={step.id} className="rounded-xl border border-border-soft bg-surface overflow-hidden">
-                      <div className="flex items-center gap-3 px-4 py-2 border-b border-border-soft bg-surface-2">
-                        <span className="w-5 h-5 rounded-full bg-accent text-accent-fg text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
-                          {idx + 1}
-                        </span>
-                        <span className="text-xs font-medium text-text flex-1">{step.label}</span>
-                        <button
-                          onClick={() => copyCmd(step.cmd, step.id)}
-                          className="text-[11px] text-muted hover:text-text px-2 py-1 rounded hover:bg-hover transition-all"
-                          aria-label={`Copy ${step.label}`}
-                        >
-                          {copiedCmd === step.id ? "Copied!" : "Copy"}
-                        </button>
-                      </div>
-                      <pre className="px-4 py-2.5 text-xs font-mono text-text-strong overflow-x-auto">
-                        <span className="text-muted select-none">$ </span>{step.cmd}
-                      </pre>
-                    </li>
-                  ))}
-                </ol>
-                <p className="mt-3 text-[11px] text-muted leading-relaxed">
-                  First <code className="font-mono bg-hover px-1 py-0.5 rounded">azd up</code> takes
-                  ~12–18 min (Foundry account + project + ACR + agent build). Subsequent
-                  {" "}<code className="font-mono bg-hover px-1 py-0.5 rounded">azd deploy</code> is &lt; 2 min.
-                </p>
-              </section>
-
-              {/* Footer / troubleshooting */}
-              <section className="rounded-xl border border-border-soft bg-surface-2 px-4 py-3">
-                <p className="text-[12px] text-muted leading-relaxed">
-                  <strong className="text-text">Stuck?</strong> The bundle&apos;s
-                  {" "}<code className="font-mono bg-hover text-text px-1 py-0.5 rounded">README.md</code> covers the
-                  three most common gotchas: 401 on first invoke (RBAC propagation, wait 5–15 min),
-                  <em> session_not_ready</em> 424 (container crash — check
-                  {" "}<code className="font-mono bg-hover text-text px-1 py-0.5 rounded">azd ai agent monitor --session-id</code>),
-                  and region <em>experience not available</em> (try
-                  {" "}<code className="font-mono bg-hover text-text px-1 py-0.5 rounded">swedencentral</code>).
-                </p>
-              </section>
-            </div>
+            <TracesAdminPanel />
           ) : tab === "consistency" ? (
             /* ── Consistency Analysis tab ── */
             <div className="max-w-4xl space-y-6">
