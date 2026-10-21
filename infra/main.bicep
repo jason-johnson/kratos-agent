@@ -34,6 +34,15 @@ param aksClusterName string = ''
 @description('Namespace used by the ARE Helm release')
 param aksNamespace string = 'kratos-agent'
 
+@description('Non-overlapping Kubernetes service CIDR')
+param aksServiceCidr string = '10.1.0.0/16'
+
+@description('Kubernetes DNS service IP within aksServiceCidr')
+param aksDnsServiceIp string = '10.1.0.10'
+
+@description('Non-overlapping Azure CNI Overlay pod CIDR')
+param aksPodCidr string = '10.244.0.0/16'
+
 @description('Optional Azure Monitor action group resource ID for AKS alerts')
 param aksAlertActionGroupId string = ''
 
@@ -232,6 +241,9 @@ module aksPlatform './modules/aks-platform.bicep' = {
     tags: tags
     subnetId: network.outputs.aksSubnetId
     vnetName: network.outputs.name
+    serviceCidr: aksServiceCidr
+    dnsServiceIp: aksDnsServiceIp
+    podCidr: aksPodCidr
     logAnalyticsWorkspaceId: logAnalytics.outputs.id
     containerRegistryName: containerRegistry.outputs.name
     cosmosDbAccountName: cosmosDb.outputs.name

@@ -13,6 +13,15 @@ param subnetId string
 @description('Virtual network name containing the AKS subnet')
 param vnetName string
 
+@description('Kubernetes service CIDR that does not overlap the VNet')
+param serviceCidr string
+
+@description('Kubernetes DNS service IP within serviceCidr')
+param dnsServiceIp string
+
+@description('Azure CNI Overlay pod CIDR that does not overlap the VNet or service CIDR')
+param podCidr string
+
 @description('Log Analytics workspace resource ID')
 param logAnalyticsWorkspaceId string
 
@@ -178,6 +187,9 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
       networkPolicy: 'cilium'
       loadBalancerSku: 'standard'
       outboundType: 'loadBalancer'
+      serviceCidr: serviceCidr
+      dnsServiceIP: dnsServiceIp
+      podCidr: podCidr
     }
     autoUpgradeProfile: {
       upgradeChannel: 'stable'

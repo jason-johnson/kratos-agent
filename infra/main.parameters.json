@@ -23,6 +23,15 @@
     "aksNamespace": {
       "value": "${AKS_NAMESPACE=kratos-agent}"
     },
+    "aksServiceCidr": {
+      "value": "${AKS_SERVICE_CIDR=10.1.0.0/16}"
+    },
+    "aksDnsServiceIp": {
+      "value": "${AKS_DNS_SERVICE_IP=10.1.0.10}"
+    },
+    "aksPodCidr": {
+      "value": "${AKS_POD_CIDR=10.244.0.0/16}"
+    },
     "aksAlertActionGroupId": {
       "value": "${AKS_ALERT_ACTION_GROUP_ID=}"
     },
