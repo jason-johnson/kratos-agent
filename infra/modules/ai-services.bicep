@@ -56,6 +56,10 @@ resource project 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
     type: 'SystemAssigned'
   }
   properties: {}
+  // Cognitive Services rejects concurrent child-resource mutations.
+  dependsOn: [
+    modelDeployment
+  ]
 }
 
 resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
