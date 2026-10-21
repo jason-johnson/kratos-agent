@@ -28,6 +28,9 @@
     },
     "frontendUrl": {
       "value": "${FRONTEND_URL=}"
+    },
+    "foundryModelCapacity": {
+      "value": "${FOUNDRY_MODEL_CAPACITY=250}"
     }
   }
 }

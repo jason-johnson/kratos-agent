@@ -79,6 +79,7 @@ jobs:
           azd env set AZURE_PRINCIPAL_ID "$principal_id"
           azd env set AKS_NAMESPACE kratos-agent
           azd env set DEPLOY_OBO "$DEPLOY_OBO"
+          azd env set FOUNDRY_MODEL_CAPACITY 250
 
       - name: Provision infrastructure
         run: azd provision --no-prompt

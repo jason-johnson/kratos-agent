@@ -88,6 +88,8 @@ Create a GitHub environment named `ktaks` with these secrets:
 - `AZURE_SUBSCRIPTION_ID` - the approved target subscription.
 
 Set its `AZURE_LOCATION` environment variable to `swedencentral`.
+The `ktaks` workflow requests 250 thousand tokens per minute for the Foundry
+model deployment, matching the approved regional quota.
 
 Add an OIDC federated credential to the deployment application with:
 

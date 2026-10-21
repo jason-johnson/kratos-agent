@@ -40,6 +40,10 @@ param aksAlertActionGroupId string = ''
 @description('Optional public frontend origin registered as an OBO SPA redirect URI')
 param frontendUrl string = ''
 
+@minValue(1)
+@description('Foundry model deployment capacity in thousands of tokens per minute')
+param foundryModelCapacity int = 250
+
 // ─── Resource Naming ───
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
@@ -146,6 +150,7 @@ module aiFoundry './modules/ai-services.bicep' = {
     tags: tags
     appInsightsId: appInsights.outputs.id
     appInsightsConnectionString: appInsights.outputs.connectionString
+    modelCapacity: foundryModelCapacity
   }
 }
 

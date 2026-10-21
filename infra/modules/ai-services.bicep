@@ -20,7 +20,7 @@ param modelName string = 'gpt-6-astra'
 param modelVersion string = '2026-09-03'
 
 @description('Deployment SKU capacity (thousands of tokens per minute)')
-param modelCapacity int = 350
+param modelCapacity int = 250
 
 @description('Application Insights resource ID to connect to the project (powers the Foundry Traces tab). Empty = no connection.')
 param appInsightsId string = ''
