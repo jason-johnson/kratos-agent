@@ -18,9 +18,7 @@ FROM ${NGINX_IMAGE}
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY runtime-config.template.json /opt/kratos/runtime-config.template.json
-COPY 40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
+COPY --chmod=0555 40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
 COPY --from=build /app/out/ /usr/share/nginx/html/
-
-RUN chmod 0555 /docker-entrypoint.d/40-runtime-config.sh
 
 EXPOSE 8080

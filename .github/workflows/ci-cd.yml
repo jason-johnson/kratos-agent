@@ -28,6 +28,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Verify private package sources
+        run: python .github/scripts/check-package-sources.py
+
       - name: Install backend dependencies
         working-directory: src/backend
         run: |

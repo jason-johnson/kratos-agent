@@ -26,6 +26,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Verify private package sources
+        run: python ../../.github/scripts/check-package-sources.py
+
       - name: Install dependencies
         run: |
           test -n "$PRIVATE_PYPI_INDEX_URL" || { echo "::error::PRIVATE_PYPI_INDEX_URL is required"; exit 1; }
