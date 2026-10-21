@@ -61,8 +61,9 @@ Production boundaries:
 - Runtime skill/prompt changes are admin-only, immutable, audited, and
   replica-refreshed.
 
-`azure.yaml` provisions infrastructure only. Application deployment is a manual
-Helm operation described in `deploy/aks/README.md`. Never add push-triggered
+`azure.yaml` provisions infrastructure only. The manual `ktaks` GitHub workflow
+may run provisioning, but application deployment remains the manual Helm
+operation described in `deploy/aks/README.md`. Never add push-triggered
 deployment.
 
 ## Conventions

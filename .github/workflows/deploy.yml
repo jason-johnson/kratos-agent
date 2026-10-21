@@ -1,0 +1,100 @@
+name: Provision AKS infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_obo:
+        description: "Provision the optional Graph OBO identity and Entra applications"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: provision-ktaks
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    name: Provision ktaks
+    runs-on: ubuntu-latest
+    environment: ktaks
+    env:
+      AZURE_ENV_NAME: ktaks
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check required credentials
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          missing=()
+          [ -n "$AZURE_CLIENT_ID" ] || missing+=(AZURE_CLIENT_ID)
+          [ -n "$AZURE_TENANT_ID" ] || missing+=(AZURE_TENANT_ID)
+          [ -n "$AZURE_SUBSCRIPTION_ID" ] || missing+=(AZURE_SUBSCRIPTION_ID)
+          [ -n "$AZURE_LOCATION" ] || missing+=(AZURE_LOCATION)
+          if [ "${#missing[@]}" -ne 0 ]; then
+            echo "::error::Missing ktaks environment secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Install azd
+        uses: Azure/setup-azd@634ad924cf8baef2257898ba5663be8d19f15aca # v2.3.0
+
+      - name: Sign in to Azure
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign in to azd
+        run: |
+          azd auth login \
+            --client-id "${{ secrets.AZURE_CLIENT_ID }}" \
+            --tenant-id "${{ secrets.AZURE_TENANT_ID }}" \
+            --federated-credential-provider github
+
+      - name: Configure azd environment
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          DEPLOY_OBO: ${{ inputs.deploy_obo && 'true' || 'false' }}
+        run: |
+          azd env select "$AZURE_ENV_NAME" 2>/dev/null || \
+            azd env new "$AZURE_ENV_NAME" \
+              --location "$AZURE_LOCATION" \
+              --subscription "$AZURE_SUBSCRIPTION_ID" \
+              --no-prompt
+
+          principal_id="$(az ad sp show --id "$AZURE_CLIENT_ID" --query id -o tsv)"
+          test -n "$principal_id"
+
+          azd env set AZURE_LOCATION "$AZURE_LOCATION"
+          azd env set AZURE_SUBSCRIPTION_ID "$AZURE_SUBSCRIPTION_ID"
+          azd env set AZURE_PRINCIPAL_ID "$principal_id"
+          azd env set AKS_NAMESPACE kratos-agent
+          azd env set DEPLOY_OBO "$DEPLOY_OBO"
+
+      - name: Provision infrastructure
+        run: azd provision --no-prompt
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### AKS infrastructure provisioning"
+            echo ""
+            echo "| Setting | Value |"
+            echo "| --- | --- |"
+            echo "| Environment | \`ktaks\` |"
+            echo "| Result | \`${{ job.status }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| OBO requested | \`${{ inputs.deploy_obo }}\` |"
+            echo ""
+            echo "This workflow provisions infrastructure only. It does not build or push images, install Helm, change DNS or TLS, or run live acceptance tests."
+          } >> "$GITHUB_STEP_SUMMARY"

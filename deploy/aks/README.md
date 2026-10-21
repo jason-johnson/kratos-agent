@@ -73,6 +73,33 @@ azd env set FRONTEND_URL https://<host>
 azd provision
 ```
 
+### Optional GitHub OIDC provisioning trial
+
+The manual `Provision AKS infrastructure` workflow provisions the fixed
+non-production `ktaks` environment from a GitHub-hosted runner. It performs
+only `azd provision`; image publication, Helm installation, DNS, TLS, secrets,
+and live acceptance remain operator actions.
+
+Create a GitHub environment named `ktaks` with these secrets:
+
+- `AZURE_CLIENT_ID` - application/client ID for the deployment service
+  principal;
+- `AZURE_TENANT_ID` - its tenant ID; and
+- `AZURE_SUBSCRIPTION_ID` - the approved target subscription.
+
+Set its `AZURE_LOCATION` environment variable to `swedencentral`.
+
+Add an OIDC federated credential to the deployment application with:
+
+- issuer `https://token.actions.githubusercontent.com`;
+- audience `api://AzureADTokenExchange`; and
+- subject `repo:jason-johnson/kratos-agent:environment:ktaks`.
+
+The workflow is manual-only and defaults `deploy_obo` to false. Enable OBO
+only after confirming the deployment identity may create Entra applications.
+The repository is public, so review workflow logs for environment disclosure
+and never print azd values, resource IDs, endpoints, or credentials.
+
 The deployment outputs the cluster name and Workload Identity client IDs for a
 private Helm values file. `FRONTEND_URL` registers the production origin on the
 OBO SPA client; omit it only when provisioning a local-only environment.

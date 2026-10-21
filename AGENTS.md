@@ -37,8 +37,10 @@ import/export, caller-selected `useCase`, or alternate application runtimes.
 | `deploy/aks` | Manual operator runbook and utilities |
 
 AKS is the only supported application runtime. `azure.yaml` provisions
-infrastructure only; Helm deployment, image publication, DNS, certificates, and
-live acceptance are explicit operator actions. CI must never deploy.
+infrastructure only. Push- and pull-request-triggered CI must never deploy; the
+manual `ktaks` GitHub workflow may provision infrastructure only. Helm
+deployment, image publication, DNS, certificates, and live acceptance are
+explicit operator actions.
 
 Keep immutable image digests, Workload Identity, OIDC ingress authentication,
 default-deny network policy, namespace-only Kubernetes inspection RBAC,
