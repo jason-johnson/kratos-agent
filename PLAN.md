@@ -1,6 +1,10 @@
 # Kratos AKS Simplification Plan
 
-Last updated: 2026-10-20
+Last updated: 2026-10-22
+
+Repository implementation is complete. Live AKS delivery, environment decisions,
+Helm installation, and acceptance are tracked in
+[DEPLOYMENT-PLAN.md](DEPLOYMENT-PLAN.md).
 
 ## Purpose
 
