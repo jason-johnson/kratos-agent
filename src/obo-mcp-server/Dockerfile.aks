@@ -11,11 +11,18 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN --mount=type=secret,id=pip_index_url,required=true \
     PIP_INDEX_URL="$(cat /run/secrets/pip_index_url)" \
     PIP_EXTRA_INDEX_URL="" \
-    pip install --no-cache-dir --requirement requirements.txt
+    pip install --no-cache-dir --requirement requirements.txt \
+    && python -m pip uninstall --yes pip setuptools wheel \
+    && rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.11 \
+    && rm -rf /usr/local/lib/python3.11/ensurepip/_bundled
 
 RUN groupadd --gid 10002 obo \
     && useradd --uid 10002 --gid obo --create-home --shell /usr/sbin/nologin obo

@@ -16,6 +16,12 @@ RUN npm run build
 
 FROM ${NGINX_IMAGE}
 
+USER root
+
+RUN apk upgrade --no-cache
+
+USER 101
+
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY runtime-config.template.json /opt/kratos/runtime-config.template.json
 COPY --chmod=0555 40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
