@@ -85,6 +85,44 @@ jobs:
           azd env set DEPLOY_OBO "$DEPLOY_OBO"
           azd env set FOUNDRY_MODEL_CAPACITY 250
 
+      - name: Start existing AKS cluster
+        run: |
+          resource_group="rg-${AZURE_ENV_NAME}"
+          cluster_name="$(
+            az aks list \
+              --resource-group "$resource_group" \
+              --query '[0].name' \
+              --output tsv
+          )"
+
+          if [ -z "$cluster_name" ]; then
+            exit 0
+          fi
+
+          power_state="$(
+            az aks show \
+              --resource-group "$resource_group" \
+              --name "$cluster_name" \
+              --query powerState.code \
+              --output tsv
+          )"
+
+          case "$power_state" in
+            Running)
+              ;;
+            Stopped)
+              az aks start \
+                --resource-group "$resource_group" \
+                --name "$cluster_name" \
+                --only-show-errors \
+                --output none
+              ;;
+            *)
+              echo "::error::AKS cluster cannot be provisioned while its power state is '$power_state'."
+              exit 1
+              ;;
+          esac
+
       - name: Provision infrastructure
         run: azd provision --no-prompt
 
