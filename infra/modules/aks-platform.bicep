@@ -70,6 +70,9 @@ param alertActionGroupId string = ''
 @description('Principal granted Azure Kubernetes Service RBAC Cluster Admin for initial operation')
 param clusterAdminPrincipalId string = ''
 
+@description('Principal granted permission to push immutable application images to ACR')
+param imagePublisherPrincipalId string = ''
+
 var backendIdentityName = '${name}-backend'
 var cosmosDbDataContributor = '00000000-0000-0000-0000-000000000002'
 var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
@@ -77,6 +80,7 @@ var cognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 var storageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var monitoringReader = '43d0d8ad-25c7-4714-9337-8ba259a9fe05'
 var acrPull = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+var acrPush = '8311e382-0749-4cb8-b61a-304f252e45ec'
 var networkContributor = '4d97b98b-1d4f-4787-a291-c67834d212e7'
 var aksRbacClusterAdmin = 'b1ff04bb-8a4e-4dc4-8eb5-8693973ce19b'
 
@@ -268,6 +272,15 @@ resource kubeletAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull)
     principalId: aks.properties.identityProfile.kubeletidentity.objectId
     principalType: 'ServicePrincipal'
+  }
+}
+
+resource imagePublisherAcrPush 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(imagePublisherPrincipalId)) {
+  name: guid(registry.id, imagePublisherPrincipalId, acrPush)
+  scope: registry
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPush)
+    principalId: imagePublisherPrincipalId
   }
 }
 

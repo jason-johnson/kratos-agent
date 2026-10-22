@@ -257,6 +257,7 @@ module aksPlatform './modules/aks-platform.bicep' = {
     deployObo: deployObo
     alertActionGroupId: aksAlertActionGroupId
     clusterAdminPrincipalId: principalId
+    imagePublisherPrincipalId: principalId
   }
 }
 

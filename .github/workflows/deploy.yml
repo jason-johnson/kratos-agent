@@ -7,6 +7,10 @@ on:
         description: "Provision the optional Graph OBO identity and Entra applications"
         type: boolean
         default: false
+      publish_images:
+        description: "Build, smoke-test, and push the backend, frontend, and OBO images"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -84,6 +88,149 @@ jobs:
       - name: Provision infrastructure
         run: azd provision --no-prompt
 
+      - name: Verify private package sources
+        if: inputs.publish_images
+        run: python .github/scripts/check-package-sources.py
+
+      - name: Configure private package feeds
+        if: inputs.publish_images
+        run: |
+          ado_token="$(
+            az account get-access-token \
+              --resource 499b84ac-1321-427f-aa17-267ca6975798 \
+              --query accessToken \
+              --output tsv
+          )"
+          test -n "$ado_token"
+          echo "::add-mask::$ado_token"
+
+          python_index="https://azure:${ado_token}@pkgs.dev.azure.com/jasojohnson-mcap2/_packaging/PythonFeed/pypi/simple/"
+          echo "::add-mask::$python_index"
+          printf '%s' "$python_index" > "$RUNNER_TEMP/pip-index-url"
+          chmod 0600 "$RUNNER_TEMP/pip-index-url"
+
+          {
+            echo "registry=https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/"
+            echo "always-auth=false"
+          } > "$RUNNER_TEMP/.npmrc"
+          chmod 0600 "$RUNNER_TEMP/.npmrc"
+
+      - name: Build and smoke-test images
+        if: inputs.publish_images
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker build \
+            --secret id=pip_index_url,src="$RUNNER_TEMP/pip-index-url" \
+            --secret id=npmrc,src="$RUNNER_TEMP/.npmrc" \
+            -f src/backend/Dockerfile.aks \
+            -t kratos-agent-service:validation .
+
+          docker build \
+            --secret id=npmrc,src="$RUNNER_TEMP/.npmrc" \
+            -f src/frontend/Dockerfile \
+            -t kratos-frontend:validation \
+            src/frontend
+
+          docker build \
+            --secret id=pip_index_url,src="$RUNNER_TEMP/pip-index-url" \
+            -f src/obo-mcp-server/Dockerfile.aks \
+            -t kratos-obo-mcp-server:validation \
+            src/obo-mcp-server
+
+          docker run --rm kratos-agent-service:validation python -c "import app.main"
+          docker run --rm kratos-obo-mcp-server:validation python -c "import server"
+
+          container_id="$(
+            docker run -d -p 127.0.0.1::8080 \
+              -e SKIP_RUNTIME_CONFIG_WRITE=true \
+              kratos-frontend:validation
+          )"
+          trap 'docker rm -f "$container_id" >/dev/null 2>&1 || :' EXIT
+          port="$(docker port "$container_id" 8080/tcp | sed 's/.*://')"
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent "http://127.0.0.1:${port}/healthz" >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              docker logs "$container_id"
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Scan backend image
+        if: inputs.publish_images
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: kratos-agent-service:validation
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan frontend image
+        if: inputs.publish_images
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: kratos-frontend:validation
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan OBO image
+        if: inputs.publish_images
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: kratos-obo-mcp-server:validation
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Push immutable image versions
+        if: inputs.publish_images
+        run: |
+          registry_name="$(
+            az acr list \
+              --resource-group "rg-${AZURE_ENV_NAME}" \
+              --query '[0].name' \
+              --output tsv
+          )"
+          registry="$(
+            az acr show \
+              --resource-group "rg-${AZURE_ENV_NAME}" \
+              --name "$registry_name" \
+              --query loginServer \
+              --output tsv
+          )"
+          test -n "$registry_name"
+          test -n "$registry"
+          echo "::add-mask::$registry"
+
+          az acr login --name "$registry_name"
+
+          docker tag kratos-agent-service:validation "$registry/kratos-agent-service:${GITHUB_SHA}"
+          docker tag kratos-frontend:validation "$registry/kratos-frontend:${GITHUB_SHA}"
+          docker tag kratos-obo-mcp-server:validation "$registry/kratos-obo-mcp-server:${GITHUB_SHA}"
+
+          push_with_retry() {
+            image="$1"
+            for attempt in $(seq 1 12); do
+              if docker push "$image"; then
+                return 0
+              fi
+              if [ "$attempt" -eq 12 ]; then
+                return 1
+              fi
+              echo "ACR authorization is still propagating; retrying image push."
+              sleep 10
+              az acr login --name "$registry_name"
+            done
+          }
+
+          push_with_retry "$registry/kratos-agent-service:${GITHUB_SHA}"
+          push_with_retry "$registry/kratos-frontend:${GITHUB_SHA}"
+          push_with_retry "$registry/kratos-obo-mcp-server:${GITHUB_SHA}"
+
       - name: Summarize
         if: always()
         run: |
@@ -96,6 +243,7 @@ jobs:
             echo "| Result | \`${{ job.status }}\` |"
             echo "| Commit | \`${{ github.sha }}\` |"
             echo "| OBO requested | \`${{ inputs.deploy_obo }}\` |"
+            echo "| Images requested | \`${{ inputs.publish_images }}\` |"
             echo ""
-            echo "This workflow provisions infrastructure only. It does not build or push images, install Helm, change DNS or TLS, or run live acceptance tests."
+            echo "This workflow does not install Helm, change DNS or TLS, create application secrets, or run live acceptance tests."
           } >> "$GITHUB_STEP_SUMMARY"

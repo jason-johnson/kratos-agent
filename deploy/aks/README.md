@@ -76,9 +76,10 @@ azd provision
 ### Optional GitHub OIDC provisioning trial
 
 The manual `Provision AKS infrastructure` workflow provisions the fixed
-non-production `ktaks` environment from a GitHub-hosted runner. It performs
-only `azd provision`; image publication, Helm installation, DNS, TLS, secrets,
-and live acceptance remain operator actions.
+non-production `ktaks` environment from a GitHub-hosted runner. It always runs
+`azd provision` and can optionally build, smoke-test, and publish the three
+application images when `publish_images` is selected. Helm installation, DNS,
+TLS, secrets, and live acceptance remain separate operator actions.
 
 Create a GitHub environment named `ktaks` with these secrets:
 
