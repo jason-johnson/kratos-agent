@@ -52,6 +52,9 @@ param kubernetesNamespace string = 'kratos-agent'
 @description('Backend Kubernetes service account name')
 param backendServiceAccountName string = 'kratos-agent-backend'
 
+@description('Authentication proxy Kubernetes service account name')
+param authServiceAccountName string = 'kratos-agent-auth'
+
 @description('OBO Kubernetes service account name')
 param oboServiceAccountName string = 'kratos-agent-obo'
 
@@ -70,10 +73,14 @@ param alertActionGroupId string = ''
 @description('Principal granted Azure Kubernetes Service RBAC Cluster Admin for initial operation')
 param clusterAdminPrincipalId string = ''
 
+@description('Entra group granted Azure Kubernetes Service RBAC Cluster Admin for manual Helm operations')
+param operatorPrincipalId string = ''
+
 @description('Principal granted permission to push immutable application images to ACR')
 param imagePublisherPrincipalId string = ''
 
 var backendIdentityName = '${name}-backend'
+var authIdentityName = '${name}-auth'
 var cosmosDbDataContributor = '00000000-0000-0000-0000-000000000002'
 var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
 var cognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
@@ -86,6 +93,12 @@ var aksRbacClusterAdmin = 'b1ff04bb-8a4e-4dc4-8eb5-8693973ce19b'
 
 resource backendIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: backendIdentityName
+  location: location
+  tags: tags
+}
+
+resource authIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: authIdentityName
   location: location
   tags: tags
 }
@@ -223,6 +236,16 @@ resource backendFederatedCredential 'Microsoft.ManagedIdentity/userAssignedIdent
   }
 }
 
+resource authFederatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
+  parent: authIdentity
+  name: 'aks-${kubernetesNamespace}-${authServiceAccountName}'
+  properties: {
+    audiences: ['api://AzureADTokenExchange']
+    issuer: aks.properties.oidcIssuerProfile.issuerURL
+    subject: 'system:serviceaccount:${kubernetesNamespace}:${authServiceAccountName}'
+  }
+}
+
 resource oboFederatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = if (deployObo) {
   parent: oboIdentity
   name: 'aks-${kubernetesNamespace}-${oboServiceAccountName}'
@@ -303,6 +326,16 @@ resource clusterAdminRole 'Microsoft.Authorization/roleAssignments@2022-04-01' =
   }
 }
 
+resource operatorClusterAdminRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(operatorPrincipalId)) {
+  name: guid(aks.id, operatorPrincipalId, aksRbacClusterAdmin)
+  scope: aks
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', aksRbacClusterAdmin)
+    principalId: operatorPrincipalId
+    principalType: 'Group'
+  }
+}
+
 resource backendCosmosRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
   parent: cosmosDb
   name: guid(cosmosDb.id, backendIdentity.name, cosmosDbDataContributor)
@@ -319,6 +352,16 @@ resource backendKeyVaultRole 'Microsoft.Authorization/roleAssignments@2022-04-01
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUser)
     principalId: backendIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource authKeyVaultRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, authIdentity.name, keyVaultSecretsUser)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUser)
+    principalId: authIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -505,6 +548,7 @@ resource restartingContainersAlert 'Microsoft.Insights/scheduledQueryRules@2023-
 
 output clusterName string = aks.name
 output backendIdentityClientId string = backendIdentity.properties.clientId
+output authIdentityClientId string = authIdentity.properties.clientId
 output oboIdentityClientId string = deployObo ? oboIdentity!.properties.clientId : ''
 output oidcIssuerUrl string = aks.properties.oidcIssuerProfile.issuerURL
 output operationsWorkbookId string = operationsWorkbook.id

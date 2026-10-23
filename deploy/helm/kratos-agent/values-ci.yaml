@@ -15,6 +15,7 @@ authProxy:
     digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
 workloadIdentity:
   backendClientId: validation-placeholder
+  authClientId: validation-placeholder
   oboClientId: validation-placeholder
 azure:
   tenantId: validation-placeholder
@@ -30,3 +31,13 @@ auth:
   allowedClientAppIds: validation-placeholder
 ingress:
   host: are.example.invalid
+secrets:
+  keyVaultCsi:
+    enabled: true
+    vaultName: validation-vault
+    serviceNowClientIdObjectName: validation-servicenow-client-id
+    serviceNowClientSecretObjectName: validation-servicenow-client-secret
+    appInsightsConnectionStringObjectName: validation-appinsights-connection-string
+    oauthClientIdObjectName: validation-oauth-client-id
+    oauthClientSecretObjectName: validation-oauth-client-secret
+    oauthCookieSecretObjectName: validation-oauth-cookie-secret

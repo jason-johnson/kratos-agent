@@ -18,8 +18,16 @@ spec:
         app.kubernetes.io/name: {{ include "kratos.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: auth
+        {{- if .Values.secrets.keyVaultCsi.enabled }}
+        azure.workload.identity/use: "true"
+        {{- end }}
     spec:
+      {{- if .Values.secrets.keyVaultCsi.enabled }}
+      serviceAccountName: {{ .Values.workloadIdentity.authServiceAccountName }}
+      automountServiceAccountToken: true
+      {{- else }}
       automountServiceAccountToken: false
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -54,17 +62,17 @@ spec:
             - name: OAUTH2_PROXY_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.existingSecret }}
+                  name: {{ ternary .Values.secrets.authSecret .Values.secrets.existingSecret .Values.secrets.keyVaultCsi.enabled }}
                   key: {{ .Values.secrets.oauthClientIdKey }}
             - name: OAUTH2_PROXY_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.existingSecret }}
+                  name: {{ ternary .Values.secrets.authSecret .Values.secrets.existingSecret .Values.secrets.keyVaultCsi.enabled }}
                   key: {{ .Values.secrets.oauthClientSecretKey }}
             - name: OAUTH2_PROXY_COOKIE_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.existingSecret }}
+                  name: {{ ternary .Values.secrets.authSecret .Values.secrets.existingSecret .Values.secrets.keyVaultCsi.enabled }}
                   key: {{ .Values.secrets.oauthCookieSecretKey }}
           readinessProbe:
             httpGet:
@@ -81,6 +89,21 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          {{- if .Values.secrets.keyVaultCsi.enabled }}
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+          {{- end }}
+      {{- if .Values.secrets.keyVaultCsi.enabled }}
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "kratos.fullname" . }}-auth
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service

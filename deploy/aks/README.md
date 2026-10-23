@@ -39,11 +39,22 @@ the repository.
    - a TLS secret named by `ingress.tlsSecretName`; or
    - a Key Vault certificate and attach the vault to the AKS application-routing
      add-on before setting `ingress.keyVaultCertificateUri`.
-5. Prepare the existing Kubernetes Secret named by `secrets.existingSecret`.
-   It must contain the keys selected in `values.yaml` for ServiceNow,
-   Application Insights, and the auth proxy. Create it from an approved secret
-   manager or a protected local env file; do not put values on a command line or
-   in a committed values file.
+5. Prefer Key Vault CSI by setting `secrets.keyVaultCsi.enabled` and supplying:
+   - the Key Vault name;
+   - the ServiceNow client ID and client secret object names;
+   - the OAuth2 Proxy client ID, client secret, and cookie secret object names;
+   - the optional Application Insights connection-string object name.
+   Bicep creates separate backend and auth Workload Identities. The auth identity
+   receives only Key Vault Secrets User, while the backend retains its existing
+   managed-service roles. The chart synchronizes separate backend and auth
+   Kubernetes Secrets and mounts each `SecretProviderClass` only into its owning
+   workload.
+
+   If Key Vault CSI is deliberately disabled, prepare the existing Kubernetes
+   Secret named by `secrets.existingSecret`. It must contain the keys selected in
+   `values.yaml` for ServiceNow, Application Insights, and the auth proxy. Create
+   it from an approved secret manager or a protected local env file; do not put
+   values on a command line or in a committed values file.
 
 ## 1. Validate without deploying
 
@@ -86,7 +97,9 @@ Create a GitHub environment named `ktaks` with these secrets:
 - `AZURE_CLIENT_ID` - application/client ID for the deployment service
   principal;
 - `AZURE_TENANT_ID` - its tenant ID; and
-- `AZURE_SUBSCRIPTION_ID` - the approved target subscription.
+- `AZURE_SUBSCRIPTION_ID` - the approved target subscription; and
+- `AKS_OPERATOR_PRINCIPAL_ID` - object ID of the approved Entra operator group
+  granted AKS RBAC Cluster Admin for manual Helm operations.
 
 Set its `AZURE_LOCATION` environment variable to `swedencentral`.
 The `ktaks` workflow requests 250 thousand tokens per minute for the Foundry
@@ -103,9 +116,10 @@ only after confirming the deployment identity may create Entra applications.
 The repository is public, so review workflow logs for environment disclosure
 and never print azd values, resource IDs, endpoints, or credentials.
 
-The deployment outputs the cluster name and Workload Identity client IDs for a
-private Helm values file. `FRONTEND_URL` registers the production origin on the
-OBO SPA client; omit it only when provisioning a local-only environment.
+The deployment outputs the cluster name and backend, auth, and optional OBO
+Workload Identity client IDs for a private Helm values file. `FRONTEND_URL`
+registers the production origin on the OBO SPA client; omit it only when
+provisioning a local-only environment.
 
 For an environment created by the former Container Apps template, decommission
 the live Container Apps resources before applying this template. Removing the
@@ -174,6 +188,7 @@ repository. Populate:
 - the auth-proxy image digest;
 - Bicep outputs for endpoints, workspace/resource IDs, tenant, and Workload
   Identity client IDs;
+- Key Vault CSI object names when CSI is enabled;
 - the OBO public client values;
 - the ServiceNow origin;
 - the public host and TLS source;

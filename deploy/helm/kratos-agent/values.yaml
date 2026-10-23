@@ -59,8 +59,10 @@ authProxy:
 
 workloadIdentity:
   backendClientId: ""
+  authClientId: ""
   oboClientId: ""
   backendServiceAccountName: kratos-agent-backend
+  authServiceAccountName: kratos-agent-auth
   oboServiceAccountName: kratos-agent-obo
 
 azure:
@@ -88,12 +90,23 @@ auth:
 
 secrets:
   existingSecret: kratos-agent-secrets
+  backendSecret: kratos-agent-backend-secrets
+  authSecret: kratos-agent-auth-secrets
   serviceNowClientIdKey: servicenow-client-id
   serviceNowClientSecretKey: servicenow-client-secret
   appInsightsConnectionStringKey: applicationinsights-connection-string
   oauthClientIdKey: oauth-client-id
   oauthClientSecretKey: oauth-client-secret
   oauthCookieSecretKey: oauth-cookie-secret
+  keyVaultCsi:
+    enabled: false
+    vaultName: ""
+    serviceNowClientIdObjectName: ""
+    serviceNowClientSecretObjectName: ""
+    appInsightsConnectionStringObjectName: ""
+    oauthClientIdObjectName: ""
+    oauthClientSecretObjectName: ""
+    oauthCookieSecretObjectName: ""
 
 ingress:
   enabled: true

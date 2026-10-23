@@ -56,13 +56,15 @@ application simplification work remains in [PLAN.md](PLAN.md).
 | DP-001 | Deploy the application with the checked-in Helm chart | Confirmed | Infrastructure and application delivery remain separate. |
 | DP-002 | Use immutable ACR digests for every deployed image | Confirmed | Backend, frontend, OBO, and auth proxy must be digest-pinned. |
 | DP-003 | Keep OBO disabled for the first core deployment | Confirmed | The image is published, but Graph infrastructure, consent, and workload deployment are deferred. |
-| DP-004 | Mirror the selected auth-proxy image into ACR | Proposed | Avoid a public registry dependency during scheduling and recovery. |
-| DP-005 | Grant AKS operator access to an Entra group | Proposed | Prefer a group over an individual principal. Represent the assignment in Bicep. |
-| DP-006 | Deliver secrets through Key Vault CSI | Proposed | Preferred over a manually maintained Kubernetes Secret; final chart design is pending. |
+| DP-004 | Mirror a patched official auth-proxy image into ACR | Confirmed, blocked | Wait for an official release that passes the fixable HIGH/CRITICAL gate; do not maintain an internal fork or weaken the gate. |
+| DP-005 | Grant AKS operator access to a dedicated Entra group | Confirmed | The dedicated group exists; its object ID remains protected and is parameterized through Bicep. |
+| DP-006 | Deliver secrets through Key Vault CSI | Confirmed | Separate backend and auth identities and synchronized Secrets are implemented; environment secret objects remain pending. |
 | DP-007 | Use the Web Application Routing ingress class | Confirmed | Already enabled on the cluster and selected by the chart. |
 | DP-008 | Require TLS and Entra OIDC before user traffic | Confirmed | No unauthenticated temporary public deployment. |
 | DP-009 | Install and upgrade Helm manually with `--atomic` | Confirmed | Failed releases must roll back automatically. |
 | DP-010 | Stop AKS when deployment work pauses | Proposed | Reduces non-production compute cost; start it before Helm or acceptance work. |
+| DP-011 | Use Workload Identity and OTLP for Application Insights | Confirmed | Do not create or deliver an Application Insights connection-string secret. |
+| DP-012 | Use the AKS Application Routing managed default domain | Confirmed, blocked | Avoid a purchased domain and Azure DNS zone. The `aksapp.io` hostname and publicly trusted TLS certificate are AKS-managed, but the feature is Preview and subscription registration remains pending. |
 
 ## Required operator decisions
 
@@ -70,15 +72,15 @@ Record decisions here before creating environment-specific resources.
 
 | Input | Status | Selected value or reference |
 |---|---|---|
-| Entra operator group | Pending | Do not record its object ID in this file. |
-| Public hostname | Pending | Do not record a live hostname until approved for this public repository. |
-| Azure DNS zone and record owner | Pending | |
-| TLS certificate source | Pending | Key Vault certificate, approved issuer, or pre-created TLS Secret. |
-| Secret delivery model | Pending | Key Vault CSI is recommended. |
-| Entra login application owner | Pending | |
-| Users/groups allowed to sign in | Pending | |
-| Auth-proxy release | Pending | Must be scanned, mirrored, and digest-pinned. |
-| ServiceNow target and credentials owner | Pending | Values remain outside Git. |
+| Entra operator group | Selected | Dedicated `kratos-aks-operators` group; do not record its object ID in this file. |
+| Public hostname | Pending allocation | Use the AKS-managed default `aksapp.io` domain; do not record the generated hostname in this public repository. |
+| Azure DNS zone and record owner | Not required | AKS manages DNS for its default domain. |
+| TLS certificate source | Selected | AKS-managed publicly trusted default-domain certificate. |
+| Secret delivery model | Selected | Key Vault CSI with separate backend and auth identities. |
+| Entra login application owner | Selected | Existing deployment service principal using `Application.ReadWrite.OwnedBy`. |
+| Users/groups allowed to sign in | Selected | Reuse `kratos-aks-operators` for initial acceptance by assigning the group to the enterprise application. |
+| Auth-proxy release | Blocked | Official v7.15.5 has fixable Go TLS/X.509 and HTTP findings. |
+| ServiceNow target and credentials owner | Blocked | Credentials are not ready; values must remain outside Git and live ServiceNow acceptance cannot proceed until they are available. |
 | Initial live acceptance operators | Pending | |
 
 ## Phase 1 - Establish operator access
@@ -86,13 +88,15 @@ Record decisions here before creating environment-specific resources.
 Goal: allow an approved Entra group to perform manual Helm operations without
 using cluster local accounts or sharing the deployment service principal.
 
-- [ ] Select or create the Entra operator group.
-- [ ] Add a parameterized Azure Kubernetes RBAC role assignment in Bicep.
-- [ ] Apply the Bicep change through the manual provisioning workflow.
-- [ ] Verify an operator can authenticate with `az aks get-credentials`.
-- [ ] Verify the operator can inspect the target namespace and perform Helm
+- [x] Select or create the Entra operator group.
+- [x] Add a parameterized Azure Kubernetes RBAC role assignment in Bicep.
+- [x] Store `AKS_OPERATOR_PRINCIPAL_ID` in the protected GitHub `ktaks`
+  environment.
+- [x] Apply the Bicep change to the live environment.
+- [x] Verify an operator can authenticate with `az aks get-credentials`.
+- [x] Verify the operator can inspect the target namespace and perform Helm
   operations.
-- [ ] Verify local AKS accounts remain disabled.
+- [x] Verify local AKS accounts remain disabled.
 - [ ] Document break-glass ownership outside the repository.
 
 Exit gate:
@@ -105,11 +109,13 @@ Exit gate:
 Goal: produce a private release manifest containing only immutable image
 coordinates.
 
-- [ ] Resolve the backend ACR digest for the successful commit SHA.
-- [ ] Resolve the frontend ACR digest for the successful commit SHA.
-- [ ] Retain the OBO digest for later use, but keep `obo.enabled: false`.
-- [ ] Select a supported OAuth2 Proxy release.
-- [ ] Scan the auth-proxy image with the same HIGH/CRITICAL gate.
+- [x] Resolve the backend ACR digest for the successful commit SHA.
+- [x] Resolve the frontend ACR digest for the successful commit SHA.
+- [x] Retain the OBO digest for later use, but keep `obo.enabled: false`.
+- [ ] Select a supported OAuth2 Proxy release. Official v7.15.5 is currently
+  blocked by fixable HIGH findings.
+- [x] Scan official OAuth2 Proxy v7.15.5 with the same HIGH/CRITICAL gate; it
+  failed and was not approved.
 - [ ] Mirror the auth-proxy image into ACR.
 - [ ] Resolve its ACR digest.
 - [ ] Store repositories and digests in a protected values file outside Git.
@@ -148,13 +154,16 @@ them.
 
 Preferred implementation:
 
-- [ ] Extend the Helm chart with a `SecretProviderClass`.
-- [ ] Use the existing Key Vault CSI add-on and Workload Identity.
-- [ ] Grant each workload access only to the secrets it needs.
-- [ ] Synchronize a Kubernetes Secret only for components that cannot consume
-  mounted files.
-- [ ] Ensure secret names and keys remain stable across upgrades.
-- [ ] Verify mounted secret files and synchronized Secrets are not exposed by
+- [x] Extend the Helm chart with backend and auth `SecretProviderClass`
+  resources.
+- [x] Use the existing Key Vault CSI add-on and Workload Identity.
+- [x] Grant the auth workload only Key Vault Secrets User; retain the backend's
+  existing bounded managed-service roles.
+- [x] Synchronize separate Kubernetes Secrets only for components that require
+  environment-backed secret keys.
+- [x] Ensure secret names and keys remain stable across upgrades.
+- [x] Verify synthetic rendering does not expose secret values.
+- [ ] Verify live mounted secret files and synchronized Secrets are not exposed by
   logs, rendered manifests, or status output.
 - [ ] Document rotation and recovery procedures.
 
@@ -162,8 +171,8 @@ Required secret categories:
 
 - OAuth2 Proxy client ID, client secret, and cookie secret.
 - ServiceNow client credentials.
-- Application Insights connection string only if a component cannot use
-  Workload Identity or OTLP configuration.
+- Application Insights connection string is not required; use Workload Identity
+  and OTLP configuration.
 - Any Copilot runtime credential that cannot be replaced by federated identity.
 
 Decision gate:
@@ -180,11 +189,13 @@ Exit gate:
 
 Goal: expose one approved HTTPS endpoint through Web Application Routing.
 
-- [ ] Select the DNS zone and record owner.
-- [ ] Attach the Azure DNS zone to Application Routing if managed DNS is used.
-- [ ] Select the TLS source.
-- [ ] If using Key Vault, attach the approved vault to Application Routing.
-- [ ] Create or reference the ingress TLS Secret.
+- [x] Select the AKS-managed default domain; no Azure DNS zone is required.
+- [x] Select the AKS-managed publicly trusted TLS certificate.
+- [ ] Complete subscription registration for
+  `Microsoft.ContainerService/DefaultDomainPreview`.
+- [ ] Enable the Application Routing default domain after registration.
+- [ ] Verify the generated hostname and managed TLS Secret without committing
+  either environment value.
 - [ ] Set the ingress host and certificate reference in protected Helm values.
 - [ ] Verify the certificate chain, hostname, renewal ownership, and expiration
   monitoring.
@@ -364,3 +375,32 @@ Rollback immediately if any of the following occurs:
 - Deferred OBO infrastructure and runtime enablement to Phase 10.
 - Created this deployment plan. Implementation begins with operator access,
   release digests, auth proxy selection, and the pending environment decisions.
+- Created the dedicated Entra operator group and added the current operator.
+- Added and applied the parameterized AKS RBAC Cluster Admin assignment.
+- Verified group-based namespace and Deployment creation authorization through a
+  temporary Entra kubeconfig; local AKS accounts remain disabled.
+- Resolved all three published application image digests without committing
+  registry coordinates.
+- Rejected OAuth2 Proxy v7.15.5 because its official image failed the fixable
+  HIGH/CRITICAL scan gate.
+- Selected Key Vault CSI for application secrets.
+- Added separate backend and auth `SecretProviderClass` resources and
+  synchronized Kubernetes Secrets.
+- Added and deployed a dedicated auth Workload Identity with only Key Vault
+  Secrets User, then verified its federation and role assignment.
+- Verified both CSI-enabled and existing-Secret Helm render paths.
+- Confirmed `AKS_OPERATOR_PRINCIPAL_ID` is configured in the protected GitHub
+  `ktaks` environment.
+- Confirmed ServiceNow credentials are not ready and live ServiceNow acceptance
+  remains blocked.
+- Selected Workload Identity and OTLP for Application Insights; no connection
+  string secret will be created.
+- Selected the AKS Application Routing managed default domain instead of a
+  purchased domain, Azure DNS zone, or Key Vault ingress certificate.
+- Started AKS and submitted the subscription registration for
+  `Microsoft.ContainerService/DefaultDomainPreview`; registration remains
+  pending, so no managed hostname has been allocated yet.
+- Selected `kratos-aks-operators` as the initial sign-in group for live
+  acceptance.
+- Selected the existing deployment service principal as the Entra login
+  application owner and verified its required Microsoft Graph permissions.

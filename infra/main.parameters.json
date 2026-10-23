@@ -23,6 +23,9 @@
     "aksNamespace": {
       "value": "${AKS_NAMESPACE=kratos-agent}"
     },
+    "aksOperatorPrincipalId": {
+      "value": "${AKS_OPERATOR_PRINCIPAL_ID=}"
+    },
     "aksServiceCidr": {
       "value": "${AKS_SERVICE_CIDR=10.1.0.0/16}"
     },

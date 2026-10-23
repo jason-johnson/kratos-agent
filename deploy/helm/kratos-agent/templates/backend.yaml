@@ -52,17 +52,17 @@ spec:
             - name: SERVICENOW_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.existingSecret }}
+                  name: {{ ternary .Values.secrets.backendSecret .Values.secrets.existingSecret .Values.secrets.keyVaultCsi.enabled }}
                   key: {{ .Values.secrets.serviceNowClientIdKey }}
             - name: SERVICENOW_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.existingSecret }}
+                  name: {{ ternary .Values.secrets.backendSecret .Values.secrets.existingSecret .Values.secrets.keyVaultCsi.enabled }}
                   key: {{ .Values.secrets.serviceNowClientSecretKey }}
             - name: APPLICATIONINSIGHTS_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.existingSecret }}
+                  name: {{ ternary .Values.secrets.backendSecret .Values.secrets.existingSecret .Values.secrets.keyVaultCsi.enabled }}
                   key: {{ .Values.secrets.appInsightsConnectionStringKey }}
                   optional: true
           startupProbe:
@@ -95,6 +95,11 @@ spec:
               mountPath: /tmp
             - name: home
               mountPath: /home/kratos
+            {{- if .Values.secrets.keyVaultCsi.enabled }}
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+            {{- end }}
       terminationGracePeriodSeconds: 60
       volumes:
         - name: tmp
@@ -103,6 +108,14 @@ spec:
         - name: home
           emptyDir:
             sizeLimit: 256Mi
+        {{- if .Values.secrets.keyVaultCsi.enabled }}
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "kratos.fullname" . }}-backend
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service

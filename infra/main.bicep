@@ -34,6 +34,9 @@ param aksClusterName string = ''
 @description('Namespace used by the ARE Helm release')
 param aksNamespace string = 'kratos-agent'
 
+@description('Optional Entra group object ID granted AKS RBAC Cluster Admin for manual Helm operations')
+param aksOperatorPrincipalId string = ''
+
 @description('Non-overlapping Kubernetes service CIDR')
 param aksServiceCidr string = '10.1.0.0/16'
 
@@ -257,6 +260,7 @@ module aksPlatform './modules/aks-platform.bicep' = {
     deployObo: deployObo
     alertActionGroupId: aksAlertActionGroupId
     clusterAdminPrincipalId: principalId
+    operatorPrincipalId: aksOperatorPrincipalId
     imagePublisherPrincipalId: principalId
   }
 }
@@ -276,6 +280,7 @@ output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint
 output AZURE_BLOB_STORAGE_ACCOUNT_NAME string = blobStorage.outputs.name
 output AKS_CLUSTER_NAME string = aksPlatform.outputs.clusterName
 output AKS_BACKEND_IDENTITY_CLIENT_ID string = aksPlatform.outputs.backendIdentityClientId
+output AKS_AUTH_IDENTITY_CLIENT_ID string = aksPlatform.outputs.authIdentityClientId
 output AKS_OBO_IDENTITY_CLIENT_ID string = deployObo ? aksPlatform.outputs.oboIdentityClientId : ''
 output AKS_OIDC_ISSUER_URL string = aksPlatform.outputs.oidcIssuerUrl
 output AKS_OPERATIONS_WORKBOOK_ID string = aksPlatform.outputs.operationsWorkbookId
