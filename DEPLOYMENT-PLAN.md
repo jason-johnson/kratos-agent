@@ -400,6 +400,11 @@ Rollback immediately if any of the following occurs:
 - Started AKS and submitted the subscription registration for
   `Microsoft.ContainerService/DefaultDomainPreview`; registration remains
   pending, so no managed hostname has been allocated yet.
+- Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
+  rebuilt and smoke-tested all application images, passed each image scan, and
+  published immutable images for commit `9d0c95a`.
+- Stopped AKS while the default-domain preview registration is pending to avoid
+  unnecessary cluster compute cost.
 - Selected `kratos-aks-operators` as the initial sign-in group for live
   acceptance.
 - Selected the existing deployment service principal as the Entra login
