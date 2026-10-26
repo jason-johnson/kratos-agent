@@ -41,6 +41,9 @@
     "frontendUrl": {
       "value": "${FRONTEND_URL=}"
     },
+    "authRedirectUri": {
+      "value": "${AUTH_REDIRECT_URI=}"
+    },
     "foundryModelCapacity": {
       "value": "${FOUNDRY_MODEL_CAPACITY=250}"
     }

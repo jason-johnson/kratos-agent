@@ -52,6 +52,9 @@ param aksAlertActionGroupId string = ''
 @description('Optional public frontend origin registered as an OBO SPA redirect URI')
 param frontendUrl string = ''
 
+@description('Exact OAuth2 Proxy callback URI for the confidential login application')
+param authRedirectUri string = ''
+
 @minValue(1)
 @description('Foundry model deployment capacity in thousands of tokens per minute')
 param foundryModelCapacity int = 250
@@ -235,6 +238,18 @@ module oboEntraAppServer './modules/obo-entra-app.bicep' = if (deployObo) {
   }
 }
 
+module authEntraApp './modules/auth-entra-app.bicep' = if (!empty(authRedirectUri)) {
+  name: 'auth-entra-app'
+  scope: rg
+  params: {
+    displayName: 'kratos-login-${environmentName}'
+    uniqueName: 'kratos-login-${resourceToken}'
+    redirectUri: authRedirectUri
+    ownerPrincipalId: principalId
+    allowedGroupId: aksOperatorPrincipalId
+  }
+}
+
 module aksPlatform './modules/aks-platform.bicep' = {
   name: 'aks-platform'
   scope: rg
@@ -283,6 +298,7 @@ output AKS_BACKEND_IDENTITY_CLIENT_ID string = aksPlatform.outputs.backendIdenti
 output AKS_AUTH_IDENTITY_CLIENT_ID string = aksPlatform.outputs.authIdentityClientId
 output AKS_OBO_IDENTITY_CLIENT_ID string = deployObo ? aksPlatform.outputs.oboIdentityClientId : ''
 output AKS_OIDC_ISSUER_URL string = aksPlatform.outputs.oidcIssuerUrl
+output ENTRA_AUTH_CLIENT_ID string = !empty(authRedirectUri) ? authEntraApp!.outputs.clientId : ''
 output AKS_OPERATIONS_WORKBOOK_ID string = aksPlatform.outputs.operationsWorkbookId
 
 // ─── OBO MCP server outputs ───

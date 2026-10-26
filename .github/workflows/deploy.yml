@@ -34,6 +34,7 @@ jobs:
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AKS_OPERATOR_PRINCIPAL_ID: ${{ secrets.AKS_OPERATOR_PRINCIPAL_ID }}
+      KRATOS_PUBLIC_HOST: ${{ secrets.KRATOS_PUBLIC_HOST }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -48,6 +49,7 @@ jobs:
           [ -n "$AZURE_SUBSCRIPTION_ID" ] || missing+=(AZURE_SUBSCRIPTION_ID)
           [ -n "$AZURE_LOCATION" ] || missing+=(AZURE_LOCATION)
           [ -n "$AKS_OPERATOR_PRINCIPAL_ID" ] || missing+=(AKS_OPERATOR_PRINCIPAL_ID)
+          [ -n "$KRATOS_PUBLIC_HOST" ] || missing+=(KRATOS_PUBLIC_HOST)
           if [ "${#missing[@]}" -ne 0 ]; then
             echo "::error::Missing ktaks environment secrets: ${missing[*]}"
             exit 1
@@ -89,6 +91,7 @@ jobs:
           azd env set AZURE_PRINCIPAL_ID "$principal_id"
           azd env set AKS_NAMESPACE kratos-agent
           azd env set AKS_OPERATOR_PRINCIPAL_ID "$AKS_OPERATOR_PRINCIPAL_ID"
+          azd env set AUTH_REDIRECT_URI "https://${KRATOS_PUBLIC_HOST}/oauth2/callback"
           azd env set DEPLOY_OBO "$DEPLOY_OBO"
           azd env set FOUNDRY_MODEL_CAPACITY 250
 

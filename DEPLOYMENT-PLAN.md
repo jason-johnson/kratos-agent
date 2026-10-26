@@ -133,11 +133,12 @@ Exit gate:
 Goal: require authenticated Entra users at ingress before the application is
 exposed.
 
-- [ ] Approve the public hostname.
+- [x] Approve the Azure regional public hostname and store it outside Git.
 - [ ] Create a confidential Entra application for OAuth2 Proxy.
-- [ ] Configure `https://<host>/oauth2/callback` as its redirect URI.
-- [ ] Restrict sign-in to the approved tenant.
-- [ ] Assign the approved users or groups.
+- [x] Add a parameterized Graph/Bicep definition for the exact
+  `https://<host>/oauth2/callback` redirect URI.
+- [x] Configure the application for the deployment tenant only.
+- [x] Require assignment and declare the approved operator-group assignment.
 - [ ] Create the client credential through the approved secret-management
   process.
 - [ ] Configure logout and post-logout behavior.
@@ -426,6 +427,10 @@ Rollback immediately if any of the following occurs:
 - Verified public HTTP reachability and successful Let's Encrypt staging
   issuance, then removed the temporary staging Certificate, ClusterIssuer,
   account Secret, and TLS Secret.
+- Added the tenant-only confidential login application, deployment service
+  principal ownership, assignment-required enterprise application, and
+  operator-group assignment to Graph/Bicep. Live creation awaits the protected
+  `KRATOS_PUBLIC_HOST` GitHub environment secret and the next provisioning run.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
