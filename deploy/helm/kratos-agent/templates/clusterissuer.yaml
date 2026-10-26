@@ -1,0 +1,25 @@
+{{- if .Values.ingress.letsEncrypt.enabled }}
+{{- $issuerName := required "ingress.clusterIssuer is required when Let's Encrypt is enabled" .Values.ingress.clusterIssuer }}
+{{- $email := required "ingress.letsEncrypt.email is required when Let's Encrypt is enabled" .Values.ingress.letsEncrypt.email }}
+{{- $accountSecret := required "ingress.letsEncrypt.privateKeySecretName is required when Let's Encrypt is enabled" .Values.ingress.letsEncrypt.privateKeySecretName }}
+{{- $environment := .Values.ingress.letsEncrypt.environment }}
+{{- if not (has $environment (list "staging" "production")) }}
+{{- fail "ingress.letsEncrypt.environment must be staging or production" }}
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ $issuerName }}
+  labels:
+    {{- include "kratos.labels" . | nindent 4 }}
+spec:
+  acme:
+    email: {{ $email | quote }}
+    server: {{ ternary "https://acme-v02.api.letsencrypt.org/directory" "https://acme-staging-v02.api.letsencrypt.org/directory" (eq $environment "production") }}
+    privateKeySecretRef:
+      name: {{ $accountSecret }}
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: {{ .Values.ingress.className }}
+{{- end }}

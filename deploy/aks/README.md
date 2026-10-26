@@ -33,12 +33,12 @@ the repository.
 2. Configure GitHub repository or organization secrets:
    - `PRIVATE_PYPI_INDEX_URL`
    - `PRIVATE_NPMRC`
-3. Prepare a confidential Entra OIDC client for the auth proxy. Its redirect
-   URI is `https://<host>/oauth2/callback`.
-4. Prepare either:
-   - a TLS secret named by `ingress.tlsSecretName`; or
-   - a Key Vault certificate and attach the vault to the AKS application-routing
-     add-on before setting `ingress.keyVaultCertificateUri`.
+3. Configure the Azure-provided regional DNS label described below. Prepare a
+   confidential Entra OIDC client for the auth proxy only after the hostname is
+   allocated. Its redirect URI is `https://<host>/oauth2/callback`.
+4. Install the pinned cert-manager release and configure the chart's Let's
+   Encrypt issuer. A pre-existing TLS Secret or Key Vault certificate remains
+   supported as an alternative.
 5. Prefer Key Vault CSI by setting `secrets.keyVaultCsi.enabled` and supplying:
    - the Key Vault name;
    - the ServiceNow client ID and client secret object names;
@@ -136,8 +136,30 @@ az aks approuting update \
   --attach-kv <key-vault-resource-id>
 ```
 
-Attach an Azure DNS zone separately when managed DNS is required. These are live
-cloud mutations and must not be run by an unattended agent.
+### Azure-provided public hostname
+
+The supported initial endpoint uses the existing Application Routing public
+load balancer and Azure's regional `cloudapp.azure.com` DNS service. It requires
+no purchased domain, Azure DNS zone, or preview feature.
+
+Run the configuration utility with protected environment values. Use a DNS
+label unique within the Azure region and an output file outside the repository:
+
+```bash
+AKS_RESOURCE_GROUP=<resource-group> \
+AKS_CLUSTER_NAME=<cluster> \
+AZURE_DNS_LABEL=<unique-label> \
+ENDPOINT_OUTPUT_FILE=<protected-directory>/endpoint.env \
+  ./deploy/aks/scripts/configure-public-endpoint.sh
+```
+
+The utility updates the supported `NginxIngressController` custom resource,
+waits for the existing load balancer, and writes the resulting hostname to the
+protected output file without printing it. If Azure reports that the requested
+label is unavailable, choose a randomized suffix and retry.
+
+Do not enable the approval-gated Application Routing default-domain preview.
+The regional Azure DNS label is generally available.
 
 If OBO is enabled, an Entra administrator must grant the requested delegated
 Graph permissions after provisioning:
@@ -181,6 +203,59 @@ values file. The chart rejects mutable tag-only deployment.
 
 ## 4. Configure and install the chart
 
+### Install cert-manager
+
+The manual workflow can scan and mirror cert-manager v1.21.3 by selecting
+`publish_platform_images`. All five images must pass the same fixable
+HIGH/CRITICAL gate as the application images. After the workflow succeeds,
+resolve each ACR repository and digest privately and create a protected
+cert-manager values file:
+
+```yaml
+crds:
+  enabled: true
+image:
+  repository: <acr>/platform/cert-manager-controller
+  digest: sha256:<digest>
+webhook:
+  image:
+    repository: <acr>/platform/cert-manager-webhook
+    digest: sha256:<digest>
+cainjector:
+  image:
+    repository: <acr>/platform/cert-manager-cainjector
+    digest: sha256:<digest>
+acmesolver:
+  image:
+    repository: <acr>/platform/cert-manager-acmesolver
+    digest: sha256:<digest>
+startupapicheck:
+  image:
+    repository: <acr>/platform/cert-manager-startupapicheck
+    digest: sha256:<digest>
+```
+
+Install the official chart at its immutable chart version:
+
+```bash
+helm upgrade --install cert-manager \
+  oci://quay.io/jetstack/charts/cert-manager \
+  --version v1.21.3 \
+  --namespace cert-manager \
+  --create-namespace \
+  --values <protected-cert-manager-values.yaml> \
+  --atomic \
+  --wait \
+  --timeout 10m
+```
+
+Test issuance with `ingress.letsEncrypt.environment: staging` first. After the
+staging Certificate is ready, switch to `production`, use a distinct issuer
+name and account Secret name, delete only the staging TLS Secret, and upgrade
+the application release. The chart creates one `ClusterIssuer`; only the main
+Ingress requests the shared TLS Secret so the auth and application Ingresses do
+not contend for Certificate ownership.
+
 Copy `deploy/helm/kratos-agent/values.yaml` to a protected location outside the
 repository. Populate:
 
@@ -191,7 +266,8 @@ repository. Populate:
 - Key Vault CSI object names when CSI is enabled;
 - the OBO public client values;
 - the ServiceNow origin;
-- the public host and TLS source;
+- the protected public host, Let's Encrypt issuer name, environment, account
+  email, account Secret name, and TLS Secret name;
 - an optional Azure Monitor action group during provisioning.
 
 Create the namespace and secret through the approved secret-management process,

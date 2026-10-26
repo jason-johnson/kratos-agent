@@ -115,6 +115,11 @@ ingress:
   tlsSecretName: kratos-agent-tls
   keyVaultCertificateUri: ""
   clusterIssuer: ""
+  letsEncrypt:
+    enabled: false
+    environment: production
+    email: ""
+    privateKeySecretName: kratos-agent-letsencrypt-account
   controllerNamespace: app-routing-system
 
 autoscaling:

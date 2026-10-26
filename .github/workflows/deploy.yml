@@ -11,6 +11,10 @@ on:
         description: "Build, smoke-test, and push the backend, frontend, and OBO images"
         type: boolean
         default: false
+      publish_platform_images:
+        description: "Scan and mirror the pinned cert-manager images"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -134,7 +138,7 @@ jobs:
         run: python .github/scripts/check-package-sources.py
 
       - name: Refresh Azure sign-in for image publication
-        if: inputs.publish_images
+        if: inputs.publish_images || inputs.publish_platform_images
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -235,6 +239,51 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
 
+      - name: Scan cert-manager controller image
+        if: inputs.publish_platform_images
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: quay.io/jetstack/cert-manager-controller@sha256:9f4f96a33c7774cef24466fcd85031997531a03a8d117f151126baa8d1290dcc
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan cert-manager webhook image
+        if: inputs.publish_platform_images
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: quay.io/jetstack/cert-manager-webhook@sha256:055ac8e9de6a0ba6763794838fe38944acc650f68ebe1b01dd8be079e580f458
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan cert-manager CA injector image
+        if: inputs.publish_platform_images
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: quay.io/jetstack/cert-manager-cainjector@sha256:083d0e906f8eb44e255fe4ff817ae54e49f9ed82e22f1011bb4e9e4f4b8a641f
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan cert-manager ACME solver image
+        if: inputs.publish_platform_images
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: quay.io/jetstack/cert-manager-acmesolver@sha256:c8c1225bb2fe8ab37a330b77f0d8c2ee6a41210fcb54fc07ca606ab9a022b8b7
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan cert-manager startup API check image
+        if: inputs.publish_platform_images
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: quay.io/jetstack/cert-manager-startupapicheck@sha256:1c519d4afca1413d1e4ccd78bdc756184418ab55a34569a3b3de39d32f9974e1
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
       - name: Push immutable image versions
         if: inputs.publish_images
         run: |
@@ -280,6 +329,45 @@ jobs:
           push_with_retry "$registry/kratos-frontend:${GITHUB_SHA}"
           push_with_retry "$registry/kratos-obo-mcp-server:${GITHUB_SHA}"
 
+      - name: Mirror cert-manager images
+        if: inputs.publish_platform_images
+        run: |
+          registry_name="$(
+            az acr list \
+              --resource-group "rg-${AZURE_ENV_NAME}" \
+              --query '[0].name' \
+              --output tsv
+          )"
+          test -n "$registry_name"
+
+          import_image() {
+            source="$1"
+            target="$2"
+            az acr import \
+              --name "$registry_name" \
+              --source "$source" \
+              --image "$target" \
+              --force \
+              --only-show-errors \
+              --output none
+          }
+
+          import_image \
+            quay.io/jetstack/cert-manager-controller@sha256:9f4f96a33c7774cef24466fcd85031997531a03a8d117f151126baa8d1290dcc \
+            platform/cert-manager-controller:v1.21.3
+          import_image \
+            quay.io/jetstack/cert-manager-webhook@sha256:055ac8e9de6a0ba6763794838fe38944acc650f68ebe1b01dd8be079e580f458 \
+            platform/cert-manager-webhook:v1.21.3
+          import_image \
+            quay.io/jetstack/cert-manager-cainjector@sha256:083d0e906f8eb44e255fe4ff817ae54e49f9ed82e22f1011bb4e9e4f4b8a641f \
+            platform/cert-manager-cainjector:v1.21.3
+          import_image \
+            quay.io/jetstack/cert-manager-acmesolver@sha256:c8c1225bb2fe8ab37a330b77f0d8c2ee6a41210fcb54fc07ca606ab9a022b8b7 \
+            platform/cert-manager-acmesolver:v1.21.3
+          import_image \
+            quay.io/jetstack/cert-manager-startupapicheck@sha256:1c519d4afca1413d1e4ccd78bdc756184418ab55a34569a3b3de39d32f9974e1 \
+            platform/cert-manager-startupapicheck:v1.21.3
+
       - name: Summarize
         if: always()
         run: |
@@ -293,6 +381,7 @@ jobs:
             echo "| Commit | \`${{ github.sha }}\` |"
             echo "| OBO requested | \`${{ inputs.deploy_obo }}\` |"
             echo "| Images requested | \`${{ inputs.publish_images }}\` |"
+            echo "| Platform images requested | \`${{ inputs.publish_platform_images }}\` |"
             echo ""
             echo "This workflow does not install Helm, change DNS or TLS, create application secrets, or run live acceptance tests."
           } >> "$GITHUB_STEP_SUMMARY"

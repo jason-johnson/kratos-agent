@@ -1,5 +1,8 @@
 {{- if .Values.ingress.enabled }}
 {{- $host := required "ingress.host is required" .Values.ingress.host }}
+{{- if and .Values.ingress.letsEncrypt.enabled (not (empty .Values.ingress.keyVaultCertificateUri)) }}
+{{- fail "ingress.letsEncrypt.enabled and ingress.keyVaultCertificateUri are mutually exclusive" }}
+{{- end }}
 {{- if .Values.authProxy.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -11,9 +14,6 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     {{- with .Values.ingress.keyVaultCertificateUri }}
     kubernetes.azure.com/tls-cert-keyvault-uri: {{ . | quote }}
-    {{- end }}
-    {{- with .Values.ingress.clusterIssuer }}
-    cert-manager.io/cluster-issuer: {{ . | quote }}
     {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}

@@ -64,7 +64,8 @@ application simplification work remains in [PLAN.md](PLAN.md).
 | DP-009 | Install and upgrade Helm manually with `--atomic` | Confirmed | Failed releases must roll back automatically. |
 | DP-010 | Stop AKS when deployment work pauses | Proposed | Reduces non-production compute cost; start it before Helm or acceptance work. |
 | DP-011 | Use Workload Identity and OTLP for Application Insights | Confirmed | Do not create or deliver an Application Insights connection-string secret. |
-| DP-012 | Use the AKS Application Routing managed default domain | Confirmed, blocked | Avoid a purchased domain and Azure DNS zone. The `aksapp.io` hostname and publicly trusted TLS certificate are AKS-managed, but `DefaultDomainPreview` is approval-gated and requires an Azure support request. |
+| DP-012 | Use an Azure regional DNS label and Let's Encrypt | Confirmed | Use the existing Application Routing load balancer with a GA `cloudapp.azure.com` hostname and cert-manager-managed TLS. No purchased domain, Azure DNS zone, or preview approval is required. |
+| DP-013 | Install cert-manager separately with mirrored immutable images | Confirmed | The manual workflow scans and mirrors cert-manager v1.21.3 components; the operator installs the official versioned chart with protected ACR digests. |
 
 ## Required operator decisions
 
@@ -73,9 +74,9 @@ Record decisions here before creating environment-specific resources.
 | Input | Status | Selected value or reference |
 |---|---|---|
 | Entra operator group | Selected | Dedicated `kratos-aks-operators` group; do not record its object ID in this file. |
-| Public hostname | Pending allocation | Use the AKS-managed default `aksapp.io` domain; do not record the generated hostname in this public repository. |
-| Azure DNS zone and record owner | Not required | AKS manages DNS for its default domain. |
-| TLS certificate source | Selected | AKS-managed publicly trusted default-domain certificate. |
+| Public hostname | Pending allocation | Use an Azure-provided regional `cloudapp.azure.com` DNS label; do not record the generated hostname in this public repository. |
+| Azure DNS zone and record owner | Not required | Azure publishes the regional DNS label on the existing load balancer. |
+| TLS certificate source | Selected | Let's Encrypt through separately installed cert-manager; test staging before production issuance. |
 | Secret delivery model | Selected | Key Vault CSI with separate backend and auth identities. |
 | Entra login application owner | Selected | Existing deployment service principal using `Application.ReadWrite.OwnedBy`. |
 | Users/groups allowed to sign in | Selected | Reuse `kratos-aks-operators` for initial acceptance by assigning the group to the enterprise application. |
@@ -189,13 +190,20 @@ Exit gate:
 
 Goal: expose one approved HTTPS endpoint through Web Application Routing.
 
-- [x] Select the AKS-managed default domain; no Azure DNS zone is required.
-- [x] Select the AKS-managed publicly trusted TLS certificate.
-- [ ] Complete subscription registration for
-  `Microsoft.ContainerService/DefaultDomainPreview`.
-- [ ] Enable the Application Routing default domain after registration.
-- [ ] Verify the generated hostname and managed TLS Secret without committing
-  either environment value.
+- [x] Select the GA Azure regional DNS-label path; no Azure DNS zone is
+  required.
+- [x] Add a protected operator utility that configures the supported
+  `NginxIngressController` resource without printing or committing the
+  hostname.
+- [x] Select Let's Encrypt and add a single-owner `ClusterIssuer` chart path.
+- [x] Add manual workflow gates to scan and mirror all pinned cert-manager
+  images.
+- [ ] Run the workflow with `publish_platform_images` selected.
+- [x] Start AKS, allocate the DNS label, and store the generated hostname in a
+  mode-`0600` protected file outside the repository.
+- [ ] Install cert-manager from the official versioned chart using protected
+  ACR repositories and digests.
+- [ ] Verify staging certificate issuance before switching to production.
 - [ ] Set the ingress host and certificate reference in protected Helm values.
 - [ ] Verify the certificate chain, hostname, renewal ownership, and expiration
   monitoring.
@@ -395,12 +403,19 @@ Rollback immediately if any of the following occurs:
   remains blocked.
 - Selected Workload Identity and OTLP for Application Insights; no connection
   string secret will be created.
-- Selected the AKS Application Routing managed default domain instead of a
-  purchased domain, Azure DNS zone, or Key Vault ingress certificate.
-- Started AKS and submitted the subscription registration for
-  `Microsoft.ContainerService/DefaultDomainPreview`; Azure returned `Pending`,
-  which requires product-team approval through an Azure support request. No
-  managed hostname has been allocated yet.
+- Replaced the approval-gated Application Routing default-domain plan with the
+  GA Azure regional DNS-label path. It uses the existing load balancer and
+  requires no purchased domain or Azure DNS zone.
+- Selected cert-manager and Let's Encrypt for TLS, with staging issuance before
+  production and all cert-manager images scanned, mirrored, and digest-pinned.
+- Added the GA endpoint configuration utility, allocated the Azure regional DNS
+  label on the existing Application Routing load balancer, and verified public
+  DNS resolution without printing or committing the hostname.
+- Added a single-owner Let's Encrypt `ClusterIssuer` chart path so the auth and
+  application Ingresses share one TLS Secret without competing Certificate
+  resources.
+- Added optional workflow gates to scan and mirror cert-manager v1.21.3
+  controller, webhook, CA injector, ACME solver, and startup check images.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
