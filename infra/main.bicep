@@ -246,7 +246,6 @@ module authEntraApp './modules/auth-entra-app.bicep' = if (!empty(authRedirectUr
     uniqueName: 'kratos-login-${resourceToken}'
     redirectUri: authRedirectUri
     ownerPrincipalId: principalId
-    allowedGroupId: aksOperatorPrincipalId
   }
 }
 

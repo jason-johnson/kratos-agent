@@ -120,9 +120,13 @@ The deployment outputs the cluster name and backend, auth, and optional OBO
 Workload Identity client IDs plus the confidential login application's client
 ID for a private Helm values file. The deployment service principal owns the
 login application, sign-in requires assignment, and the operator group is
-assigned through Microsoft Graph. After the Azure regional hostname exists, the
-workflow discovers it from the AKS managed resource group, masks it, and
-configures the exact OAuth callback only in the ephemeral azd environment.
+assigned through Microsoft Graph. Because Graph can take time to recognize new
+application ownership, the workflow creates the app registration through Bicep
+and then idempotently retries enterprise-application creation and group
+assignment with `deploy/aks/scripts/configure-auth-enterprise-app.sh`. After the
+Azure regional hostname exists, the workflow discovers it from the AKS managed
+resource group, masks it, and configures the exact OAuth callback only in the
+ephemeral azd environment.
 `FRONTEND_URL`
 registers the production origin on the OBO SPA client; omit it only when
 provisioning a local-only environment.

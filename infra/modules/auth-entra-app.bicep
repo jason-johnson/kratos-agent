@@ -15,11 +15,6 @@ param redirectUri string
 @description('Object ID of the deployment service principal that owns the application')
 param ownerPrincipalId string
 
-@description('Object ID of the Entra group allowed to sign in')
-param allowedGroupId string
-
-var defaultAppRoleId = '00000000-0000-0000-0000-000000000000'
-
 resource application 'Microsoft.Graph/applications@v1.0' = {
   uniqueName: uniqueName
   displayName: displayName
@@ -39,18 +34,5 @@ resource application 'Microsoft.Graph/applications@v1.0' = {
   } : null
 }
 
-resource servicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' = {
-  appId: application.appId
-  appRoleAssignmentRequired: true
-}
-
-resource operatorAssignment 'Microsoft.Graph/appRoleAssignedTo@v1.0' = if (!empty(allowedGroupId)) {
-  appRoleId: defaultAppRoleId
-  principalId: allowedGroupId
-  resourceDisplayName: displayName
-  resourceId: servicePrincipal.id
-}
-
 output clientId string = application.appId
 output applicationObjectId string = application.id
-output servicePrincipalObjectId string = servicePrincipal.id

@@ -427,11 +427,14 @@ Rollback immediately if any of the following occurs:
 - Verified public HTTP reachability and successful Let's Encrypt staging
   issuance, then removed the temporary staging Certificate, ClusterIssuer,
   account Secret, and TLS Secret.
-- Added the tenant-only confidential login application, deployment service
-  principal ownership, assignment-required enterprise application, and
-  operator-group assignment to Graph/Bicep. The workflow discovers and masks
-  the Azure hostname without requiring it as a GitHub secret; live creation
-  awaits the next provisioning run.
+- Added the tenant-only confidential login application and deployment service
+  principal ownership to Graph/Bicep. The workflow discovers and masks the
+  Azure hostname without requiring it as a GitHub secret.
+- The first live provisioning attempt created the owned app registration but
+  Graph rejected immediate enterprise-application creation while ownership was
+  still propagating. Moved that operation to an idempotent post-provision script
+  that retries creation, enforces assignment-required access, and assigns the
+  operator group.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.

@@ -175,6 +175,17 @@ jobs:
       - name: Provision infrastructure
         run: azd provision --no-prompt
 
+      - name: Configure login enterprise application
+        run: |
+          client_id="$(azd env get-value ENTRA_AUTH_CLIENT_ID)"
+          if [ -z "$client_id" ]; then
+            exit 0
+          fi
+          echo "::add-mask::$client_id"
+          ENTRA_AUTH_CLIENT_ID="$client_id" \
+          AKS_OPERATOR_PRINCIPAL_ID="$AKS_OPERATOR_PRINCIPAL_ID" \
+            ./deploy/aks/scripts/configure-auth-enterprise-app.sh
+
       - name: Verify private package sources
         if: inputs.publish_images
         run: python .github/scripts/check-package-sources.py
