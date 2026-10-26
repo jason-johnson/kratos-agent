@@ -198,12 +198,12 @@ Goal: expose one approved HTTPS endpoint through Web Application Routing.
 - [x] Select Let's Encrypt and add a single-owner `ClusterIssuer` chart path.
 - [x] Add manual workflow gates to scan and mirror all pinned cert-manager
   images.
-- [ ] Run the workflow with `publish_platform_images` selected.
+- [x] Run the workflow with `publish_platform_images` selected.
 - [x] Start AKS, allocate the DNS label, and store the generated hostname in a
   mode-`0600` protected file outside the repository.
-- [ ] Install cert-manager from the official versioned chart using protected
+- [x] Install cert-manager from the official versioned chart using protected
   ACR repositories and digests.
-- [ ] Verify staging certificate issuance before switching to production.
+- [x] Verify staging certificate issuance before switching to production.
 - [ ] Set the ingress host and certificate reference in protected Helm values.
 - [ ] Verify the certificate chain, hostname, renewal ownership, and expiration
   monitoring.
@@ -416,6 +416,16 @@ Rollback immediately if any of the following occurs:
   resources.
 - Added optional workflow gates to scan and mirror cert-manager v1.21.3
   controller, webhook, CA injector, ACME solver, and startup check images.
+- Verified workflow run `40366741218` passed all five cert-manager image scans
+  and mirrored the images to ACR.
+- Installed cert-manager v1.21.3 atomically from five protected ACR
+  repositories and immutable digests; all deployments became Available.
+- Added the required AKS subnet NSG rule for public Application Routing traffic
+  after staging issuance identified the organization-created subnet NSG as the
+  HTTP timeout boundary.
+- Verified public HTTP reachability and successful Let's Encrypt staging
+  issuance, then removed the temporary staging Certificate, ClusterIssuer,
+  account Secret, and TLS Secret.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.

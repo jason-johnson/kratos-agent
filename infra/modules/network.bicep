@@ -7,6 +7,32 @@ param location string
 @description('Tags for resources')
 param tags object = {}
 
+resource aksNetworkSecurityGroup 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
+  name: '${name}-aks-nsg-${location}'
+  location: location
+  tags: tags
+  properties: {
+    securityRules: [
+      {
+        name: 'AllowApplicationRoutingHttps'
+        properties: {
+          priority: 500
+          access: 'Allow'
+          direction: 'Inbound'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRanges: [
+            '80'
+            '443'
+          ]
+          sourceAddressPrefix: 'Internet'
+          destinationAddressPrefix: '*'
+        }
+      }
+    ]
+  }
+}
+
 resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
   name: name
   location: location
@@ -27,6 +53,9 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
         name: 'aks'
         properties: {
           addressPrefix: '10.0.4.0/22'
+          networkSecurityGroup: {
+            id: aksNetworkSecurityGroup.id
+          }
         }
       }
     ]
