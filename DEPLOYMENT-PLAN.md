@@ -64,7 +64,7 @@ application simplification work remains in [PLAN.md](PLAN.md).
 | DP-009 | Install and upgrade Helm manually with `--atomic` | Confirmed | Failed releases must roll back automatically. |
 | DP-010 | Stop AKS when deployment work pauses | Proposed | Reduces non-production compute cost; start it before Helm or acceptance work. |
 | DP-011 | Use Workload Identity and OTLP for Application Insights | Confirmed | Do not create or deliver an Application Insights connection-string secret. |
-| DP-012 | Use the AKS Application Routing managed default domain | Confirmed, blocked | Avoid a purchased domain and Azure DNS zone. The `aksapp.io` hostname and publicly trusted TLS certificate are AKS-managed, but the feature is Preview and subscription registration remains pending. |
+| DP-012 | Use the AKS Application Routing managed default domain | Confirmed, blocked | Avoid a purchased domain and Azure DNS zone. The `aksapp.io` hostname and publicly trusted TLS certificate are AKS-managed, but `DefaultDomainPreview` is approval-gated and requires an Azure support request. |
 
 ## Required operator decisions
 
@@ -398,8 +398,9 @@ Rollback immediately if any of the following occurs:
 - Selected the AKS Application Routing managed default domain instead of a
   purchased domain, Azure DNS zone, or Key Vault ingress certificate.
 - Started AKS and submitted the subscription registration for
-  `Microsoft.ContainerService/DefaultDomainPreview`; registration remains
-  pending, so no managed hostname has been allocated yet.
+  `Microsoft.ContainerService/DefaultDomainPreview`; Azure returned `Pending`,
+  which requires product-team approval through an Azure support request. No
+  managed hostname has been allocated yet.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
