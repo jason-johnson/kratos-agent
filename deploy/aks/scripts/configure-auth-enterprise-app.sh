@@ -20,12 +20,27 @@ error_body="$(mktemp)"
 trap 'rm -f "$request_body" "$response_body" "$error_body"' EXIT
 chmod 600 "$request_body" "$response_body" "$error_body"
 
-service_principal_id="$(
-  az ad sp list \
-    --filter "appId eq '$ENTRA_AUTH_CLIENT_ID'" \
-    --query '[0].id' \
-    --output tsv
-)"
+az rest \
+  --method get \
+  --url "https://graph.microsoft.com/v1.0/servicePrincipals?\$filter=appId%20eq%20'$ENTRA_AUTH_CLIENT_ID'&\$select=id,appRoleAssignmentRequired" \
+  --output json > "$response_body"
+
+readarray -t service_principal < <(
+  python - "$response_body" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    matches = json.load(stream).get("value", [])
+if len(matches) > 1:
+    raise SystemExit("Multiple enterprise applications have the same appId.")
+if matches:
+    print(matches[0]["id"])
+    print(str(matches[0].get("appRoleAssignmentRequired", False)).lower())
+PY
+)
+service_principal_id="${service_principal[0]:-}"
+assignment_required="${service_principal[1]:-false}"
 
 if [ -z "$service_principal_id" ]; then
   python - "$ENTRA_AUTH_CLIENT_ID" > "$request_body" <<'PY'
@@ -56,7 +71,7 @@ PY
     fi
     sleep 10
   done
-else
+elif [ "$assignment_required" != "true" ]; then
   printf '{"appRoleAssignmentRequired":true}\n' > "$request_body"
   az rest \
     --method patch \
@@ -66,10 +81,20 @@ else
     --output none
 fi
 
-az rest \
-  --method get \
-  --url "https://graph.microsoft.com/v1.0/servicePrincipals/$service_principal_id/appRoleAssignedTo" \
-  --output json > "$response_body"
+for attempt in $(seq 1 18); do
+  if az rest \
+    --method get \
+    --url "https://graph.microsoft.com/v1.0/servicePrincipals/$service_principal_id/appRoleAssignedTo" \
+    --output json > "$response_body" 2> "$error_body"; then
+    break
+  fi
+  if [ "$attempt" -eq 18 ]; then
+    echo "The enterprise application relationships were not readable after waiting for propagation." >&2
+    cat "$error_body" >&2
+    exit 4
+  fi
+  sleep 10
+done
 
 assignment_count="$(
   python - "$AKS_OPERATOR_PRINCIPAL_ID" "$service_principal_id" "$response_body" <<'PY'
@@ -106,7 +131,7 @@ PY
     --output none
 elif [ "$assignment_count" -ne 1 ]; then
   echo "Unexpected duplicate operator-group assignments were found." >&2
-  exit 4
+  exit 5
 fi
 
 echo "Enterprise application configured with assignment-required access."

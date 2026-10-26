@@ -435,6 +435,10 @@ Rollback immediately if any of the following occurs:
   still propagating. Moved that operation to an idempotent post-provision script
   that retries creation, enforces assignment-required access, and assigns the
   operator group.
+- The next provisioning run created the assignment-required enterprise
+  application, then Graph briefly returned not-found for its relationship
+  collection. Added propagation-aware relationship retries; operator-group
+  assignment remains to be verified by the next run.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
