@@ -99,9 +99,7 @@ Create a GitHub environment named `ktaks` with these secrets:
 - `AZURE_TENANT_ID` - its tenant ID; and
 - `AZURE_SUBSCRIPTION_ID` - the approved target subscription; and
 - `AKS_OPERATOR_PRINCIPAL_ID` - object ID of the approved Entra operator group
-  granted AKS RBAC Cluster Admin for manual Helm operations; and
-- `KRATOS_PUBLIC_HOST` - the protected Azure regional hostname without a scheme
-  or path.
+  granted AKS RBAC Cluster Admin for manual Helm operations.
 
 Set its `AZURE_LOCATION` environment variable to `swedencentral`.
 The `ktaks` workflow requests 250 thousand tokens per minute for the Foundry
@@ -122,7 +120,10 @@ The deployment outputs the cluster name and backend, auth, and optional OBO
 Workload Identity client IDs plus the confidential login application's client
 ID for a private Helm values file. The deployment service principal owns the
 login application, sign-in requires assignment, and the operator group is
-assigned through Microsoft Graph. `FRONTEND_URL`
+assigned through Microsoft Graph. After the Azure regional hostname exists, the
+workflow discovers it from the AKS managed resource group, masks it, and
+configures the exact OAuth callback only in the ephemeral azd environment.
+`FRONTEND_URL`
 registers the production origin on the OBO SPA client; omit it only when
 provisioning a local-only environment.
 

@@ -34,7 +34,6 @@ jobs:
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AKS_OPERATOR_PRINCIPAL_ID: ${{ secrets.AKS_OPERATOR_PRINCIPAL_ID }}
-      KRATOS_PUBLIC_HOST: ${{ secrets.KRATOS_PUBLIC_HOST }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -49,7 +48,6 @@ jobs:
           [ -n "$AZURE_SUBSCRIPTION_ID" ] || missing+=(AZURE_SUBSCRIPTION_ID)
           [ -n "$AZURE_LOCATION" ] || missing+=(AZURE_LOCATION)
           [ -n "$AKS_OPERATOR_PRINCIPAL_ID" ] || missing+=(AKS_OPERATOR_PRINCIPAL_ID)
-          [ -n "$KRATOS_PUBLIC_HOST" ] || missing+=(KRATOS_PUBLIC_HOST)
           if [ "${#missing[@]}" -ne 0 ]; then
             echo "::error::Missing ktaks environment secrets: ${missing[*]}"
             exit 1
@@ -91,7 +89,6 @@ jobs:
           azd env set AZURE_PRINCIPAL_ID "$principal_id"
           azd env set AKS_NAMESPACE kratos-agent
           azd env set AKS_OPERATOR_PRINCIPAL_ID "$AKS_OPERATOR_PRINCIPAL_ID"
-          azd env set AUTH_REDIRECT_URI "https://${KRATOS_PUBLIC_HOST}/oauth2/callback"
           azd env set DEPLOY_OBO "$DEPLOY_OBO"
           azd env set FOUNDRY_MODEL_CAPACITY 250
 
@@ -132,6 +129,48 @@ jobs:
               exit 1
               ;;
           esac
+
+      - name: Configure protected login redirect
+        run: |
+          resource_group="rg-${AZURE_ENV_NAME}"
+          cluster_name="$(
+            az aks list \
+              --resource-group "$resource_group" \
+              --query '[0].name' \
+              --output tsv
+          )"
+
+          if [ -z "$cluster_name" ]; then
+            azd env set AUTH_REDIRECT_URI ""
+            exit 0
+          fi
+
+          node_resource_group="$(
+            az aks show \
+              --resource-group "$resource_group" \
+              --name "$cluster_name" \
+              --query nodeResourceGroup \
+              --output tsv
+          )"
+          mapfile -t public_hosts < <(
+            az network public-ip list \
+              --resource-group "$node_resource_group" \
+              --query "[?dnsSettings.fqdn != null].dnsSettings.fqdn" \
+              --output tsv
+          )
+
+          if [ "${#public_hosts[@]}" -eq 0 ]; then
+            azd env set AUTH_REDIRECT_URI ""
+            exit 0
+          fi
+          if [ "${#public_hosts[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one AKS public hostname."
+            exit 1
+          fi
+
+          public_host="${public_hosts[0]}"
+          echo "::add-mask::$public_host"
+          azd env set AUTH_REDIRECT_URI "https://${public_host}/oauth2/callback"
 
       - name: Provision infrastructure
         run: azd provision --no-prompt
