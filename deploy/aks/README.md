@@ -127,6 +127,20 @@ assignment with `deploy/aks/scripts/configure-auth-enterprise-app.sh`. After the
 Azure regional hostname exists, the workflow discovers it from the AKS managed
 resource group, masks it, and configures the exact OAuth callback only in the
 ephemeral azd environment.
+
+After the login application and Key Vault exist, rerun the manual workflow with
+`configure_auth_secrets` selected. The deployment service principal creates a
+180-day OAuth credential and stores the client ID, client secret, and generated
+cookie secret through Key Vault's ARM resource interface. This does not require
+public vault access or a persistent Key Vault data-plane writer. The operation
+is idempotent and removes the newly created application password if vault
+storage fails.
+
+The stable Key Vault object names are:
+
+- `kratos-oauth-client-id`
+- `kratos-oauth-client-secret`
+- `kratos-oauth-cookie-secret`
 `FRONTEND_URL`
 registers the production origin on the OBO SPA client; omit it only when
 provisioning a local-only environment.

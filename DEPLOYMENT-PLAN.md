@@ -134,7 +134,7 @@ Goal: require authenticated Entra users at ingress before the application is
 exposed.
 
 - [x] Approve the Azure regional public hostname and store it outside Git.
-- [ ] Create a confidential Entra application for OAuth2 Proxy.
+- [x] Create a confidential Entra application for OAuth2 Proxy.
 - [x] Add a parameterized Graph/Bicep definition for the exact
   `https://<host>/oauth2/callback` redirect URI.
 - [x] Configure the application for the deployment tenant only.
@@ -442,6 +442,10 @@ Rollback immediately if any of the following occurs:
   that the deployment service principal owns the login application, the
   enterprise application requires assignment, and exactly one assignment
   grants access to `kratos-aks-operators`.
+- Added an explicit workflow action that creates a 180-day OAuth credential and
+  writes the client ID, client secret, and generated cookie secret through Key
+  Vault's ARM resource interface. This preserves the private vault boundary and
+  avoids persistent data-plane writer access; live execution remains pending.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.

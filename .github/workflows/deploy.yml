@@ -15,6 +15,10 @@ on:
         description: "Scan and mirror the pinned cert-manager images"
         type: boolean
         default: false
+      configure_auth_secrets:
+        description: "Create or reconcile the OAuth client credential and Key Vault secrets"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -185,6 +189,25 @@ jobs:
           ENTRA_AUTH_CLIENT_ID="$client_id" \
           AKS_OPERATOR_PRINCIPAL_ID="$AKS_OPERATOR_PRINCIPAL_ID" \
             ./deploy/aks/scripts/configure-auth-enterprise-app.sh
+
+      - name: Configure protected login secrets
+        if: inputs.configure_auth_secrets
+        run: |
+          client_id="$(azd env get-value ENTRA_AUTH_CLIENT_ID)"
+          vault_id="$(
+            az keyvault list \
+              --resource-group "rg-${AZURE_ENV_NAME}" \
+              --query '[0].id' \
+              --output tsv
+          )"
+          if [ -z "$client_id" ] || [ -z "$vault_id" ]; then
+            echo "::error::The login application and Key Vault must exist before configuring auth secrets."
+            exit 1
+          fi
+          echo "::add-mask::$client_id"
+          ENTRA_AUTH_CLIENT_ID="$client_id" \
+          KEY_VAULT_RESOURCE_ID="$vault_id" \
+            ./deploy/aks/scripts/configure-auth-secrets.sh
 
       - name: Verify private package sources
         if: inputs.publish_images
