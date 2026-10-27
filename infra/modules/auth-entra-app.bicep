@@ -19,6 +19,7 @@ resource application 'Microsoft.Graph/applications@v1.0' = {
   uniqueName: uniqueName
   displayName: displayName
   signInAudience: 'AzureADMyOrg'
+  groupMembershipClaims: 'SecurityGroup'
   web: {
     redirectUris: [redirectUri]
     implicitGrantSettings: {
