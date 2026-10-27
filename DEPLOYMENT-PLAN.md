@@ -139,7 +139,7 @@ exposed.
   `https://<host>/oauth2/callback` redirect URI.
 - [x] Configure the application for the deployment tenant only.
 - [x] Require assignment and declare the approved operator-group assignment.
-- [ ] Create the client credential through the approved secret-management
+- [x] Create the client credential through the approved secret-management
   process.
 - [ ] Configure logout and post-logout behavior.
 - [ ] Record only non-secret operational ownership outside the repository.
@@ -445,7 +445,10 @@ Rollback immediately if any of the following occurs:
 - Added an explicit workflow action that creates a 180-day OAuth credential and
   writes the client ID, client secret, and generated cookie secret through Key
   Vault's ARM resource interface. This preserves the private vault boundary and
-  avoids persistent data-plane writer access; live execution remains pending.
+  avoids persistent data-plane writer access.
+- Verified workflow run `40478568853` completed successfully. Confirmed exactly
+  one currently valid named OAuth credential exists and all three required Key
+  Vault secret objects are present and enabled without retrieving their values.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
