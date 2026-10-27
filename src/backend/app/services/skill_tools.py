@@ -401,7 +401,18 @@ TOOL_SKILL_MAP = {
     "kubernetes_list_object_events": "kubernetes_inspection",
 }
 TOOL_MAP = {tool.name: tool for tool in ALL_TOOLS}
+SERVICENOW_TOOL_NAMES = {
+    "servicenow_get_major_incident",
+    "servicenow_list_incident_updates",
+    "servicenow_prepare_update",
+    "servicenow_execute_update",
+}
 
 
-def get_enabled_custom_tools(enabled_names: set[str]) -> list:
-    return [tool for tool in ALL_TOOLS if tool.name in enabled_names or TOOL_SKILL_MAP.get(tool.name) in enabled_names]
+def get_enabled_custom_tools(enabled_names: set[str], *, servicenow_enabled: bool = True) -> list:
+    return [
+        tool
+        for tool in ALL_TOOLS
+        if (servicenow_enabled or tool.name not in SERVICENOW_TOOL_NAMES)
+        and (tool.name in enabled_names or TOOL_SKILL_MAP.get(tool.name) in enabled_names)
+    ]

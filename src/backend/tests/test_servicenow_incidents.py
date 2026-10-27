@@ -245,3 +245,15 @@ def test_incident_updates_skill_enables_all_servicenow_tools():
         "servicenow_prepare_update",
         "servicenow_execute_update",
     }
+
+
+def test_disabled_servicenow_excludes_all_servicenow_tools():
+    names = {
+        tool.name
+        for tool in skill_tools.get_enabled_custom_tools(
+            {"incident_updates", "servicenow_get_major_incident"},
+            servicenow_enabled=False,
+        )
+    }
+
+    assert names.isdisjoint(skill_tools.SERVICENOW_TOOL_NAMES)

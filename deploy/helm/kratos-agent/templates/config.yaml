@@ -18,7 +18,10 @@ data:
   BLOB_SKILLS_CONTAINER: {{ .Values.azure.blobSkillsContainer | quote }}
   APPLICATION_INSIGHTS_RESOURCE_ID: {{ .Values.azure.applicationInsightsResourceId | quote }}
   APPLICATION_INSIGHTS_WORKSPACE_ID: {{ .Values.azure.applicationInsightsWorkspaceId | quote }}
-  SERVICENOW_INSTANCE_URL: {{ required "serviceNow.instanceUrl is required" .Values.serviceNow.instanceUrl | quote }}
+  SERVICENOW_ENABLED: {{ .Values.serviceNow.enabled | quote }}
+  {{- if .Values.serviceNow.enabled }}
+  SERVICENOW_INSTANCE_URL: {{ required "serviceNow.instanceUrl is required when ServiceNow is enabled" .Values.serviceNow.instanceUrl | quote }}
+  {{- end }}
   KUBERNETES_ALLOWED_NAMESPACES: {{ .Release.Namespace | quote }}
   OBO_MCP_SERVER_NAME: {{ .Values.auth.oboServerName | quote }}
   OBO_MCP_SERVER_MCP_URL: {{ printf "http://%s-obo:8000/mcp" (include "kratos.fullname" .) | quote }}

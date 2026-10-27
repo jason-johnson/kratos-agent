@@ -50,6 +50,11 @@ the repository.
    Kubernetes Secrets and mounts each `SecretProviderClass` only into its owning
    workload.
 
+   Set `serviceNow.enabled: false` when the initial release does not integrate
+   with ServiceNow. In that mode the chart does not require its origin or secret
+   object names, and the backend excludes all ServiceNow tools and the
+   incident-update skill. Do not use placeholder credentials.
+
    If Key Vault CSI is deliberately disabled, prepare the existing Kubernetes
    Secret named by `secrets.existingSecret`. It must contain the keys selected in
    `values.yaml` for ServiceNow, Application Insights, and the auth proxy. Create

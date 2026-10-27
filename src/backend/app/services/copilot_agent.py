@@ -810,13 +810,22 @@ class CopilotAgent:
         async with lock:
             # Resolve enabled tools and skill directories from the use-case registry
             registry = self._get_registry(conversation_id)
-            enabled_tools = ALL_TOOLS
+            enabled_tools = get_enabled_custom_tools(
+                {tool.name for tool in ALL_TOOLS},
+                servicenow_enabled=self.settings.servicenow_enabled,
+            )
             skill_dirs = []
             mcp_servers: dict = {}
             if registry is not None:
                 enabled_names = registry.get_enabled_tool_names()
-                enabled_tools = get_enabled_custom_tools(enabled_names)
-                skill_dirs = registry.get_skill_directories()
+                enabled_tools = get_enabled_custom_tools(
+                    enabled_names,
+                    servicenow_enabled=self.settings.servicenow_enabled,
+                )
+                excluded_skills = (
+                    set() if self.settings.servicenow_enabled else {"incident-updates", "incident_updates"}
+                )
+                skill_dirs = registry.get_skill_directories(excluded_names=excluded_skills)
                 mcp_servers = getattr(registry, "mcp_servers", {})
 
             # Inject the signed-in user's OBO tokens as Authorization headers on the

@@ -98,6 +98,10 @@ async def test_get_skill_directories(use_case_dir: Path, monkeypatch: pytest.Mon
     assert any("web-search" in d for d in dirs)
     assert any("rag-search" in d for d in dirs)
 
+    filtered_dirs = registry.get_skill_directories(excluded_names={"web-search"})
+    assert len(filtered_dirs) == 1
+    assert "rag-search" in filtered_dirs[0]
+
 
 @pytest.mark.asyncio
 async def test_no_use_case_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

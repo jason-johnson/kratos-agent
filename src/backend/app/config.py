@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     # Production incident integrations. ServiceNow access is pinned to one
     # configured HTTPS origin and uses OAuth client credentials. The client
     # secret must come from the runtime secret provider, never source control.
+    servicenow_enabled: bool = True
     servicenow_instance_url: str = ""
     servicenow_token_url: str = ""
     servicenow_client_id: str = ""

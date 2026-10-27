@@ -24,7 +24,7 @@ azure:
   cosmosDbEndpoint: https://cosmos.example.invalid
   blobStorageEndpoint: https://blob.example.invalid
 serviceNow:
-  instanceUrl: https://servicenow.example.invalid
+  enabled: false
 auth:
   oboClientId: validation-placeholder
   oboScope: api://validation/access_as_user
@@ -40,8 +40,8 @@ secrets:
   keyVaultCsi:
     enabled: true
     vaultName: validation-vault
-    serviceNowClientIdObjectName: validation-servicenow-client-id
-    serviceNowClientSecretObjectName: validation-servicenow-client-secret
+    serviceNowClientIdObjectName: ""
+    serviceNowClientSecretObjectName: ""
     appInsightsConnectionStringObjectName: validation-appinsights-connection-string
     oauthClientIdObjectName: validation-oauth-client-id
     oauthClientSecretObjectName: validation-oauth-client-secret

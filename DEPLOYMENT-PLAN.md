@@ -81,7 +81,7 @@ Record decisions here before creating environment-specific resources.
 | Entra login application owner | Selected | Existing deployment service principal using `Application.ReadWrite.OwnedBy`. |
 | Users/groups allowed to sign in | Selected | Reuse `kratos-aks-operators` for initial acceptance by assigning the group to the enterprise application. |
 | Auth-proxy release | Blocked | Official v7.15.5 has fixable Go TLS/X.509 and HTTP findings. |
-| ServiceNow target and credentials owner | Blocked | Credentials are not ready; values must remain outside Git and live ServiceNow acceptance cannot proceed until they are available. |
+| ServiceNow target and credentials owner | Not required for initial release | Deploy with `serviceNow.enabled: false`; do not create placeholder credentials or expose ServiceNow tools. |
 | Initial live acceptance operators | Pending | |
 
 ## Phase 1 - Establish operator access

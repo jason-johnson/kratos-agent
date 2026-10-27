@@ -49,6 +49,7 @@ spec:
             - configMapRef:
                 name: {{ include "kratos.fullname" . }}-config
           env:
+            {{- if .Values.serviceNow.enabled }}
             - name: SERVICENOW_CLIENT_ID
               valueFrom:
                 secretKeyRef:
@@ -59,6 +60,7 @@ spec:
                 secretKeyRef:
                   name: {{ ternary .Values.secrets.backendSecret .Values.secrets.existingSecret .Values.secrets.keyVaultCsi.enabled }}
                   key: {{ .Values.secrets.serviceNowClientSecretKey }}
+            {{- end }}
             - name: APPLICATIONINSIGHTS_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:
@@ -95,7 +97,7 @@ spec:
               mountPath: /tmp
             - name: home
               mountPath: /home/kratos
-            {{- if .Values.secrets.keyVaultCsi.enabled }}
+            {{- if and .Values.secrets.keyVaultCsi.enabled (or .Values.serviceNow.enabled .Values.secrets.keyVaultCsi.appInsightsConnectionStringObjectName) }}
             - name: secrets-store
               mountPath: /mnt/secrets-store
               readOnly: true
@@ -108,7 +110,7 @@ spec:
         - name: home
           emptyDir:
             sizeLimit: 256Mi
-        {{- if .Values.secrets.keyVaultCsi.enabled }}
+        {{- if and .Values.secrets.keyVaultCsi.enabled (or .Values.serviceNow.enabled .Values.secrets.keyVaultCsi.appInsightsConnectionStringObjectName) }}
         - name: secrets-store
           csi:
             driver: secrets-store.csi.k8s.io

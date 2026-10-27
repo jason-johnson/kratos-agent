@@ -299,7 +299,7 @@ class SkillRegistry:
         """Get a specific skill by name."""
         return self.skills.get(name)
 
-    def get_skill_directories(self) -> list[str]:
+    def get_skill_directories(self, excluded_names: set[str] | None = None) -> list[str]:
         """Return local directory paths for enabled skills with instructions.
 
         The SDK expects directory paths containing SKILL.md files.
@@ -309,8 +309,11 @@ class SkillRegistry:
         data), a ``## Available Files`` section is appended to SKILL.md so
         the agent knows it can ``read_file`` them at runtime.
         """
+        excluded_names = excluded_names or set()
         dirs: list[str] = []
         for skill in self.get_enabled_skills():
+            if skill.name in excluded_names:
+                continue
             if skill.local_path:
                 skill_dir = Path(skill.local_path)
                 # Ensure SKILL.md is written (may have been updated via admin)
