@@ -127,20 +127,19 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
 
     # Load all use-case registries from blob storage
     registries: dict[str, SkillRegistry] = {}
-    if not blob_skill_service.is_available:
-        logger.error("Blob storage is not configured — no skills will be available")
+    if blob_skill_service.is_available:
+        # Seed only the supported ARE use-case. Legacy persona blobs may
+        # remain for rollback but are not loaded into the runtime.
+        seeded = await blob_skill_service.seed_from_local({PRIMARY_USE_CASE})
+        if seeded:
+            logger.info("Seeded %d use-case(s) into blob: %s", len(seeded), seeded)
     else:
-        try:
-            # Seed only the supported ARE use-case. Legacy persona blobs may
-            # remain for rollback but are not loaded into the runtime.
-            seeded = await blob_skill_service.seed_from_local({PRIMARY_USE_CASE})
-            if seeded:
-                logger.info("Seeded %d use-case(s) into blob: %s", len(seeded), seeded)
-            registry = SkillRegistry()
-            await registry.load(PRIMARY_USE_CASE, blob_skill_service, apm_service=apm_service)
-            registries[PRIMARY_USE_CASE] = registry
-        except Exception:
-            logger.exception("Failed to load use-cases from blob storage")
+        logger.warning("Blob storage is unavailable — loading the baked ARE configuration")
+    registry = SkillRegistry()
+    await registry.load(PRIMARY_USE_CASE, blob_skill_service, apm_service=apm_service)
+    if not registry.system_prompt:
+        raise RuntimeError("The Agent Reliability Engineer configuration did not provide a system prompt")
+    registries[PRIMARY_USE_CASE] = registry
 
     application.state.registries = registries
     application.state.skill_registry = registries.get(PRIMARY_USE_CASE, SkillRegistry())

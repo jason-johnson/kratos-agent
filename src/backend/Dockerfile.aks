@@ -51,7 +51,9 @@ RUN groupadd --gid 10001 kratos \
     && useradd --uid 10001 --gid kratos --create-home --shell /usr/sbin/nologin kratos
 
 COPY --chown=kratos:kratos src/backend/ .
-COPY --chown=kratos:kratos use-cases/ use-cases/
+COPY --chown=kratos:kratos use-cases/ /opt/kratos/use-cases/
+
+RUN ln -s /home/kratos/use-cases /app/use-cases
 
 USER 10001:10001
 
