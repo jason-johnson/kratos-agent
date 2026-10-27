@@ -495,6 +495,12 @@ Rollback immediately if any of the following occurs:
   usable registry can load. Both replicas loaded the registry, and live browser
   acceptance confirmed the system prompt and six skills are available.
   Remaining functional, restore, and rollback acceptance is still pending.
+- Workflow run `40571865451` built and smoke-tested commit `680b844`
+  successfully, then correctly blocked publication when the backend scan found
+  newly disclosed fixable HIGH findings in transitive NLTK and OAuthLib
+  dependencies. Raised the production-only security floors to NLTK 3.10.4 and
+  OAuthLib 4.0.0; image publication and live investigation acceptance remain
+  pending.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
