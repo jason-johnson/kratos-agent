@@ -501,6 +501,13 @@ Rollback immediately if any of the following occurs:
   dependencies. Raised the production-only security floors to NLTK 3.10.4 and
   OAuthLib 4.0.0; image publication and live investigation acceptance remain
   pending.
+- Verified workflow run `40576266981` built commit `4d14d6f`, passed all
+  application image scans, and published the corrected backend image. Helm
+  revision 8 deploys that immutable digest and grants only namespace-scoped
+  workload `get` and `list`. All six pods are ready with zero restarts. Live
+  in-pod acceptance discovered the three exact Helm-generated deployments, and
+  the fixed Application Insights request and dependency queries both succeeded
+  with no failed queries rather than returning HTTP 400.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
