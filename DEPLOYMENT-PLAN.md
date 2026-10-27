@@ -477,8 +477,18 @@ Rollback immediately if any of the following occurs:
 - Verified the certificate and issuer are ready, unauthenticated public traffic
   redirects into OIDC, images run by digest with hardened security contexts,
   and the intended network policies, PDBs, and HPAs are present. Interactive
-  assigned-user login and the remaining functional, restore, and rollback
-  acceptance are still pending.
+  assigned-user login initially exposed invalid OIDC scope, missing Entra group
+  claims, organizational-account identity mapping, and oversized cookie-session
+  issues. Corrected each without broad Graph access, larger ingress buffers, or
+  a new stateful session service. Tenant consent is limited to `email`,
+  `openid`, and `profile`.
+- Verified workflow run `40559779667` built commit `c90411d`, passed all
+  application image scans, and published the CSP-correct frontend image. Helm
+  revision 6 uses that immutable digest and permits the Next.js bootstrap
+  scripts through build-derived SHA-256 hashes rather than `unsafe-inline`.
+  Confirmed assigned-group login and the Agent Reliability Engineer UI render
+  successfully. Remaining functional, restore, and rollback acceptance is still
+  pending.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
