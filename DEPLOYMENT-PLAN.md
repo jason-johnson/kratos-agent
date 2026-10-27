@@ -459,6 +459,11 @@ Rollback immediately if any of the following occurs:
   published the rebuilt OAuth2 Proxy image to ACR. Resolved the backend,
   frontend, and auth-proxy digests and stored all repository/digest pairs only
   in a mode-`0600` protected file outside Git.
+- A later backend scan found newly disclosed fixable findings in APM Python
+  dependencies and in the synthetic M365 mock that had been packaged into the
+  AKS backend. Raised the Python dependency floors and removed the local mock
+  from the production image; production session assembly now filters that known
+  synthetic command while local mode retains it.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.

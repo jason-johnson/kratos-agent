@@ -1,0 +1,3 @@
+# Security floors for transitive dependencies included in the AKS image.
+filelock>=4.2.1
+gitpython>=3.2.1

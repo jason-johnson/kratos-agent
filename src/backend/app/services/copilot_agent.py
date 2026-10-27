@@ -350,6 +350,12 @@ class CopilotAgent:
         )
         return servers
 
+    def _filter_synthetic_mcp_servers(self, mcp_servers: dict | None) -> dict:
+        servers = copy.deepcopy(mcp_servers) if mcp_servers else {}
+        if self.settings.is_local_mode:
+            return servers
+        return {name: config for name, config in servers.items() if config.get("command") != "m365-graph-mcp-server"}
+
     @staticmethod
     def _mcp_has_auth(mcp_servers: dict | None) -> bool:
         """True if any MCP server carries an ``Authorization`` header (identity-bearing)."""
@@ -828,6 +834,7 @@ class CopilotAgent:
                 skill_dirs = registry.get_skill_directories(excluded_names=excluded_skills)
                 mcp_servers = getattr(registry, "mcp_servers", {})
 
+            mcp_servers = self._filter_synthetic_mcp_servers(mcp_servers)
             # Inject the signed-in user's OBO tokens as Authorization headers on the
             # matching remote MCP servers (and auto-add the env-configured OBO server
             # when a token is present for it). No-op when no tokens are registered.

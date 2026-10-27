@@ -23,6 +23,11 @@ the repository.
 - A Helm chart with immutable image digests, TLS ingress, an OIDC auth proxy,
   probes, resources, autoscaling, PodDisruptionBudgets, default-deny network
   policy, and same-namespace read-only inspection RBAC.
+
+The AKS backend image contains the Copilot CLI but not the synthetic local
+Microsoft 365 Graph MCP package. Production sessions filter that known local
+mock command; Microsoft Graph is available only through the separately enabled
+OBO service.
 - Continuous seven-day Cosmos DB backup and 30-day Blob delete/version
   retention. Cosmos and Blob remain managed services; the chart creates no
   stateful data volume.

@@ -29,6 +29,26 @@ def test_copilot_agent_init(copilot_agent, settings):
     assert copilot_agent._sessions == {}
 
 
+def test_production_filters_only_synthetic_m365_mcp(settings):
+    agent = CopilotAgent(settings.model_copy(update={"local_mode": False}))
+    servers = {
+        "m365-graph": {"type": "local", "command": "m365-graph-mcp-server"},
+        "approved-remote": {"type": "http", "url": "https://mcp.example.invalid"},
+    }
+
+    assert agent._filter_synthetic_mcp_servers(servers) == {
+        "approved-remote": {"type": "http", "url": "https://mcp.example.invalid"}
+    }
+    assert "m365-graph" in servers
+
+
+def test_local_mode_retains_synthetic_m365_mcp(settings):
+    agent = CopilotAgent(settings.model_copy(update={"local_mode": True}))
+    servers = {"m365-graph": {"type": "local", "command": "m365-graph-mcp-server"}}
+
+    assert agent._filter_synthetic_mcp_servers(servers) == servers
+
+
 def test_cancel_aborts_only_active_turn(copilot_agent):
     session = MagicMock()
     copilot_agent._sessions["active"] = session
