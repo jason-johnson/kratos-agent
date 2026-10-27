@@ -11,6 +11,10 @@ suspected-cause investigation, command brief, or verification question.
 
 ## Tools
 
+- `kubernetes_list_workloads`: bounded discovery of exact Deployment,
+  StatefulSet, and DaemonSet names and readiness in one namespace. Use this
+  before `kubernetes_get_workload` when the exact generated workload name is
+  not already known.
 - `kubernetes_get_workload`: rollout generation, replicas, readiness, and
   conditions for one exact Deployment, StatefulSet, or DaemonSet.
 - `kubernetes_list_service_pods`: bounded pod phase, readiness, restart count,
@@ -19,7 +23,8 @@ suspected-cause investigation, command brief, or verification question.
 
 ## Boundaries
 
-- Use only an explicitly named namespace and object/service.
+- Use only an explicitly named namespace. Discover generated workload names
+  with `kubernetes_list_workloads`; otherwise use exact object/service names.
 - The backend enforces an allowlist of namespaces.
 - These tools expose no Kubernetes mutation, exec, logs, secrets, ConfigMaps,
   environment variables, volume contents, or arbitrary API path.

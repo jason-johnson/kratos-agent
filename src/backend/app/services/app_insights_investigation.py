@@ -212,7 +212,7 @@ def build_investigation_queries(
             kql=f"""requests
 | where timestamp > ago({params.lookback_hours}h)
 {common_filter}
-| where success == false or duration > 2s
+| where success == false or duration > 2000
 | project timestamp, operation_Id, name, success, resultCode, duration, cloud_RoleName, url
 | order by timestamp desc
 | take {take}""",
@@ -224,7 +224,7 @@ def build_investigation_queries(
             kql=f"""dependencies
 | where timestamp > ago({params.lookback_hours}h)
 {common_filter}
-| where success == false or duration > 2s
+| where success == false or duration > 2000
 | project timestamp, operation_Id, name, target, type, success, resultCode, duration, cloud_RoleName
 | order by timestamp desc
 | take {take}""",

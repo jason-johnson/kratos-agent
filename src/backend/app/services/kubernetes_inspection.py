@@ -22,6 +22,11 @@ class KubernetesWorkloadParams(BaseModel):
     name: str = Field(pattern=_K8S_NAME)
 
 
+class KubernetesWorkloadsParams(BaseModel):
+    namespace: str = Field(pattern=_K8S_NAME)
+    limit: int = Field(default=50, ge=1, le=100)
+
+
 class KubernetesPodsParams(BaseModel):
     namespace: str = Field(pattern=_K8S_NAME)
     service_name: str = Field(pattern=_K8S_NAME)
@@ -130,6 +135,17 @@ class KubernetesInspectionClient:
             ],
         }
 
+    async def list_workloads(self, params: KubernetesWorkloadsParams) -> list[dict[str, Any]]:
+        self._authorize_namespace(params.namespace)
+        workloads: list[dict[str, Any]] = []
+        for plural in ("deployments", "statefulsets", "daemonsets"):
+            payload = await self._get(
+                f"/apis/apps/v1/namespaces/{quote(params.namespace)}/{plural}",
+                params={"limit": str(params.limit)},
+            )
+            workloads.extend(_project_workload(item) for item in payload.get("items") or [])
+        return workloads[: params.limit]
+
     async def list_pods(self, params: KubernetesPodsParams) -> list[dict[str, Any]]:
         self._authorize_namespace(params.namespace)
         items: dict[str, dict[str, Any]] = {}
@@ -183,6 +199,22 @@ def _project_pod(item: dict[str, Any]) -> dict[str, Any]:
             }
             for container in status.get("containerStatuses") or []
         ],
+    }
+
+
+def _project_workload(item: dict[str, Any]) -> dict[str, Any]:
+    metadata = item.get("metadata") or {}
+    spec = item.get("spec") or {}
+    status = item.get("status") or {}
+    return {
+        "kind": item.get("kind"),
+        "name": metadata.get("name"),
+        "namespace": metadata.get("namespace"),
+        "desiredReplicas": spec.get("replicas"),
+        "readyReplicas": status.get("readyReplicas"),
+        "availableReplicas": status.get("availableReplicas"),
+        "updatedReplicas": status.get("updatedReplicas"),
+        "unavailableReplicas": status.get("unavailableReplicas"),
     }
 
 

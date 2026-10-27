@@ -24,6 +24,7 @@ from app.services.kubernetes_inspection import (
     KubernetesInspectionClient,
     KubernetesPodsParams,
     KubernetesWorkloadParams,
+    KubernetesWorkloadsParams,
     classify_kubernetes_error,
     kubernetes_result,
 )
@@ -359,6 +360,14 @@ async def kubernetes_get_workload(params: KubernetesWorkloadParams) -> dict:
         return await _kubernetes_read("get_workload", lambda client: client.get_workload(params))
 
 
+@define_tool(description="List bounded workload names and readiness in an allowlisted Kubernetes namespace")
+async def kubernetes_list_workloads(params: KubernetesWorkloadsParams) -> dict:
+    with tracer.start_as_current_span("skill.kubernetes_list_workloads") as span:
+        _set_kratos_attrs(span)
+        span.set_attribute("k8s.namespace.name", params.namespace)
+        return await _kubernetes_read("list_workloads", lambda client: client.list_workloads(params))
+
+
 @define_tool(description="Read bounded pod health for one service in an allowlisted Kubernetes namespace")
 async def kubernetes_list_service_pods(params: KubernetesPodsParams) -> dict:
     with tracer.start_as_current_span("skill.kubernetes_list_service_pods") as span:
@@ -385,6 +394,7 @@ ALL_TOOLS = [
     servicenow_execute_update,
     incident_brief_get,
     incident_brief_update,
+    kubernetes_list_workloads,
     kubernetes_get_workload,
     kubernetes_list_service_pods,
     kubernetes_list_object_events,
@@ -396,6 +406,7 @@ TOOL_SKILL_MAP = {
     "servicenow_execute_update": "incident_updates",
     "incident_brief_get": "incident_command_brief",
     "incident_brief_update": "incident_command_brief",
+    "kubernetes_list_workloads": "kubernetes_inspection",
     "kubernetes_get_workload": "kubernetes_inspection",
     "kubernetes_list_service_pods": "kubernetes_inspection",
     "kubernetes_list_object_events": "kubernetes_inspection",

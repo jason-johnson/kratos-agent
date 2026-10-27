@@ -85,6 +85,8 @@ def test_queries_are_fixed_and_escape_user_values():
     assert all("ago(6h)" in query.kql for query in queries)
     assert all("| take 7" in query.kql for query in queries)
     assert all("checkout''api" in query.kql for query in queries)
+    assert all("duration > 2000" in query.kql for query in queries[:2])
+    assert all("duration > 2s" not in query.kql for query in queries)
     assert "sql" in queries[3].kql
     assert "timeout" in queries[3].kql
 

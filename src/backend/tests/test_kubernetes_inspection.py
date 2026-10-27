@@ -13,6 +13,7 @@ from app.services.kubernetes_inspection import (
     KubernetesInspectionClient,
     KubernetesPodsParams,
     KubernetesWorkloadParams,
+    KubernetesWorkloadsParams,
 )
 
 
@@ -86,6 +87,50 @@ async def test_workload_projection_excludes_pod_template_and_secrets(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_workload_discovery_returns_exact_names_without_templates(tmp_path):
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        kind = {
+            "deployments": "Deployment",
+            "statefulsets": "StatefulSet",
+            "daemonsets": "DaemonSet",
+        }[request.url.path.rsplit("/", 1)[-1]]
+        return httpx.Response(
+            200,
+            json={
+                "items": [
+                    {
+                        "kind": kind,
+                        "metadata": {"name": f"kratos-{kind.lower()}", "namespace": "payments"},
+                        "spec": {
+                            "replicas": 2,
+                            "template": {"spec": {"containers": [{"env": [{"value": "must-not-leak"}]}]}},
+                        },
+                        "status": {"readyReplicas": 2, "availableReplicas": 2},
+                    }
+                ]
+            },
+        )
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = KubernetesInspectionClient(_settings(tmp_path), client=http)
+
+    result = await client.list_workloads(KubernetesWorkloadsParams(namespace="payments", limit=10))
+
+    assert len(requests) == 3
+    assert [item["name"] for item in result] == [
+        "kratos-deployment",
+        "kratos-statefulset",
+        "kratos-daemonset",
+    ]
+    assert all(item["readyReplicas"] == 2 for item in result)
+    assert "must-not-leak" not in str(result)
+    await http.aclose()
+
+
+@pytest.mark.asyncio
 async def test_namespace_allowlist_blocks_request_before_network(tmp_path):
     http = httpx.AsyncClient(
         transport=httpx.MockTransport(lambda _request: pytest.fail("network request should not occur"))
@@ -154,6 +199,7 @@ def test_kubernetes_skill_enables_only_read_tools():
     names = {tool.name for tool in skill_tools.get_enabled_custom_tools({"kubernetes_inspection"})}
 
     assert names == {
+        "kubernetes_list_workloads",
         "kubernetes_get_workload",
         "kubernetes_list_service_pods",
         "kubernetes_list_object_events",
