@@ -109,7 +109,7 @@ spec:
             sizeLimit: 512Mi
         - name: home
           emptyDir:
-            sizeLimit: 256Mi
+            sizeLimit: {{ .Values.backend.homeSizeLimit }}
         {{- if and .Values.secrets.keyVaultCsi.enabled (or .Values.serviceNow.enabled .Values.secrets.keyVaultCsi.appInsightsConnectionStringObjectName) }}
         - name: secrets-store
           csi:

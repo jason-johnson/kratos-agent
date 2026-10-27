@@ -5,6 +5,7 @@ imagePullSecrets: []
 
 backend:
   replicaCount: 2
+  homeSizeLimit: 1Gi
   image:
     repository: ""
     digest: ""
