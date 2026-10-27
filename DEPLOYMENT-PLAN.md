@@ -1,6 +1,6 @@
 # Kratos AKS Deployment Plan
 
-Last updated: 2026-10-22
+Last updated: 2026-10-27
 
 ## Purpose
 
@@ -44,8 +44,8 @@ application simplification work remains in [PLAN.md](PLAN.md).
 - [x] All three images pass their smoke tests.
 - [x] All three images pass the fixable HIGH/CRITICAL Trivy gate.
 - [x] All three images are published to ACR with the successful commit SHA.
-- [ ] Application Helm resources are installed in AKS.
-- [ ] DNS, TLS, and Entra user authentication are configured.
+- [x] Application Helm resources are installed in AKS.
+- [x] DNS, TLS, and Entra user authentication are configured.
 - [ ] Live functional, authorization, resilience, restore, and rollback
   acceptance is complete.
 
@@ -56,9 +56,9 @@ application simplification work remains in [PLAN.md](PLAN.md).
 | DP-001 | Deploy the application with the checked-in Helm chart | Confirmed | Infrastructure and application delivery remain separate. |
 | DP-002 | Use immutable ACR digests for every deployed image | Confirmed | Backend, frontend, OBO, and auth proxy must be digest-pinned. |
 | DP-003 | Keep OBO disabled for the first core deployment | Confirmed | The image is published, but Graph infrastructure, consent, and workload deployment are deferred. |
-| DP-004 | Mirror a patched official auth-proxy image into ACR | Confirmed, blocked | Wait for an official release that passes the fixable HIGH/CRITICAL gate; do not maintain an internal fork or weaken the gate. |
+| DP-004 | Mirror a patched official auth-proxy image into ACR | Confirmed | Rebuild the exact official v7.15.5 source with the minimal fixed `golang.org/x/net` dependency, verify its identity and tests, pass the unchanged scan gate, and publish it privately. |
 | DP-005 | Grant AKS operator access to a dedicated Entra group | Confirmed | The dedicated group exists; its object ID remains protected and is parameterized through Bicep. |
-| DP-006 | Deliver secrets through Key Vault CSI | Confirmed | Separate backend and auth identities and synchronized Secrets are implemented; environment secret objects remain pending. |
+| DP-006 | Deliver secrets through Key Vault CSI | Confirmed | Separate backend and auth identities are implemented. The OAuth objects are configured and synchronized; ServiceNow is disabled without placeholders for the initial release. |
 | DP-007 | Use the Web Application Routing ingress class | Confirmed | Already enabled on the cluster and selected by the chart. |
 | DP-008 | Require TLS and Entra OIDC before user traffic | Confirmed | No unauthenticated temporary public deployment. |
 | DP-009 | Install and upgrade Helm manually with `--atomic` | Confirmed | Failed releases must roll back automatically. |
@@ -464,6 +464,21 @@ Rollback immediately if any of the following occurs:
   AKS backend. Raised the Python dependency floors and removed the local mock
   from the production image; production session assembly now filters that known
   synthetic command while local mode retains it.
+- Verified workflow run `40504156215` built commit `618663c`, passed the
+  backend, frontend, and OBO scan gates, and published the new immutable
+  application images. Refreshed the protected backend and frontend digests.
+- Installed Helm release revision 2 with ServiceNow and OBO disabled, production
+  Let's Encrypt TLS, OAuth secrets synchronized from Key Vault CSI, and all six
+  auth, backend, and frontend containers healthy with zero restarts. The first
+  atomic attempt exposed an undersized backend writable home; a diagnostic
+  release then exposed the missing frontend `/tmp` mount required by
+  nginx-unprivileged. Both limits are now explicit and bounded, and the final
+  atomic upgrade succeeded.
+- Verified the certificate and issuer are ready, unauthenticated public traffic
+  redirects into OIDC, images run by digest with hardened security contexts,
+  and the intended network policies, PDBs, and HPAs are present. Interactive
+  assigned-user login and the remaining functional, restore, and rollback
+  acceptance are still pending.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
