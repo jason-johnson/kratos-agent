@@ -117,9 +117,9 @@ coordinates.
   1.26.10 and the minimal `golang.org/x/net` 0.60.0 security update.
 - [x] Scan official OAuth2 Proxy v7.15.5 with the same HIGH/CRITICAL gate; it
   failed and was not approved.
-- [ ] Mirror the auth-proxy image into ACR.
-- [ ] Resolve its ACR digest.
-- [ ] Store repositories and digests in a protected values file outside Git.
+- [x] Mirror the auth-proxy image into ACR.
+- [x] Resolve its ACR digest.
+- [x] Store repositories and digests in a protected values file outside Git.
 - [ ] Verify no image uses `latest` or a tag without a digest.
 
 Exit gate:
@@ -455,6 +455,10 @@ Rollback immediately if any of the following occurs:
   reproducible, checksum-verified rebuild with only the fixed 0.60.0 dependency,
   pinned builder/runtime digests, binary identity verification, and an explicit
   scan-and-publish workflow gate.
+- Verified workflow run `40487625994` passed the HIGH/CRITICAL gate and
+  published the rebuilt OAuth2 Proxy image to ACR. Resolved the backend,
+  frontend, and auth-proxy digests and stored all repository/digest pairs only
+  in a mode-`0600` protected file outside Git.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
