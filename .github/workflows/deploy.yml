@@ -15,6 +15,10 @@ on:
         description: "Scan and mirror the pinned cert-manager images"
         type: boolean
         default: false
+      publish_auth_proxy_image:
+        description: "Rebuild, scan, and publish the pinned OAuth2 Proxy release"
+        type: boolean
+        default: false
       configure_auth_secrets:
         description: "Create or reconcile the OAuth client credential and Key Vault secrets"
         type: boolean
@@ -214,7 +218,7 @@ jobs:
         run: python .github/scripts/check-package-sources.py
 
       - name: Refresh Azure sign-in for image publication
-        if: inputs.publish_images || inputs.publish_platform_images
+        if: inputs.publish_images || inputs.publish_platform_images || inputs.publish_auth_proxy_image
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -288,6 +292,10 @@ jobs:
             sleep 1
           done
 
+      - name: Build patched OAuth2 Proxy image
+        if: inputs.publish_auth_proxy_image
+        run: OUTPUT_IMAGE=oauth2-proxy:validation ./deploy/aks/scripts/build-auth-proxy.sh
+
       - name: Scan backend image
         if: inputs.publish_images
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -311,6 +319,15 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: kratos-obo-mcp-server:validation
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan OAuth2 Proxy image
+        if: inputs.publish_auth_proxy_image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: oauth2-proxy:validation
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
@@ -444,6 +461,42 @@ jobs:
             quay.io/jetstack/cert-manager-startupapicheck@sha256:1c519d4afca1413d1e4ccd78bdc756184418ab55a34569a3b3de39d32f9974e1 \
             platform/cert-manager-startupapicheck:v1.21.3
 
+      - name: Push patched OAuth2 Proxy image
+        if: inputs.publish_auth_proxy_image
+        run: |
+          registry_name="$(
+            az acr list \
+              --resource-group "rg-${AZURE_ENV_NAME}" \
+              --query '[0].name' \
+              --output tsv
+          )"
+          registry="$(
+            az acr show \
+              --resource-group "rg-${AZURE_ENV_NAME}" \
+              --name "$registry_name" \
+              --query loginServer \
+              --output tsv
+          )"
+          test -n "$registry_name"
+          test -n "$registry"
+          echo "::add-mask::$registry"
+
+          az acr login --name "$registry_name"
+          target="$registry/platform/oauth2-proxy:${GITHUB_SHA}"
+          docker tag oauth2-proxy:validation "$target"
+
+          for attempt in $(seq 1 12); do
+            if docker push "$target"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 12 ]; then
+              exit 1
+            fi
+            echo "ACR authorization is still propagating; retrying image push."
+            sleep 10
+            az acr login --name "$registry_name"
+          done
+
       - name: Summarize
         if: always()
         run: |
@@ -458,6 +511,8 @@ jobs:
             echo "| OBO requested | \`${{ inputs.deploy_obo }}\` |"
             echo "| Images requested | \`${{ inputs.publish_images }}\` |"
             echo "| Platform images requested | \`${{ inputs.publish_platform_images }}\` |"
+            echo "| Auth proxy image requested | \`${{ inputs.publish_auth_proxy_image }}\` |"
+            echo "| Auth secrets requested | \`${{ inputs.configure_auth_secrets }}\` |"
             echo ""
-            echo "This workflow does not install Helm, change DNS or TLS, create application secrets, or run live acceptance tests."
+            echo "This workflow does not install Helm, change DNS or TLS, or run live acceptance tests."
           } >> "$GITHUB_STEP_SUMMARY"

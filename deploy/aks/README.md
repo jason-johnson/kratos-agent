@@ -141,6 +141,16 @@ The stable Key Vault object names are:
 - `kratos-oauth-client-id`
 - `kratos-oauth-client-secret`
 - `kratos-oauth-cookie-secret`
+
+The official OAuth2 Proxy v7.15.5 image is not deployed directly because its Go
+binary fails the fixable HIGH/CRITICAL release gate. Select
+`publish_auth_proxy_image` in the manual workflow to reproducibly rebuild the
+exact v7.15.5 release commit with the patched Go 1.26.10 toolchain and the
+minimal `golang.org/x/net` 0.60.0 security update. The workflow verifies the
+source archive checksum, uses digest-pinned builder and distroless runtime
+images, verifies the resulting binary identity, applies the standard Trivy
+gate, and publishes the approved result to the private
+`platform/oauth2-proxy` ACR repository.
 `FRONTEND_URL`
 registers the production origin on the OBO SPA client; omit it only when
 provisioning a local-only environment.

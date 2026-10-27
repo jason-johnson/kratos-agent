@@ -113,8 +113,8 @@ coordinates.
 - [x] Resolve the backend ACR digest for the successful commit SHA.
 - [x] Resolve the frontend ACR digest for the successful commit SHA.
 - [x] Retain the OBO digest for later use, but keep `obo.enabled: false`.
-- [ ] Select a supported OAuth2 Proxy release. Official v7.15.5 is currently
-  blocked by fixable HIGH findings.
+- [x] Select OAuth2 Proxy v7.15.5 rebuilt from its exact release commit with Go
+  1.26.10 and the minimal `golang.org/x/net` 0.60.0 security update.
 - [x] Scan official OAuth2 Proxy v7.15.5 with the same HIGH/CRITICAL gate; it
   failed and was not approved.
 - [ ] Mirror the auth-proxy image into ACR.
@@ -449,6 +449,12 @@ Rollback immediately if any of the following occurs:
 - Verified workflow run `40478568853` completed successfully. Confirmed exactly
   one currently valid named OAuth credential exists and all three required Key
   Vault secret objects are present and enabled without retrieving their values.
+- Confirmed v7.15.5 remains the latest official OAuth2 Proxy release. Rebuilding
+  the exact release with Go 1.26.10 removed its standard-library findings; a
+  scan then identified `CVE-2026-78669` in `golang.org/x/net` 0.59.0. Added a
+  reproducible, checksum-verified rebuild with only the fixed 0.60.0 dependency,
+  pinned builder/runtime digests, binary identity verification, and an explicit
+  scan-and-publish workflow gate.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
