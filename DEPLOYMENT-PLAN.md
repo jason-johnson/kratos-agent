@@ -437,8 +437,11 @@ Rollback immediately if any of the following occurs:
   operator group.
 - The next provisioning run created the assignment-required enterprise
   application, then Graph briefly returned not-found for its relationship
-  collection. Added propagation-aware relationship retries; operator-group
-  assignment remains to be verified by the next run.
+  collection. Added propagation-aware relationship retries.
+- Verified workflow run `40474008472` completed successfully. Confirmed live
+  that the deployment service principal owns the login application, the
+  enterprise application requires assignment, and exactly one assignment
+  grants access to `kratos-aks-operators`.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
