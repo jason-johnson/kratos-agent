@@ -54,7 +54,8 @@ spec:
             - --skip-provider-button=true
             - --cookie-secure=true
             - --cookie-samesite=lax
-            - --cookie-refresh=30m
+            - --session-cookie-minimal=true
+            - --cookie-refresh=0
             - --cookie-expire=8h
           ports:
             - name: http
