@@ -487,8 +487,14 @@ Rollback immediately if any of the following occurs:
   revision 6 uses that immutable digest and permits the Next.js bootstrap
   scripts through build-derived SHA-256 hashes rather than `unsafe-inline`.
   Confirmed assigned-group login and the Agent Reliability Engineer UI render
-  successfully. Remaining functional, restore, and rollback acceptance is still
-  pending.
+  successfully.
+- Verified workflow run `40563786711` built commit `9598457`, passed all
+  application image scans, and published the runtime-configuration backend
+  image. Helm revision 7 stages the baked ARE configuration into bounded
+  writable pod storage before Blob synchronization and fails startup when no
+  usable registry can load. Both replicas loaded the registry, and live browser
+  acceptance confirmed the system prompt and six skills are available.
+  Remaining functional, restore, and rollback acceptance is still pending.
 - Verified workflow run `39956733655` provisioned the Key Vault CSI changes,
   rebuilt and smoke-tested all application images, passed each image scan, and
   published immutable images for commit `9d0c95a`.
