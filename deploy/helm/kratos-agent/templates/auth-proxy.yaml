@@ -44,6 +44,7 @@ spec:
             - --provider=oidc
             - --oidc-issuer-url=https://login.microsoftonline.com/{{ required "azure.tenantId is required" .Values.azure.tenantId }}/v2.0
             - --scope=openid profile email
+            - --oidc-email-claim=preferred_username
             - --email-domain=*
             - --upstream=static://202
             - --http-address=0.0.0.0:4180
