@@ -354,7 +354,8 @@ Migrate with both data planes running in parallel:
    OAuth2 Proxy routes `/api` and `/health` to the backend and all other paths
    to the frontend while supplying trusted identity headers. The default-deny
    policy permits generated Gateway proxies to reach the managed control plane
-   only in `gateway.controlPlaneNamespace` on TCP 15012.
+   only in `gateway.controlPlaneNamespace` on TCP 15012 and exposes only their
+   public HTTP/HTTPS ports.
 5. Rerun the manual infrastructure workflow so the confidential Entra
    application contains both callback URIs.
 6. Exercise TLS, assigned and unassigned login, admin authorization, SSE,

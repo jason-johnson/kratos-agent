@@ -78,6 +78,22 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: {{ include "kratos.fullname" . }}-gateway-public-ingress
+  labels:
+    {{- include "kratos.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: {{ include "kratos.fullname" . }}-gateway
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: {{ include "kratos.fullname" . }}-gateway-control-plane-egress
   labels:
     {{- include "kratos.labels" . | nindent 4 }}
