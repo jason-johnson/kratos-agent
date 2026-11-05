@@ -113,6 +113,32 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: {{ include "kratos.fullname" . }}-gateway-backend-egress
+  labels:
+    {{- include "kratos.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: {{ include "kratos.fullname" . }}-gateway
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: auth
+      ports:
+        - { protocol: TCP, port: 4180 }
+    - to:
+        - podSelector:
+            matchLabels:
+              acme.cert-manager.io/http01-solver: "true"
+      ports:
+        - { protocol: TCP, port: 8089 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: {{ include "kratos.fullname" . }}-auth-upstream-ingress
   labels:
     {{- include "kratos.labels" . | nindent 4 }}

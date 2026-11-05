@@ -355,7 +355,8 @@ Migrate with both data planes running in parallel:
    to the frontend while supplying trusted identity headers. The default-deny
    policy permits generated Gateway proxies to reach the managed control plane
    only in `gateway.controlPlaneNamespace` on TCP 15012 and exposes only their
-   public HTTP/HTTPS ports.
+   public HTTP/HTTPS ports. Proxy backend egress is limited to OAuth2 Proxy on
+   TCP 4180 and cert-manager HTTP-01 solver pods on TCP 8089.
 5. Rerun the manual infrastructure workflow so the confidential Entra
    application contains both callback URIs.
 6. Exercise TLS, assigned and unassigned login, admin authorization, SSE,
