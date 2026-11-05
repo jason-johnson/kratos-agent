@@ -34,16 +34,28 @@ def _get_client_principal(request: Request) -> dict | None:
 def _get_trusted_proxy_principal(request: Request, settings: Settings) -> dict | None:
     if not settings.trusted_auth_proxy_enabled:
         return None
-    user_id = request.headers.get("x-auth-request-user", "").strip()
+    auth_request_user = request.headers.get("x-auth-request-user", "").strip()
+    forwarded_user = request.headers.get("x-forwarded-user", "").strip()
+    if auth_request_user and forwarded_user and auth_request_user != forwarded_user:
+        logger.warning("Trusted authentication proxy supplied conflicting user headers")
+        return None
+    user_id = auth_request_user or forwarded_user
     if not user_id:
         return None
-    groups = {group.strip() for group in request.headers.get("x-auth-request-groups", "").split(",") if group.strip()}
+    group_header = (
+        request.headers.get("x-auth-request-groups", "").strip()
+        or request.headers.get("x-forwarded-groups", "").strip()
+    )
+    groups = {group.strip() for group in group_header.split(",") if group.strip()}
     roles = ["authenticated"]
     if settings.trusted_auth_proxy_admin_group and settings.trusted_auth_proxy_admin_group in groups:
         roles.append("admin")
+    email = (
+        request.headers.get("x-auth-request-email", "").strip() or request.headers.get("x-forwarded-email", "").strip()
+    )
     return {
         "userId": user_id,
-        "userDetails": request.headers.get("x-auth-request-email", "").strip() or user_id,
+        "userDetails": email or user_id,
         "userRoles": roles,
     }
 

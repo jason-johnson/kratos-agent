@@ -55,6 +55,9 @@ param frontendUrl string = ''
 @description('Exact OAuth2 Proxy callback URI for the confidential login application')
 param authRedirectUri string = ''
 
+@description('Optional second OAuth2 Proxy callback URI used during a parallel Gateway API migration')
+param authAdditionalRedirectUri string = ''
+
 @minValue(1)
 @description('Foundry model deployment capacity in thousands of tokens per minute')
 param foundryModelCapacity int = 250
@@ -244,7 +247,10 @@ module authEntraApp './modules/auth-entra-app.bicep' = if (!empty(authRedirectUr
   params: {
     displayName: 'kratos-login-${environmentName}'
     uniqueName: 'kratos-login-${resourceToken}'
-    redirectUri: authRedirectUri
+    redirectUris: filter([
+      authRedirectUri
+      authAdditionalRedirectUri
+    ], uri => !empty(uri))
     ownerPrincipalId: principalId
   }
 }

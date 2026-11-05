@@ -23,3 +23,32 @@ spec:
           ingress:
             ingressClassName: {{ .Values.ingress.className }}
 {{- end }}
+{{- if and .Values.gateway.enabled .Values.gateway.letsEncrypt.enabled }}
+{{- $issuerName := required "gateway.clusterIssuer is required when Gateway Let's Encrypt is enabled" .Values.gateway.clusterIssuer }}
+{{- $email := required "gateway.letsEncrypt.email is required when Gateway Let's Encrypt is enabled" .Values.gateway.letsEncrypt.email }}
+{{- $accountSecret := required "gateway.letsEncrypt.privateKeySecretName is required when Gateway Let's Encrypt is enabled" .Values.gateway.letsEncrypt.privateKeySecretName }}
+{{- $environment := .Values.gateway.letsEncrypt.environment }}
+{{- if not (has $environment (list "staging" "production")) }}
+{{- fail "gateway.letsEncrypt.environment must be staging or production" }}
+{{- end }}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ $issuerName }}
+  labels:
+    {{- include "kratos.labels" . | nindent 4 }}
+spec:
+  acme:
+    email: {{ $email | quote }}
+    server: {{ ternary "https://acme-v02.api.letsencrypt.org/directory" "https://acme-staging-v02.api.letsencrypt.org/directory" (eq $environment "production") }}
+    privateKeySecretRef:
+      name: {{ $accountSecret }}
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: {{ include "kratos.fullname" . }}-gateway
+                namespace: {{ .Release.Namespace }}
+                kind: Gateway
+{{- end }}

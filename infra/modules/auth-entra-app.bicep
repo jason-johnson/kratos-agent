@@ -9,8 +9,8 @@ param displayName string
 param uniqueName string
 
 @minLength(1)
-@description('Exact OAuth2 Proxy callback URI')
-param redirectUri string
+@description('Exact OAuth2 Proxy callback URIs')
+param redirectUris array
 
 @description('Object ID of the deployment service principal that owns the application')
 param ownerPrincipalId string
@@ -40,7 +40,7 @@ resource application 'Microsoft.Graph/applications@v1.0' = {
     }
   ]
   web: {
-    redirectUris: [redirectUri]
+    redirectUris: redirectUris
     implicitGrantSettings: {
       enableAccessTokenIssuance: false
       enableIdTokenIssuance: false

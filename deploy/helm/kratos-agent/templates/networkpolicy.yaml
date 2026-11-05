@@ -53,6 +53,54 @@ spec:
         - { protocol: TCP, port: 8080 }
         - { protocol: TCP, port: 8000 }
         - { protocol: TCP, port: 4180 }
+{{- if .Values.gateway.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kratos.fullname" . }}-gateway-auth-ingress
+  labels:
+    {{- include "kratos.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: auth
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              gateway.networking.k8s.io/gateway-name: {{ include "kratos.fullname" . }}-gateway
+      ports:
+        - { protocol: TCP, port: 4180 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kratos.fullname" . }}-auth-upstream-ingress
+  labels:
+    {{- include "kratos.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [{{ .Release.Name }}]
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [backend, frontend]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: auth
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 8000 }
+{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -117,6 +165,20 @@ spec:
       app.kubernetes.io/component: auth
   policyTypes: [Egress]
   egress:
+    {{- if .Values.gateway.enabled }}
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/instance
+                operator: In
+                values: [{{ .Release.Name }}]
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [backend, frontend]
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 8000 }
+    {{- end }}
     - ports:
         - { protocol: TCP, port: 443 }
 {{- end }}

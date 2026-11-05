@@ -44,6 +44,9 @@
     "authRedirectUri": {
       "value": "${AUTH_REDIRECT_URI=}"
     },
+    "authAdditionalRedirectUri": {
+      "value": "${AUTH_ADDITIONAL_REDIRECT_URI=}"
+    },
     "foundryModelCapacity": {
       "value": "${FOUNDRY_MODEL_CAPACITY=250}"
     }

@@ -58,6 +58,19 @@ authProxy:
       cpu: 250m
       memory: 256Mi
 
+gateway:
+  enabled: false
+  className: approuting-istio
+  host: ""
+  azureDnsLabel: ""
+  tlsSecretName: kratos-agent-gateway-tls
+  clusterIssuer: ""
+  letsEncrypt:
+    enabled: false
+    environment: production
+    email: ""
+    privateKeySecretName: kratos-agent-gateway-letsencrypt-account
+
 workloadIdentity:
   backendClientId: ""
   authClientId: ""

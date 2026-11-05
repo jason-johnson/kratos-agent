@@ -96,3 +96,46 @@ async def test_trusted_proxy_requires_user_header():
         )
 
     assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_trusted_proxy_accepts_oauth_reverse_proxy_headers():
+    request = _request(None)
+    request.headers.update(
+        {
+            "x-forwarded-user": "gateway-operator",
+            "x-forwarded-email": "gateway@example.invalid",
+            "x-forwarded-groups": "responders,are-admins",
+        }
+    )
+
+    principal = await require_admin_user(
+        request,
+        Settings(
+            admin_auth_enabled="true",
+            trusted_auth_proxy_enabled=True,
+            trusted_auth_proxy_admin_group="are-admins",
+        ),
+    )
+
+    assert principal["userId"] == "gateway-operator"
+    assert principal["userDetails"] == "gateway@example.invalid"
+
+
+@pytest.mark.asyncio
+async def test_trusted_proxy_rejects_conflicting_identity_headers():
+    request = _request(None)
+    request.headers.update(
+        {
+            "x-auth-request-user": "nginx-user",
+            "x-forwarded-user": "gateway-user",
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await require_authenticated_user(
+            request,
+            Settings(admin_auth_enabled="true", trusted_auth_proxy_enabled=True),
+        )
+
+    assert exc.value.status_code == 401

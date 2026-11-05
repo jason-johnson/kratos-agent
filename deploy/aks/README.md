@@ -335,6 +335,36 @@ helm upgrade --install kratos-agent deploy/helm/kratos-agent \
   --timeout 15m
 ```
 
+### Migrate managed NGINX to Gateway API
+
+The managed NGINX application-routing path is a temporary rollback surface.
+Microsoft support for its critical security patches ends in November 2026.
+Migrate with both data planes running in parallel:
+
+1. Provision the managed standard Gateway API CRDs and the `approuting-istio`
+   implementation through Bicep.
+   Restart cert-manager after the managed CRDs are ready because cert-manager
+   detects Gateway API support only during startup.
+2. Choose a new Azure regional DNS label and corresponding
+   `cloudapp.azure.com` hostname. Keep both values outside Git.
+3. Set `gateway.enabled`, `gateway.azureDnsLabel`, `gateway.host`,
+   `gateway.clusterIssuer`, and `gateway.letsEncrypt` in the protected Helm
+   values. Keep `ingress.enabled` true.
+4. Install the chart atomically. The Gateway routes only to OAuth2 Proxy;
+   OAuth2 Proxy routes `/api` and `/health` to the backend and all other paths
+   to the frontend while supplying trusted identity headers.
+5. Rerun the manual infrastructure workflow so the confidential Entra
+   application contains both callback URIs.
+6. Exercise TLS, assigned and unassigned login, admin authorization, SSE,
+   user-input responses, cancellation, refresh/reconnect, pod replacement, and
+   rollback against the new hostname.
+7. Remove the legacy Ingress resources and managed NGINX controller only after
+   the Gateway path remains stable. Until then, rollback is the original
+   hostname and Helm values.
+
+Do not commit either hostname, rendered manifests, callback URIs, or protected
+Gateway values.
+
 ## 5. Acceptance and rollback
 
 Verify before sending production traffic:

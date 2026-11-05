@@ -149,6 +149,9 @@ metadata:
     {{- include "kratos.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
+  {{- if .Values.gateway.enabled }}
+  sessionAffinity: ClientIP
+  {{- end }}
   selector:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: backend

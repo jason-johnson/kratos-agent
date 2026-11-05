@@ -46,7 +46,19 @@ spec:
             - --scope=openid profile email
             - --oidc-email-claim=preferred_username
             - --email-domain=*
+            {{- if .Values.gateway.enabled }}
+            - --upstream=http://{{ include "kratos.fullname" . }}-backend:8000/api
+            - --upstream=http://{{ include "kratos.fullname" . }}-backend:8000/api/
+            - --upstream=http://{{ include "kratos.fullname" . }}-backend:8000/health
+            - --upstream=http://{{ include "kratos.fullname" . }}-backend:8000/health/
+            - --upstream=http://{{ include "kratos.fullname" . }}-frontend:8080/
+            - --upstream-timeout=3600s
+            - --flush-interval=1s
+            - --pass-user-headers=true
+            - --pass-basic-auth=false
+            {{- else }}
             - --upstream=static://202
+            {{- end }}
             - --http-address=0.0.0.0:4180
             - --reverse-proxy=true
             - --set-xauthrequest=true
@@ -115,6 +127,9 @@ metadata:
     {{- include "kratos.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
+  {{- if .Values.gateway.enabled }}
+  sessionAffinity: ClientIP
+  {{- end }}
   selector:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: auth

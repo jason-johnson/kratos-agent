@@ -107,7 +107,7 @@ resource oboIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-3
   name: oboIdentityName
 }
 
-resource aks 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
+resource aks 'Microsoft.ContainerService/managedClusters@2026-03-01' = {
   name: name
   location: location
   tags: tags
@@ -193,8 +193,16 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
       }
     }
     ingressProfile: {
+      gatewayAPI: {
+        installation: 'Standard'
+      }
       webAppRouting: {
         enabled: true
+        gatewayAPIImplementations: {
+          appRoutingIstio: {
+            mode: 'Enabled'
+          }
+        }
       }
     }
     networkProfile: {

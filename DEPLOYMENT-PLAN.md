@@ -59,13 +59,14 @@ application simplification work remains in [PLAN.md](PLAN.md).
 | DP-004 | Mirror a patched official auth-proxy image into ACR | Confirmed | Rebuild the exact official v7.15.5 source with the minimal fixed `golang.org/x/net` dependency, verify its identity and tests, pass the unchanged scan gate, and publish it privately. |
 | DP-005 | Grant AKS operator access to a dedicated Entra group | Confirmed | The dedicated group exists; its object ID remains protected and is parameterized through Bicep. |
 | DP-006 | Deliver secrets through Key Vault CSI | Confirmed | Separate backend and auth identities are implemented. The OAuth objects are configured and synchronized; ServiceNow is disabled without placeholders for the initial release. |
-| DP-007 | Use the Web Application Routing ingress class | Confirmed | Already enabled on the cluster and selected by the chart. |
+| DP-007 | Use the Web Application Routing ingress class | Superseded | Retained only as the rollback path during DP-014 migration. |
 | DP-008 | Require TLS and Entra OIDC before user traffic | Confirmed | No unauthenticated temporary public deployment. |
 | DP-009 | Install and upgrade Helm manually with `--atomic` | Confirmed | Failed releases must roll back automatically. |
 | DP-010 | Stop AKS when deployment work pauses | Proposed | Reduces non-production compute cost; start it before Helm or acceptance work. |
 | DP-011 | Use Workload Identity and OTLP for Application Insights | Confirmed | Do not create or deliver an Application Insights connection-string secret. |
 | DP-012 | Use an Azure regional DNS label and Let's Encrypt | Confirmed | Use the existing Application Routing load balancer with a GA `cloudapp.azure.com` hostname and cert-manager-managed TLS. No purchased domain, Azure DNS zone, or preview approval is required. |
 | DP-013 | Install cert-manager separately with mirrored immutable images | Confirmed | The manual workflow scans and mirrors cert-manager v1.21.3 components; the operator installs the official versioned chart with protected ACR digests. |
+| DP-014 | Migrate from managed NGINX to managed AKS Gateway API | Confirmed | Run both data planes in parallel, route the Gateway through OAuth2 Proxy, use a new free regional hostname, and remove NGINX only after auth, SSE, resilience, and rollback acceptance. |
 
 ## Required operator decisions
 

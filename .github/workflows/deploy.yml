@@ -150,6 +150,7 @@ jobs:
 
           if [ -z "$cluster_name" ]; then
             azd env set AUTH_REDIRECT_URI ""
+            azd env set AUTH_ADDITIONAL_REDIRECT_URI ""
             exit 0
           fi
 
@@ -169,16 +170,24 @@ jobs:
 
           if [ "${#public_hosts[@]}" -eq 0 ]; then
             azd env set AUTH_REDIRECT_URI ""
+            azd env set AUTH_ADDITIONAL_REDIRECT_URI ""
             exit 0
           fi
-          if [ "${#public_hosts[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one AKS public hostname."
+          if [ "${#public_hosts[@]}" -gt 2 ]; then
+            echo "::error::Expected no more than two AKS public hostnames during the Gateway migration."
             exit 1
           fi
 
           public_host="${public_hosts[0]}"
           echo "::add-mask::$public_host"
           azd env set AUTH_REDIRECT_URI "https://${public_host}/oauth2/callback"
+          if [ "${#public_hosts[@]}" -eq 2 ]; then
+            additional_public_host="${public_hosts[1]}"
+            echo "::add-mask::$additional_public_host"
+            azd env set AUTH_ADDITIONAL_REDIRECT_URI "https://${additional_public_host}/oauth2/callback"
+          else
+            azd env set AUTH_ADDITIONAL_REDIRECT_URI ""
+          fi
 
       - name: Provision infrastructure
         run: azd provision --no-prompt
