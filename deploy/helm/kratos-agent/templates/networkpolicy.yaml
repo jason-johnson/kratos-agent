@@ -78,6 +78,25 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: {{ include "kratos.fullname" . }}-gateway-control-plane-egress
+  labels:
+    {{- include "kratos.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: {{ include "kratos.fullname" . }}-gateway
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.gateway.controlPlaneNamespace }}
+      ports:
+        - { protocol: TCP, port: 15012 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: {{ include "kratos.fullname" . }}-auth-upstream-ingress
   labels:
     {{- include "kratos.labels" . | nindent 4 }}

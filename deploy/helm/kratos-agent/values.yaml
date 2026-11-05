@@ -61,6 +61,7 @@ authProxy:
 gateway:
   enabled: false
   className: approuting-istio
+  controlPlaneNamespace: aks-istio-system
   host: ""
   azureDnsLabel: ""
   tlsSecretName: kratos-agent-gateway-tls

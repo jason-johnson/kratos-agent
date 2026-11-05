@@ -352,7 +352,9 @@ Migrate with both data planes running in parallel:
    values. Keep `ingress.enabled` true.
 4. Install the chart atomically. The Gateway routes only to OAuth2 Proxy;
    OAuth2 Proxy routes `/api` and `/health` to the backend and all other paths
-   to the frontend while supplying trusted identity headers.
+   to the frontend while supplying trusted identity headers. The default-deny
+   policy permits generated Gateway proxies to reach the managed control plane
+   only in `gateway.controlPlaneNamespace` on TCP 15012.
 5. Rerun the manual infrastructure workflow so the confidential Entra
    application contains both callback URIs.
 6. Exercise TLS, assigned and unassigned login, admin authorization, SSE,
