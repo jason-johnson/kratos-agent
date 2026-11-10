@@ -534,3 +534,8 @@ Rollback immediately if any of the following occurs:
   the first prompt of a replacement SDK session while keeping the displayed
   prompt unchanged. This fix is validated by 122 backend tests and Ruff but is
   not yet built, published, deployed, or accepted live.
+- Workflow run `42791338968` built and smoke-tested the context-restoration
+  image, then correctly blocked publication when the backend scan found the
+  newly disclosed fixable HIGH `CVE-2026-49272` in OAuthLib 4.0.0. Raised the
+  production lock and security floor to the fixed OAuthLib 4.0.1 release;
+  publication and live acceptance remain pending.

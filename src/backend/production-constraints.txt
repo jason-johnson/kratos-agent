@@ -2,4 +2,4 @@
 filelock>=4.2.1
 gitpython>=3.2.1
 nltk>=3.10.4
-oauthlib>=4.0.0
+oauthlib>=4.0.1
