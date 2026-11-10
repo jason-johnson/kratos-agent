@@ -1,11 +1,12 @@
 """Tests for the Copilot SDK agent service."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.config import Settings
-from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent
+from app.models import ContentEvent, ErrorEvent, Message, MessageRole, ThoughtEvent, ToolCallEvent
 from app.services.copilot_agent import CopilotAgent, _reasoning_tokens
 
 
@@ -324,6 +325,70 @@ async def test_copilot_agent_exception_drops_session(copilot_agent):
         assert events[0].code == "AGENT_ERROR"
         # Session should be dropped
         assert "conv-fail" not in copilot_agent._sessions
+
+
+@pytest.mark.asyncio
+async def test_replacement_session_restores_persisted_history(copilot_agent):
+    now = datetime.now(UTC)
+    copilot_agent._sessions_needing_history.add("conv-restored")
+    copilot_agent._cosmos_service = AsyncMock()
+    copilot_agent._cosmos_service.list_messages.return_value = [
+        Message(
+            id="user-1",
+            conversationId="conv-restored",
+            role=MessageRole.USER,
+            content="Investigate the last 30 minutes.",
+            createdAt=now,
+        ),
+        Message(
+            id="assistant-1",
+            conversationId="conv-restored",
+            role=MessageRole.ASSISTANT,
+            content="Four workloads were found; auth and backend telemetry failed.",
+            createdAt=now + timedelta(seconds=1),
+        ),
+        Message(
+            id="user-2",
+            conversationId="conv-restored",
+            role=MessageRole.USER,
+            content="Summarize the prior result without tools.",
+            createdAt=now + timedelta(seconds=2),
+        ),
+    ]
+
+    prompt, display_prompt = await copilot_agent._prompt_with_persisted_history(
+        "conv-restored",
+        "Summarize the prior result without tools.",
+    )
+
+    assert '"role": "assistant"' in prompt
+    assert "auth and backend telemetry failed" in prompt
+    assert prompt.count("Summarize the prior result without tools.") == 1
+    assert display_prompt == "Summarize the prior result without tools."
+    assert "conv-restored" not in copilot_agent._sessions_needing_history
+
+
+@pytest.mark.asyncio
+async def test_new_conversation_does_not_wrap_first_message(copilot_agent):
+    copilot_agent._sessions_needing_history.add("conv-new")
+    copilot_agent._cosmos_service = AsyncMock()
+    copilot_agent._cosmos_service.list_messages.return_value = [
+        Message(
+            id="user-1",
+            conversationId="conv-new",
+            role=MessageRole.USER,
+            content="Start a new investigation.",
+            createdAt=datetime.now(UTC),
+        )
+    ]
+
+    prompt, display_prompt = await copilot_agent._prompt_with_persisted_history(
+        "conv-new",
+        "Start a new investigation.",
+    )
+
+    assert prompt == "Start a new investigation."
+    assert display_prompt is None
 
 
 def test_provider_config_uses_responses_wire_api(settings):

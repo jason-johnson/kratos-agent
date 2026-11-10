@@ -518,3 +518,19 @@ Rollback immediately if any of the following occurs:
   acceptance.
 - Selected the existing deployment service principal as the Entra login
   application owner and verified its required Microsoft Graph permissions.
+
+### 2026-11-10
+
+- Restarted AKS after confirming the cluster was stopped. All four application
+  Deployments recovered to two ready replicas, both protected ingress paths
+  returned the expected authentication redirect, both Gateway routes were
+  accepted with resolved references, and both certificates were ready.
+- Gateway refresh/context-restoration acceptance failed after the restart. The
+  UI loaded the persisted Cosmos messages, but the next turn reported that the
+  prior investigation was unavailable. Live backend evidence showed Cosmos and
+  the sessions container were reachable, the persisted SDK session failed to
+  resume, and a blank replacement session was created.
+- Added a bounded fallback that restores persisted user/assistant messages into
+  the first prompt of a replacement SDK session while keeping the displayed
+  prompt unchanged. This fix is validated by 122 backend tests and Ruff but is
+  not yet built, published, deployed, or accepted live.
