@@ -49,6 +49,8 @@ jobs:
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          PRIVATE_PYPI_INDEX_URL: ${{ secrets.PRIVATE_PYPI_INDEX_URL }}
+          PUBLISH_IMAGES: ${{ inputs.publish_images }}
         run: |
           missing=()
           [ -n "$AZURE_CLIENT_ID" ] || missing+=(AZURE_CLIENT_ID)
@@ -56,6 +58,9 @@ jobs:
           [ -n "$AZURE_SUBSCRIPTION_ID" ] || missing+=(AZURE_SUBSCRIPTION_ID)
           [ -n "$AZURE_LOCATION" ] || missing+=(AZURE_LOCATION)
           [ -n "$AKS_OPERATOR_PRINCIPAL_ID" ] || missing+=(AKS_OPERATOR_PRINCIPAL_ID)
+          if [ "$PUBLISH_IMAGES" = "true" ]; then
+            [ -n "$PRIVATE_PYPI_INDEX_URL" ] || missing+=(PRIVATE_PYPI_INDEX_URL)
+          fi
           if [ "${#missing[@]}" -ne 0 ]; then
             echo "::error::Missing ktaks environment secrets: ${missing[*]}"
             exit 1
@@ -236,6 +241,8 @@ jobs:
 
       - name: Configure private package feeds
         if: inputs.publish_images
+        env:
+          PRIVATE_PYPI_INDEX_URL: ${{ secrets.PRIVATE_PYPI_INDEX_URL }}
         run: |
           ado_token="$(
             az account get-access-token \
@@ -246,7 +253,20 @@ jobs:
           test -n "$ado_token"
           echo "::add-mask::$ado_token"
 
-          python_index="https://azure:${ado_token}@pkgs.dev.azure.com/jasojohnson-mcap2/_packaging/PythonFeed/pypi/simple/"
+          python_index="$(
+            PRIVATE_PYPI_INDEX_URL="$PRIVATE_PYPI_INDEX_URL" \
+            ADO_TOKEN="$ado_token" \
+            python - <<'PY'
+          import os
+          from urllib.parse import quote, urlsplit, urlunsplit
+
+          feed = urlsplit(os.environ["PRIVATE_PYPI_INDEX_URL"])
+          if feed.scheme != "https" or not feed.hostname or feed.username or feed.password:
+              raise SystemExit("PRIVATE_PYPI_INDEX_URL must be an uncredentialed HTTPS URL")
+          credentials = f"azure:{quote(os.environ['ADO_TOKEN'], safe='')}"
+          print(urlunsplit((feed.scheme, f"{credentials}@{feed.netloc}", feed.path, feed.query, feed.fragment)))
+          PY
+          )"
           echo "::add-mask::$python_index"
           printf '%s' "$python_index" > "$RUNNER_TEMP/pip-index-url"
           chmod 0600 "$RUNNER_TEMP/pip-index-url"

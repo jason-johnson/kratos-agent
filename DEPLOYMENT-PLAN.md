@@ -539,3 +539,15 @@ Rollback immediately if any of the following occurs:
   newly disclosed fixable HIGH `CVE-2026-49272` in OAuthLib 4.0.0. Raised the
   production lock and security floor to the fixed OAuthLib 4.0.1 release;
   publication and live acceptance remain pending.
+- The private feed's healthy PyPI upstream had not yet saved OAuthLib 4.0.1.
+  Cached and verified the fixed wheel through the private feed using an
+  authorized Azure identity; no public restore path was added.
+- Workflow run `42826536344` then built and smoke-tested the images, passed all
+  application image scans, and published immutable images for commit
+  `9f18540`. Helm revision 14 deploys those backend and frontend digests. All
+  four Deployments are at two ready replicas, both protected ingress paths
+  return the expected authentication redirect, and the backend reports
+  OAuthLib 4.0.1.
+- Conversation refresh/context restoration still requires assigned-user live
+  acceptance. The integrated browser reached Entra sign-in but had no
+  authenticated user session.

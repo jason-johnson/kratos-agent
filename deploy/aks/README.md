@@ -109,6 +109,10 @@ Create a GitHub environment named `ktaks` with these secrets:
 - `AZURE_TENANT_ID` - its tenant ID; and
 - `AZURE_SUBSCRIPTION_ID` - the approved target subscription; and
 - `AKS_OPERATOR_PRINCIPAL_ID` - object ID of the approved Entra operator group
+  used for assigned-user access; and
+- `PRIVATE_PYPI_INDEX_URL` - the uncredentialed HTTPS index URL for the approved
+  private Python feed. The workflow injects its short-lived Azure DevOps token
+  at runtime; do not include credentials in this secret.
   granted AKS RBAC Cluster Admin for manual Helm operations.
 
 Set its `AZURE_LOCATION` environment variable to `swedencentral`.
