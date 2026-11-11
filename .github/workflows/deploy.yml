@@ -49,7 +49,7 @@ jobs:
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          PRIVATE_PYPI_INDEX_URL: ${{ secrets.PRIVATE_PYPI_INDEX_URL }}
+          PRIVATE_PYPI_INDEX_URL: ${{ vars.PRIVATE_PYPI_INDEX_URL }}
           PUBLISH_IMAGES: ${{ inputs.publish_images }}
         run: |
           missing=()
@@ -242,7 +242,7 @@ jobs:
       - name: Configure private package feeds
         if: inputs.publish_images
         env:
-          PRIVATE_PYPI_INDEX_URL: ${{ secrets.PRIVATE_PYPI_INDEX_URL }}
+          PRIVATE_PYPI_INDEX_URL: ${{ vars.PRIVATE_PYPI_INDEX_URL }}
         run: |
           ado_token="$(
             az account get-access-token \
