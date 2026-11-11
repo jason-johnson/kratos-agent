@@ -548,6 +548,8 @@ Rollback immediately if any of the following occurs:
   four Deployments are at two ready replicas, both protected ingress paths
   return the expected authentication redirect, and the backend reports
   OAuthLib 4.0.1.
-- Conversation refresh/context restoration still requires assigned-user live
-  acceptance. The integrated browser reached Entra sign-in but had no
-  authenticated user session.
+- Assigned-user Gateway refresh/context restoration passed. After refreshing
+  the existing conversation, the agent answered the no-tools recall prompt with
+  all four previously discovered workloads and correctly identified the auth
+  and backend Application Insights failures. Backend logs recorded one
+  persisted-history restoration for the accepted turn.
