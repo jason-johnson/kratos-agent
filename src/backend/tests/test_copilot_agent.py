@@ -62,6 +62,21 @@ def test_cancel_aborts_only_active_turn(copilot_agent):
     session.abort.assert_called_once_with()
 
 
+def test_cancel_releases_pending_user_input(copilot_agent):
+    session = MagicMock()
+    future = MagicMock()
+    future.done.return_value = False
+    copilot_agent._sessions["active"] = session
+    copilot_agent._active_runs.add("active")
+    copilot_agent._user_input_futures["request-1"] = future
+    copilot_agent._user_input_context["request-1"] = ("active", "Which namespace?")
+
+    assert copilot_agent.cancel("active") is True
+
+    session.abort.assert_called_once_with()
+    future.set_result.assert_called_once_with("The user cancelled the active turn.")
+
+
 @pytest.mark.asyncio
 async def test_copilot_agent_start_stop(settings):
     """Test CopilotClient start and stop lifecycle."""

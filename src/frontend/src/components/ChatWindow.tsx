@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Conversation, ChatMessage, ToolCallInfo, RunStats, Attachment } from "@/types";
-import { streamAgentChat, getConversationMessages, respondToUserInput, updateConversation } from "@/lib/api";
+import { cancelAgent, streamAgentChat, getConversationMessages, respondToUserInput, updateConversation } from "@/lib/api";
 import { MessageBubble } from "./MessageBubble";
 import { OperationalContextBar } from "./OperationalContextBar";
 import { ThoughtChain } from "./ThoughtChain";
@@ -96,6 +96,8 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
   const [userInputAnswer, setUserInputAnswer] = useState("");
   const [userInputSubmitting, setUserInputSubmitting] = useState(false);
   const [userInputError, setUserInputError] = useState("");
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  const [cancelError, setCancelError] = useState("");
   const [approvalRecorded, setApprovalRecorded] = useState(false);
   const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
   // True when an answer is being generated on the backend but is not being
@@ -137,6 +139,8 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
     setUserInputAnswer("");
     setUserInputSubmitting(false);
     setUserInputError("");
+    setCancelSubmitting(false);
+    setCancelError("");
     setApprovalRecorded(false);
 
     const applyLoaded = (loaded: ChatMessage[]) => {
@@ -225,6 +229,8 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
     setUserInputPrompt(null);
     setUserInputAnswer("");
     setUserInputError("");
+    setCancelSubmitting(false);
+    setCancelError("");
     setApprovalRecorded(false);
     thoughtsRef.current = [];
     toolCallsRef.current = [];
@@ -397,6 +403,18 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
       },
       currentAttachments
     );
+  };
+
+  const handleCancel = async () => {
+    if (!isStreaming || cancelSubmitting) return;
+    setCancelSubmitting(true);
+    setCancelError("");
+    try {
+      await cancelAgent(conversation.id);
+    } catch (error) {
+      setCancelError(error instanceof Error ? error.message : "Failed to cancel agent");
+      setCancelSubmitting(false);
+    }
   };
 
   // Auto-send initial message (e.g. from sample question click)
@@ -714,24 +732,43 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
                 target.style.height = Math.min(target.scrollHeight, 200) + "px";
               }}
             />
-            <button
-              onClick={() => handleSend()}
-              disabled={isStreaming || !input.trim()}
-              aria-label={isStreaming ? "Sending message" : "Send message"}
-              className="p-2.5 bg-accent text-accent-fg rounded-xl transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed shadow-md hover:shadow-lg active:scale-95"
-            >
-              {isStreaming ? (
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : (
+            {isStreaming ? (
+              <button
+                onClick={handleCancel}
+                disabled={cancelSubmitting}
+                aria-label={cancelSubmitting ? "Cancelling response" : "Cancel response"}
+                title={cancelSubmitting ? "Cancelling…" : "Cancel response"}
+                className="p-2.5 bg-red-600 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:bg-red-700 hover:shadow-lg active:scale-95"
+              >
+                {cancelSubmitting ? (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="6" y="6" width="12" height="12" rx="1" />
+                  </svg>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={() => handleSend()}
+                disabled={!input.trim()}
+                aria-label="Send message"
+                className="p-2.5 bg-accent text-accent-fg rounded-xl transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed shadow-md hover:shadow-lg active:scale-95"
+              >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
                 </svg>
-              )}
-            </button>
+              </button>
+            )}
           </div>
+          {cancelError && (
+            <p className="mt-2 px-2 text-sm text-red-600 dark:text-red-400" role="alert">
+              {cancelError}
+            </p>
+          )}
         </div>
       </div>
     </div>

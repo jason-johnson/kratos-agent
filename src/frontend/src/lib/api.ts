@@ -136,6 +136,17 @@ export async function respondToUserInput(
   }
 }
 
+export async function cancelAgent(conversationId: string): Promise<void> {
+  const response = await fetch(`${getApiUrl()}/api/agent/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ conversationId }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to cancel agent: ${response.status}`);
+  }
+}
+
 export async function getOperationalContext(): Promise<OperationalContext> {
   const response = await fetch(`${getApiUrl()}/api/context`);
   if (!response.ok) {

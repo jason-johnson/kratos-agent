@@ -811,6 +811,10 @@ class CopilotAgent:
         if session is None:
             return False
         session.abort()
+        for request_id, future in list(self._user_input_futures.items()):
+            context = self._user_input_context.get(request_id)
+            if context and context[0] == conversation_id and not future.done():
+                future.set_result("The user cancelled the active turn.")
         return True
 
     def get_sdk_session_id(self, conversation_id: str) -> str | None:
