@@ -219,6 +219,6 @@ async def cancel_agent(body: AgentCancelRequest, request: Request) -> JSONRespon
     if await cosmos.get_conversation(body.conversationId, user_id) is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     copilot_agent = request.app.state.copilot_agent
-    if not copilot_agent.cancel(body.conversationId):
+    if not await copilot_agent.cancel(body.conversationId):
         raise HTTPException(status_code=404, detail="Conversation has no active agent session")
     return JSONResponse(content={"cancelled": True})

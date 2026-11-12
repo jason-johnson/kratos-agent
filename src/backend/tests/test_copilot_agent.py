@@ -50,20 +50,22 @@ def test_local_mode_retains_synthetic_m365_mcp(settings):
     assert agent._filter_synthetic_mcp_servers(servers) == servers
 
 
-def test_cancel_aborts_only_active_turn(copilot_agent):
-    session = MagicMock()
+@pytest.mark.asyncio
+async def test_cancel_aborts_only_active_turn(copilot_agent):
+    session = AsyncMock()
     copilot_agent._sessions["active"] = session
     copilot_agent._sessions["idle"] = MagicMock()
     copilot_agent._active_runs.add("active")
 
-    assert copilot_agent.cancel("active") is True
-    assert copilot_agent.cancel("idle") is False
-    assert copilot_agent.cancel("missing") is False
-    session.abort.assert_called_once_with()
+    assert await copilot_agent.cancel("active") is True
+    assert await copilot_agent.cancel("idle") is False
+    assert await copilot_agent.cancel("missing") is False
+    session.abort.assert_awaited_once_with()
 
 
-def test_cancel_releases_pending_user_input(copilot_agent):
-    session = MagicMock()
+@pytest.mark.asyncio
+async def test_cancel_releases_pending_user_input(copilot_agent):
+    session = AsyncMock()
     future = MagicMock()
     future.done.return_value = False
     copilot_agent._sessions["active"] = session
@@ -71,9 +73,9 @@ def test_cancel_releases_pending_user_input(copilot_agent):
     copilot_agent._user_input_futures["request-1"] = future
     copilot_agent._user_input_context["request-1"] = ("active", "Which namespace?")
 
-    assert copilot_agent.cancel("active") is True
+    assert await copilot_agent.cancel("active") is True
 
-    session.abort.assert_called_once_with()
+    session.abort.assert_awaited_once_with()
     future.set_result.assert_called_once_with("The user cancelled the active turn.")
 
 

@@ -41,7 +41,7 @@ class _FakeAgent:
     def resolve_user_input(self, request_id: str, answer: str, conversation_id: str) -> bool:
         return request_id == "active" and answer == "approve" and conversation_id == "conv-1"
 
-    def cancel(self, conversation_id: str) -> bool:
+    async def cancel(self, conversation_id: str) -> bool:
         return conversation_id == "running"
 
     def get_run_stats(self, conversation_id: str) -> dict[str, int]:

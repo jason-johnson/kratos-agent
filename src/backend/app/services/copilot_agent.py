@@ -803,14 +803,14 @@ class CopilotAgent:
             return True
         return False
 
-    def cancel(self, conversation_id: str) -> bool:
+    async def cancel(self, conversation_id: str) -> bool:
         """Abort the active SDK turn for a conversation."""
         if conversation_id not in self._active_runs:
             return False
         session = self._sessions.get(conversation_id)
         if session is None:
             return False
-        session.abort()
+        await session.abort()
         for request_id, future in list(self._user_input_futures.items()):
             context = self._user_input_context.get(request_id)
             if context and context[0] == conversation_id and not future.done():
