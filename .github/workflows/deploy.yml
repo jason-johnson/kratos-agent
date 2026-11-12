@@ -229,6 +229,8 @@ jobs:
 
       - name: Verify private package sources
         if: inputs.publish_images
+        env:
+          PRIVATE_PYPI_INDEX_URL: ${{ vars.PRIVATE_PYPI_INDEX_URL }}
         run: python .github/scripts/check-package-sources.py
 
       - name: Refresh Azure sign-in for image publication

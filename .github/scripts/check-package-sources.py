@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -15,6 +17,14 @@ ALLOWED_NPM_HOST_SUFFIXES = (
     ".pkgs.dev.azure.com",
     ".pkgs.visualstudio.com",
 )
+REGISTRY_PATTERN = re.compile(r'source = \{ registry = "([^"]+)" \}')
+
+
+def normalize_index_url(value: str) -> str:
+    parsed = urlparse(value)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("PRIVATE_PYPI_INDEX_URL must be an uncredentialed HTTPS URL")
+    return parsed._replace(path=parsed.path.rstrip("/") + "/", params="", query="", fragment="").geturl()
 
 
 def iter_resolved_urls(value: Any) -> list[str]:
@@ -41,6 +51,17 @@ def main() -> None:
             errors.append(f"{uv_lock.relative_to(ROOT)} contains forbidden host {host}")
     if "pkgs.dev.azure.com" not in uv_text:
         errors.append(f"{uv_lock.relative_to(ROOT)} does not use Azure Artifacts")
+
+    configured_index = os.environ.get("PRIVATE_PYPI_INDEX_URL", "")
+    if configured_index:
+        try:
+            normalized_configured_index = normalize_index_url(configured_index)
+        except ValueError as exc:
+            errors.append(str(exc))
+        else:
+            locked_registries = {normalize_index_url(value) for value in REGISTRY_PATTERN.findall(uv_text)}
+            if normalized_configured_index not in locked_registries:
+                errors.append("PRIVATE_PYPI_INDEX_URL does not match the approved registry in src/backend/uv.lock")
 
     for relative_path in ("src/frontend/package-lock.json", "mocks/package-lock.json"):
         path = ROOT / relative_path
