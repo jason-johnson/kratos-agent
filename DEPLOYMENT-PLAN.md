@@ -270,21 +270,21 @@ Goal: prove the deployed ARE works and preserves every authorization boundary.
 
 ### Platform and authentication
 
-- [ ] Frontend `/healthz` succeeds over TLS.
-- [ ] Backend liveness and readiness endpoints succeed.
-- [ ] Unauthenticated requests redirect to Entra login or are rejected.
+- [x] Frontend `/healthz` succeeds over TLS.
+- [x] Backend liveness and readiness endpoints succeed.
+- [x] Unauthenticated requests redirect to Entra login or are rejected.
 - [ ] Approved users can sign in and sign out.
-- [ ] Unassigned or wrong-tenant users are rejected.
+- [x] Unassigned or wrong-tenant users are rejected.
 - [ ] Auth headers cannot be spoofed by direct backend access.
 
 ### Application behavior
 
-- [ ] The frontend loads live backend data.
-- [ ] Streaming chat over SSE succeeds.
-- [ ] Cancellation and reconnect behavior succeed.
-- [ ] Foundry returns a model response.
-- [ ] Cosmos stores and reloads conversations.
-- [ ] Blob-backed prompt and skill configuration loads.
+- [x] The frontend loads live backend data.
+- [x] Streaming chat over SSE succeeds.
+- [x] Cancellation and reconnect behavior succeed.
+- [x] Foundry returns a model response.
+- [x] Cosmos stores and reloads conversations.
+- [x] Blob-backed prompt and skill configuration loads.
 - [ ] Runtime configuration refresh reaches every backend replica.
 - [ ] Conversation ownership prevents cross-user reads and writes.
 
@@ -318,17 +318,17 @@ Exit gate:
 
 Goal: prove the release can tolerate expected disruption and recover safely.
 
-- [ ] Restart one backend pod during an active conversation.
+- [x] Restart one backend pod during an active conversation.
 - [ ] Drain or disrupt one node while maintaining service availability.
 - [ ] Verify HPA scale-out and scale-in behavior.
 - [ ] Verify PDB behavior.
-- [ ] Verify readiness prevents premature traffic.
-- [ ] Exercise a failed Helm upgrade and automatic rollback.
-- [ ] Perform an explicit `helm rollback` to the prior revision.
+- [x] Verify readiness prevents premature traffic.
+- [x] Exercise a failed Helm upgrade and automatic rollback.
+- [x] Perform an explicit `helm rollback` to the prior revision.
 - [ ] Validate Cosmos point-in-time recovery procedure.
 - [ ] Validate Blob version/delete recovery procedure.
 - [ ] Rotate one non-production secret and verify rollout behavior.
-- [ ] Stop and restart AKS, then verify application recovery.
+- [x] Stop and restart AKS, then verify application recovery.
 
 Exit gate:
 
@@ -553,3 +553,25 @@ Rollback immediately if any of the following occurs:
   all four previously discovered workloads and correctly identified the auth
   and backend Application Insights failures. Backend logs recorded one
   persisted-history restoration for the accepted turn.
+- Gateway resilience and rollback acceptance passed. Passive auth and backend
+  pod replacement retained at least one ready replica. An intentionally invalid
+  backend digest caused Helm revision 15 to fail and atomically roll back as
+  revision 16; an explicit rollback then produced healthy revision 17.
+- Added the user-visible Cancel control, awaited the Copilot SDK abort, and
+  coordinated cancellation across backend replicas through a run-scoped Cosmos
+  marker. Revision 20 passed single-click cancellation, restored composer
+  usability, persisted the cancellation marker, and retained it after refresh.
+- Active-conversation backend replacement retained at least one ready replica
+  and preserved the conversation. The first test exposed a frontend stream that
+  could remain pending after its upstream pod disappeared. Revision 21 adds a
+  bounded SSE read-idle watchdog; the retest cleared streaming state without a
+  refresh, and the same investigation completed when rerun. The interrupted
+  request surfaced a transient 404, so the accepted guarantee is explicit
+  recovery and retry rather than uninterrupted execution across pod loss.
+- The assigned operator path, TLS, Gateway SSE, interactive input, cancellation,
+  and refresh all passed. A different-tenant account was rejected by Entra
+  before the application loaded, completing the negative-auth Gateway gate.
+- Workflow run `43441903624` exposed that the pre-build GitHub OIDC assertion
+  could expire before ACR publication. A just-in-time Azure login now runs
+  immediately before publication; run `43453283766` passed build, smoke-test,
+  scan, and immutable publication gates.

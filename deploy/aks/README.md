@@ -369,9 +369,14 @@ Migrate with both data planes running in parallel:
 6. Exercise TLS, assigned and unassigned login, admin authorization, SSE,
    user-input responses, cancellation, refresh/reconnect, pod replacement, and
    rollback against the new hostname.
-7. Remove the legacy Ingress resources and managed NGINX controller only after
-   the Gateway path remains stable. Until then, rollback is the original
-   hostname and Helm values.
+7. After acceptance, set `ingress.enabled: false` in the protected values and
+   perform an atomic Helm upgrade. Keep the managed NGINX controller enabled
+   during this Gateway-only observation period. Roll back by restoring
+   `ingress.enabled: true` and applying the previously accepted protected
+   values.
+8. Remove the legacy Entra callback, managed NGINX controller, and obsolete TLS
+   resources only after the Gateway-only path remains stable and an operator
+   separately approves removal.
 
 Do not commit either hostname, rendered manifests, callback URIs, or protected
 Gateway values.
