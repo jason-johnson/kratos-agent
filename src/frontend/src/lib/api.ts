@@ -10,6 +10,8 @@ import type {
   OperationalContext,
 } from "@/types";
 
+const STREAM_IDLE_TIMEOUT_MS = 45_000;
+
 /**
  * Send a message to the agent and receive streaming SSE events.
  */
@@ -45,10 +47,12 @@ export async function streamAgentChat(
       }
     }
 
+    const controller = new AbortController();
     const response = await fetch(`${getApiUrl()}/api/agent/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -64,7 +68,17 @@ export async function streamAgentChat(
     let buffer = "";
 
     while (true) {
-      const { done, value } = await reader.read();
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const idleTimeout = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          controller.abort();
+          reject(new Error("Agent stream stopped responding"));
+        }, STREAM_IDLE_TIMEOUT_MS);
+      });
+
+      const { done, value } = await Promise.race([reader.read(), idleTimeout]).finally(() => {
+        if (timeoutId) clearTimeout(timeoutId);
+      });
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
