@@ -575,3 +575,13 @@ Rollback immediately if any of the following occurs:
   could expire before ACR publication. A just-in-time Azure login now runs
   immediately before publication; run `43453283766` passed build, smoke-test,
   scan, and immutable publication gates.
+- With explicit operator approval, Helm revision 22 disabled the legacy
+  Ingress resources while retaining the managed NGINX controller and protected
+  rollback values. The namespace has zero Ingress objects; all four Deployments
+  remain at two ready replicas; the Gateway is programmed; both HTTPRoutes are
+  accepted with resolved references; certificates are ready; and the public
+  path returns the expected Entra redirect.
+- Authenticated Gateway-only acceptance then passed: sign-in succeeded,
+  persisted conversation history loaded, and a new response streamed to
+  completion. Managed NGINX, the legacy callback, and obsolete TLS resources
+  remain intentionally retained pending a separate removal approval.
