@@ -230,6 +230,7 @@ class CopilotAgent:
         self._model_response_start: dict[str, float] = {}
         self._response_parts: dict[str, list[str]] = {}
         self._active_runs: set[str] = set()
+        self._cancelled_runs: set[str] = set()
 
     @property
     def system_prompt(self) -> str:
@@ -811,6 +812,7 @@ class CopilotAgent:
         if session is None:
             return False
         await session.abort()
+        self._cancelled_runs.add(conversation_id)
         for request_id, future in list(self._user_input_futures.items()):
             context = self._user_input_context.get(request_id)
             if context and context[0] == conversation_id and not future.done():
@@ -1386,6 +1388,10 @@ class CopilotAgent:
                         break
                     yield item
 
+                if conversation_id in self._cancelled_runs:
+                    self._cancelled_runs.discard(conversation_id)
+                    yield ContentEvent(content="\n\n_Response cancelled by user._")
+
                 tool_events = self._tool_counters.get(conversation_id, 0)
                 # Enrich the span with usage and tool call counts
                 usage = self._usage.get(conversation_id, {})
@@ -1464,6 +1470,7 @@ class CopilotAgent:
                     await self._cosmos_service.delete_session_mapping(conversation_id)
             finally:
                 self._active_runs.discard(conversation_id)
+                self._cancelled_runs.discard(conversation_id)
                 self._queues.pop(conversation_id, None)
 
     def get_run_stats(self, conversation_id: str) -> dict:

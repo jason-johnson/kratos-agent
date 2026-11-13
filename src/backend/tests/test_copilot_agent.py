@@ -61,6 +61,7 @@ async def test_cancel_aborts_only_active_turn(copilot_agent):
     assert await copilot_agent.cancel("idle") is False
     assert await copilot_agent.cancel("missing") is False
     session.abort.assert_awaited_once_with()
+    assert "active" in copilot_agent._cancelled_runs
 
 
 @pytest.mark.asyncio

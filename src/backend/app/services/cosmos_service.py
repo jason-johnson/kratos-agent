@@ -487,3 +487,74 @@ class CosmosService:
                     await self._sessions_container.delete_item(item=item["id"], partition_key=item["conversationId"])
         except Exception:
             logger.warning("Failed to purge all session mappings from Cosmos", exc_info=True)
+
+    # ─── Active runs (cross-replica cancellation) ────────────────────────────
+
+    @staticmethod
+    def _active_run_id(conversation_id: str) -> str:
+        return f"active-run:{conversation_id}"
+
+    async def start_agent_run(self, conversation_id: str, run_id: str) -> None:
+        """Register an active turn so any replica can request cancellation."""
+        doc = {
+            "id": self._active_run_id(conversation_id),
+            "conversationId": conversation_id,
+            "runId": run_id,
+            "cancelRequested": False,
+        }
+        if self._using_sqlite():
+            await self._sqlite_upsert("session_mappings", doc["id"], conversation_id, doc)
+            return
+        if self._sessions_container:
+            await self._sessions_container.upsert_item(doc)
+
+    async def request_agent_run_cancel(self, conversation_id: str) -> bool:
+        """Mark the active turn for cancellation, returning False when none exists."""
+        item_id = self._active_run_id(conversation_id)
+        if self._using_sqlite():
+            doc = await self._sqlite_read("session_mappings", item_id, conversation_id)
+            if not doc:
+                return False
+            doc["cancelRequested"] = True
+            await self._sqlite_upsert("session_mappings", item_id, conversation_id, doc)
+            return True
+        if not self._sessions_container:
+            return False
+        try:
+            doc = await self._sessions_container.read_item(item=item_id, partition_key=conversation_id)
+        except Exception:
+            return False
+        doc["cancelRequested"] = True
+        await self._sessions_container.upsert_item(doc)
+        return True
+
+    async def is_agent_run_cancel_requested(self, conversation_id: str, run_id: str) -> bool:
+        """Return whether cancellation was requested for the specified active turn."""
+        item_id = self._active_run_id(conversation_id)
+        if self._using_sqlite():
+            doc = await self._sqlite_read("session_mappings", item_id, conversation_id)
+        elif self._sessions_container:
+            try:
+                doc = await self._sessions_container.read_item(item=item_id, partition_key=conversation_id)
+            except Exception:
+                doc = None
+        else:
+            doc = None
+        return bool(doc and doc.get("runId") == run_id and doc.get("cancelRequested"))
+
+    async def finish_agent_run(self, conversation_id: str, run_id: str) -> None:
+        """Remove an active-turn marker without deleting a newer replacement turn."""
+        item_id = self._active_run_id(conversation_id)
+        if self._using_sqlite():
+            doc = await self._sqlite_read("session_mappings", item_id, conversation_id)
+            if doc and doc.get("runId") == run_id:
+                await self._sqlite_delete("session_mappings", item_id, conversation_id)
+            return
+        if not self._sessions_container:
+            return
+        try:
+            doc = await self._sessions_container.read_item(item=item_id, partition_key=conversation_id)
+            if doc.get("runId") == run_id:
+                await self._sessions_container.delete_item(item=item_id, partition_key=conversation_id)
+        except Exception:
+            logger.warning("Failed to clear active run for conversation=%s", conversation_id, exc_info=True)

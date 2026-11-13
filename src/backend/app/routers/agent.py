@@ -1,6 +1,7 @@
 """Agent endpoints backed by the in-process Copilot SDK runtime."""
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -54,12 +55,15 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
         span.set_attribute("kratos.eval_run_id", eval_run_id)
 
     app = request.app
+    run_id = str(uuid.uuid4())
+    await cosmos.start_agent_run(body.conversationId, run_id)
     otel_ctx = otel_context.get_current()
     event_queue: asyncio.Queue[dict[str, str] | object] = asyncio.Queue()
     sentinel = object()
 
     async def run_agent() -> None:
         token = otel_context.attach(otel_ctx)
+        cancellation_watcher: asyncio.Task[None] | None = None
         start_time = time.monotonic()
         assistant_content_parts: list[str] = []
         collected_thoughts: list[str] = []
@@ -75,6 +79,16 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
         total_tool_calls = 0
 
         try:
+
+            async def watch_for_cancellation() -> None:
+                while True:
+                    if await cosmos.is_agent_run_cancel_requested(body.conversationId, run_id):
+                        while not await copilot_agent.cancel(body.conversationId):
+                            await asyncio.sleep(0.1)
+                        return
+                    await asyncio.sleep(0.5)
+
+            cancellation_watcher = asyncio.create_task(watch_for_cancellation())
             await cosmos.upsert_message(
                 Message(
                     id=str(uuid.uuid4()),
@@ -181,6 +195,11 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
             error = ErrorEvent(message="An internal error occurred", code="AGENT_ERROR")
             await event_queue.put({"event": error.type, "data": json.dumps(error.model_dump())})
         finally:
+            if cancellation_watcher:
+                cancellation_watcher.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await cancellation_watcher
+            await cosmos.finish_agent_run(body.conversationId, run_id)
             await event_queue.put(sentinel)
             otel_context.detach(token)
 
@@ -219,6 +238,8 @@ async def cancel_agent(body: AgentCancelRequest, request: Request) -> JSONRespon
     if await cosmos.get_conversation(body.conversationId, user_id) is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     copilot_agent = request.app.state.copilot_agent
-    if not await copilot_agent.cancel(body.conversationId):
+    locally_cancelled = await copilot_agent.cancel(body.conversationId)
+    cancellation_requested = locally_cancelled or await cosmos.request_agent_run_cancel(body.conversationId)
+    if not cancellation_requested and not locally_cancelled:
         raise HTTPException(status_code=404, detail="Conversation has no active agent session")
     return JSONResponse(content={"cancelled": True})

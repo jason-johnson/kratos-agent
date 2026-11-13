@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.config import Settings
 from app.constants import PRIMARY_USE_CASE
 from app.models import (
     AgentCancelRequest,
@@ -16,6 +17,7 @@ from app.models import (
     UserInputResponseRequest,
 )
 from app.routers.agent import cancel_agent, chat, user_input_response
+from app.services.cosmos_service import CosmosService
 from app.services.eval_service import EvalService
 
 
@@ -109,6 +111,40 @@ async def test_user_input_and_cancel_route_to_in_process_agent():
 
     assert json.loads(accepted.body) == {"accepted": True}
     assert json.loads(cancelled.body) == {"cancelled": True}
+
+
+@pytest.mark.asyncio
+async def test_cancel_accepts_cross_replica_run_marker():
+    agent = _FakeAgent()
+    cosmos = AsyncMock()
+    cosmos.request_agent_run_cancel.return_value = True
+    request = _request(agent, cosmos)
+
+    cancelled = await cancel_agent(AgentCancelRequest(conversationId="owned-by-other-replica"), request)
+
+    assert json.loads(cancelled.body) == {"cancelled": True}
+    cosmos.request_agent_run_cancel.assert_awaited_once_with("owned-by-other-replica")
+
+
+@pytest.mark.asyncio
+async def test_active_run_cancellation_marker_round_trip(tmp_path):
+    cosmos = CosmosService(Settings(cosmos_db_endpoint="", local_data_dir=str(tmp_path)))
+    await cosmos.initialize()
+    try:
+        await cosmos.start_agent_run("conv-1", "run-1")
+
+        assert await cosmos.is_agent_run_cancel_requested("conv-1", "run-1") is False
+        assert await cosmos.request_agent_run_cancel("conv-1") is True
+        assert await cosmos.is_agent_run_cancel_requested("conv-1", "run-1") is True
+        assert await cosmos.is_agent_run_cancel_requested("conv-1", "run-2") is False
+
+        await cosmos.finish_agent_run("conv-1", "run-2")
+        assert await cosmos.is_agent_run_cancel_requested("conv-1", "run-1") is True
+
+        await cosmos.finish_agent_run("conv-1", "run-1")
+        assert await cosmos.request_agent_run_cancel("conv-1") is False
+    finally:
+        await cosmos.close()
 
 
 @pytest.mark.asyncio
