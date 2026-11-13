@@ -585,3 +585,6 @@ Rollback immediately if any of the following occurs:
   persisted conversation history loaded, and a new response streamed to
   completion. Managed NGINX, the legacy callback, and obsolete TLS resources
   remain intentionally retained pending a separate removal approval.
+- The operator selected a 24-hour Gateway-only observation window before final
+  cleanup. Do not remove managed NGINX, the legacy callback, or obsolete TLS
+  resources before the post-observation health check and separate approval.
