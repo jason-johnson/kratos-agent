@@ -588,3 +588,12 @@ Rollback immediately if any of the following occurs:
 - The operator selected a 24-hour Gateway-only observation window before final
   cleanup. Do not remove managed NGINX, the legacy callback, or obsolete TLS
   resources before the post-observation health check and separate approval.
+- The post-observation recheck passed after the cluster was started on
+  2026-11-17. Revision 22 recovered with all four Deployments at two ready
+  replicas and zero container restarts. All nodes were Ready without pressure,
+  live pod/node metrics and HPA metrics recovered, no legacy Ingress objects
+  existed, Gateway and HTTPRoute conditions were healthy, certificates were
+  ready, and the public path returned the expected Entra redirect. Transient
+  scheduling, CNI/CSI, probe, and metrics warnings were limited to AKS startup.
+  Authenticated browser acceptance then confirmed sign-in, persisted history,
+  and a newly streamed response. Final cleanup remains separately approved.
