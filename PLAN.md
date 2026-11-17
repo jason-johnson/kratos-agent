@@ -1,6 +1,6 @@
 # Kratos AKS Simplification Plan
 
-Last updated: 2026-10-22
+Last updated: 2026-11-17
 
 Repository implementation is complete. Live AKS delivery, environment decisions,
 Helm installation, and acceptance are tracked in
@@ -113,7 +113,7 @@ seeding and synchronization remain, but only for the single ARE use-case.
   Copilot SDK directly; this is not the current backend/hosted-agent split.
 - One separately secured OBO MCP Deployment and ClusterIP Service for delegated
   Microsoft Graph access.
-- One ingress or Gateway API route with TLS.
+- One managed Gateway API route with TLS.
 - ConfigMap for non-secret configuration.
 - Key Vault CSI or workload-identity-based secret retrieval for secrets.
 - Startup, readiness, and liveness probes.
@@ -683,7 +683,7 @@ Post-Phase 4 manual acceptance:
 - [x] Create deterministic, pinned production images.
 - [x] Add a Helm chart.
 - [x] Configure Workload Identity and least-privilege Azure RBAC.
-- [x] Configure ingress and TLS.
+- [x] Configure managed Gateway API and TLS.
 - [x] Configure secrets, ConfigMaps, probes, resources, PDBs, and NetworkPolicies.
 - [x] Configure persistent managed services and backup/retention policies.
 - [x] Configure OpenTelemetry and operational dashboards/alerts.
@@ -705,15 +705,15 @@ Phase 5 implementation status: **Complete (2026-10-20).**
   probes, resources, HPA, PDBs, rolling-update safeguards, read-only root
   filesystems, default-deny Cilium NetworkPolicies, and same-namespace
   read-only Kubernetes inspection RBAC.
-- The public ingress uses the managed AKS application-routing class, TLS, OIDC
-  authentication, trusted identity headers, and cookie affinity for active
-  approval/cancellation state. TLS may use an existing secret or an explicitly
-  attached Key Vault certificate.
+- The public route uses the managed AKS `approuting-istio` GatewayClass, TLS,
+  OAuth2 Proxy OIDC authentication, and trusted identity headers. Distributed
+  cancellation state is stored in Cosmos rather than relying on ingress
+  affinity.
 - Optional Bicep provisioning (`DEPLOY_AKS=false` by default) creates a
   zone-spread autoscaling AKS cluster with local accounts disabled, Azure RBAC,
-  Workload Identity, separate backend/OBO service accounts, managed ingress,
-  Cilium, Azure Policy, Defender, Key Vault CSI, Container Insights, and managed
-  Prometheus. Azure roles are scoped to the required managed resources.
+  Workload Identity, separate backend/OBO service accounts, managed Gateway
+  API, Cilium, Azure Policy, Defender, Key Vault CSI, Container Insights, and
+  managed Prometheus. Azure roles are scoped to the required managed resources.
 - Cosmos DB now uses continuous seven-day backup. Blob skills use versioning
   plus 30-day blob/container delete retention; no application state is moved to
   an in-cluster volume.
@@ -771,7 +771,7 @@ Phase 6 outcome:
   deployment hooks were removed.
 - `azure.yaml` provisions infrastructure only; application delivery is the
   explicit manual Helm workflow in the AKS runbook.
-- The deployed smoke suite targets one authenticated AKS ingress and the
+- The deployed smoke suite targets one authenticated AKS Gateway and the
   single-agent API.
 - Commits: `193f34f`, `7d23c93`, `7e835a5`, `7b787a7`, `20f4521`,
   `b39c466`, and `d043691`.
@@ -829,6 +829,7 @@ Phase 6 outcome:
 | D-024 | V1 workflows are investigation, live command brief, and approved incident updates | Confirmed | These three workflows define release scope and acceptance. |
 | D-025 | Use Azure Monitor, Application Insights, and Log Analytics for application observability | Confirmed | Export via OpenTelemetry and retain trace exploration. |
 | D-026 | Run the Copilot SDK in the AKS agent/API service; evaluate Foundry external-agent registration separately | Partially implemented | AKS owns invocation and Foundry retains model hosting/evaluation. External-agent registration is not implemented and must not be assumed. |
+| D-027 | Use managed AKS Gateway API as the only public application route | Confirmed | `approuting-istio` replaced managed NGINX after parallel acceptance, rollback testing, a Gateway-only observation period, and final authenticated acceptance. |
 
 ## Risks and mitigations
 
@@ -921,3 +922,19 @@ Work through these in order:
 - Added autonomous execution order, validation gates, mandatory stop conditions,
   manual cloud/deployment boundaries, and phase handoff requirements.
 - Phase 0 complete.
+
+### 2026-11-17
+
+- Completed the managed Gateway API migration after parallel TLS, OIDC, SSE,
+  cancellation, persistence, pod-replacement, rollback, and negative-auth
+  acceptance.
+- Verified the Gateway-only release through an observation period and an AKS
+  stop/start recovery. All application workloads recovered at two ready
+  replicas with live metrics and healthy Gateway, route, and certificate
+  conditions.
+- Removed the managed NGINX controller, legacy Ingress chart surface, old
+  public load balancer, legacy Entra callback, NGINX network-policy allowance,
+  and obsolete TLS/ACME resources.
+- Helm revision 23 passed final authenticated sign-in, sign-out/sign-in,
+  persisted-history, and streaming acceptance through the single Gateway
+  callback.

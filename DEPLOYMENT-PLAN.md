@@ -597,3 +597,15 @@ Rollback immediately if any of the following occurs:
   scheduling, CNI/CSI, probe, and metrics warnings were limited to AKS startup.
   Authenticated browser acceptance then confirmed sign-in, persisted history,
   and a newly streamed response. Final cleanup remains separately approved.
+- With final operator approval, the infrastructure workflow set the AKS default
+  NGINX controller type to `None` and reconciled the Entra application to the
+  single Gateway callback. Helm revision 23 removed the legacy Ingress chart
+  surface, NGINX network-policy allowance, and legacy ClusterIssuer. The
+  retired `NginxIngressController`, its managed resources and public load
+  balancer, the old TLS secret, and old ACME account secret were then removed.
+- Final verification found no Ingress, managed NGINX, legacy IngressClass, or
+  legacy TLS resources. Only the Gateway public IP and callback remain. All
+  four Deployments are at two ready replicas with zero restarts; Gateway,
+  HTTPRoutes, and Gateway certificate are healthy; the public path redirects
+  to Entra; and authenticated sign-in, sign-out/sign-in, persisted history, and
+  streaming all passed. The managed Gateway API migration is complete.
