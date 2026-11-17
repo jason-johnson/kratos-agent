@@ -189,25 +189,10 @@ az aks approuting update \
 
 ### Azure-provided public hostname
 
-The supported initial endpoint uses the existing Application Routing public
-load balancer and Azure's regional `cloudapp.azure.com` DNS service. It requires
-no purchased domain, Azure DNS zone, or preview feature.
-
-Run the configuration utility with protected environment values. Use a DNS
-label unique within the Azure region and an output file outside the repository:
-
-```bash
-AKS_RESOURCE_GROUP=<resource-group> \
-AKS_CLUSTER_NAME=<cluster> \
-AZURE_DNS_LABEL=<unique-label> \
-ENDPOINT_OUTPUT_FILE=<protected-directory>/endpoint.env \
-  ./deploy/aks/scripts/configure-public-endpoint.sh
-```
-
-The utility updates the supported `NginxIngressController` custom resource,
-waits for the existing load balancer, and writes the resulting hostname to the
-protected output file without printing it. If Azure reports that the requested
-label is unavailable, choose a randomized suffix and retry.
+The supported endpoint uses the managed Gateway API load balancer and Azure's
+regional `cloudapp.azure.com` DNS service. It requires no purchased domain,
+Azure DNS zone, or preview feature. Configure `gateway.azureDnsLabel` and
+`gateway.host` only in protected Helm values; do not commit either value.
 
 Do not enable the approval-gated Application Routing default-domain preview.
 The regional Azure DNS label is generally available.
@@ -356,7 +341,7 @@ Migrate with both data planes running in parallel:
    `cloudapp.azure.com` hostname. Keep both values outside Git.
 3. Set `gateway.enabled`, `gateway.azureDnsLabel`, `gateway.host`,
    `gateway.clusterIssuer`, and `gateway.letsEncrypt` in the protected Helm
-   values. Keep `ingress.enabled` true.
+   values.
 4. Install the chart atomically. The Gateway routes only to OAuth2 Proxy;
    OAuth2 Proxy routes `/api` and `/health` to the backend and all other paths
    to the frontend while supplying trusted identity headers. The default-deny
@@ -364,19 +349,16 @@ Migrate with both data planes running in parallel:
    only in `gateway.controlPlaneNamespace` on TCP 15012 and exposes only their
    public HTTP/HTTPS ports. Proxy backend egress is limited to OAuth2 Proxy on
    TCP 4180 and cert-manager HTTP-01 solver pods on TCP 8089.
-5. Rerun the manual infrastructure workflow so the confidential Entra
-   application contains both callback URIs.
+5. Rerun the manual infrastructure workflow after the Gateway load balancer
+   exists so the confidential Entra application contains its callback URI.
 6. Exercise TLS, assigned and unassigned login, admin authorization, SSE,
    user-input responses, cancellation, refresh/reconnect, pod replacement, and
    rollback against the new hostname.
-7. After acceptance, set `ingress.enabled: false` in the protected values and
-   perform an atomic Helm upgrade. Keep the managed NGINX controller enabled
-   during this Gateway-only observation period. Roll back by restoring
-   `ingress.enabled: true` and applying the previously accepted protected
-   values.
-8. Remove the legacy Entra callback, managed NGINX controller, and obsolete TLS
-   resources only after the Gateway-only path remains stable and an operator
-   separately approves removal.
+7. After acceptance and an observation period, set the AKS default NGINX
+   controller type to `None`, delete the retired `NginxIngressController`
+   custom resource, and remove obsolete legacy TLS resources. Keep Web
+   Application Routing enabled because it owns the `approuting-istio`
+   implementation.
 
 Do not commit either hostname, rendered manifests, callback URIs, or protected
 Gateway values.

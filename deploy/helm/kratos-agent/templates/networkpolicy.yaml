@@ -30,29 +30,6 @@ spec:
       ports:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ include "kratos.fullname" . }}-ingress
-  labels:
-    {{- include "kratos.labels" . | nindent 4 }}
-spec:
-  podSelector:
-    matchExpressions:
-      - key: app.kubernetes.io/component
-        operator: In
-        values: [frontend, backend, auth]
-  policyTypes: [Ingress]
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.ingress.controllerNamespace }}
-      ports:
-        - { protocol: TCP, port: 8080 }
-        - { protocol: TCP, port: 8000 }
-        - { protocol: TCP, port: 4180 }
 {{- if .Values.gateway.enabled }}
 ---
 apiVersion: networking.k8s.io/v1

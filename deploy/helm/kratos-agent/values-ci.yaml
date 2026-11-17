@@ -29,8 +29,9 @@ auth:
   oboClientId: validation-placeholder
   oboScope: api://validation/access_as_user
   allowedClientAppIds: validation-placeholder
-ingress:
+gateway:
   host: are.example.invalid
+  azureDnsLabel: validation-gateway
   clusterIssuer: validation-letsencrypt
   letsEncrypt:
     enabled: true

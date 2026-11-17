@@ -59,7 +59,7 @@ authProxy:
       memory: 256Mi
 
 gateway:
-  enabled: false
+  enabled: true
   className: approuting-istio
   controlPlaneNamespace: aks-istio-system
   host: ""
@@ -123,20 +123,6 @@ secrets:
     oauthClientIdObjectName: ""
     oauthClientSecretObjectName: ""
     oauthCookieSecretObjectName: ""
-
-ingress:
-  enabled: true
-  className: webapprouting.kubernetes.azure.com
-  host: ""
-  tlsSecretName: kratos-agent-tls
-  keyVaultCertificateUri: ""
-  clusterIssuer: ""
-  letsEncrypt:
-    enabled: false
-    environment: production
-    email: ""
-    privateKeySecretName: kratos-agent-letsencrypt-account
-  controllerNamespace: app-routing-system
 
 autoscaling:
   backend:

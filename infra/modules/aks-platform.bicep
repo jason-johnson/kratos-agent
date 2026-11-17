@@ -198,6 +198,9 @@ resource aks 'Microsoft.ContainerService/managedClusters@2026-03-01' = {
       }
       webAppRouting: {
         enabled: true
+        nginx: {
+          defaultIngressControllerType: 'None'
+        }
         gatewayAPIImplementations: {
           appRoutingIstio: {
             mode: 'Enabled'
