@@ -1,6 +1,6 @@
 # Kratos AKS Deployment Plan
 
-Last updated: 2026-10-27
+Last updated: 2026-11-19
 
 ## Purpose
 
@@ -11,6 +11,37 @@ leave a repeatable operating and rollback path.
 This document tracks deployment decisions and progress. The procedural command
 reference remains [deploy/aks/README.md](deploy/aks/README.md), and the completed
 application simplification work remains in [PLAN.md](PLAN.md).
+
+## Reconciled delivery status
+
+The core ARE deployment and managed Gateway API migration are complete. The last
+recorded live acceptance is Helm revision 23 on 2026-11-17; this reconciliation
+does not constitute a new live health check.
+
+Verified acceptance includes assigned-user sign-in/sign-out, wrong-tenant
+denial, SSE and interactive input, persisted history and context restoration,
+single-click cancellation across replicas, backend/auth pod replacement, failed
+atomic upgrade recovery, explicit Helm rollback, and AKS stop/start recovery.
+Pod loss interrupts an in-flight turn: the UI recovers and permits retry; seamless
+continuation is not an accepted guarantee.
+
+Managed NGINX, the legacy callback, and legacy TLS resources have been removed.
+There is no remaining NGINX cutover task or immediate dual-ingress rollback path.
+ServiceNow and Graph OBO remain intentionally disabled in the accepted release.
+
+Remaining work is operational assurance, not another application deployment:
+
+- Security: direct-backend header-spoofing and cross-user ownership tests,
+  replica-wide configuration refresh, and sensitive-log review.
+- Resilience: controlled node disruption, PDB enforcement, and HPA scale-out/in.
+- Recovery: Cosmos point-in-time recovery, Blob version/delete recovery, and a
+  non-production secret-rotation exercise.
+- Observability: prove ingestion/correlation and exercise alerts/workbooks.
+- Handoff: document break-glass ownership, credential/certificate monitoring, and
+  recovery ownership outside this public repository.
+
+Unchecked items below are not claimed as live-verified. Installation and Gateway
+functional gates have passed; full production-readiness sign-off remains open.
 
 ## Safety and scope
 
@@ -46,8 +77,10 @@ application simplification work remains in [PLAN.md](PLAN.md).
 - [x] All three images are published to ACR with the successful commit SHA.
 - [x] Application Helm resources are installed in AKS.
 - [x] DNS, TLS, and Entra user authentication are configured.
-- [ ] Live functional, authorization, resilience, restore, and rollback
-  acceptance is complete.
+- [x] Core functional, Gateway authentication, cancellation, pod-recovery, and
+  Helm rollback acceptance is recorded.
+- [ ] Remaining security, scaling/node-disruption, observability, rotation, and
+  data-recovery acceptance is complete.
 
 ## Decision register
 
@@ -59,14 +92,14 @@ application simplification work remains in [PLAN.md](PLAN.md).
 | DP-004 | Mirror a patched official auth-proxy image into ACR | Confirmed | Rebuild the exact official v7.15.5 source with the minimal fixed `golang.org/x/net` dependency, verify its identity and tests, pass the unchanged scan gate, and publish it privately. |
 | DP-005 | Grant AKS operator access to a dedicated Entra group | Confirmed | The dedicated group exists; its object ID remains protected and is parameterized through Bicep. |
 | DP-006 | Deliver secrets through Key Vault CSI | Confirmed | Separate backend and auth identities are implemented. The OAuth objects are configured and synchronized; ServiceNow is disabled without placeholders for the initial release. |
-| DP-007 | Use the Web Application Routing ingress class | Superseded | Retained only as the rollback path during DP-014 migration. |
+| DP-007 | Use the Web Application Routing ingress class | Superseded | Managed NGINX and its rollback resources were removed after DP-014 acceptance. |
 | DP-008 | Require TLS and Entra OIDC before user traffic | Confirmed | No unauthenticated temporary public deployment. |
 | DP-009 | Install and upgrade Helm manually with `--atomic` | Confirmed | Failed releases must roll back automatically. |
 | DP-010 | Stop AKS when deployment work pauses | Proposed | Reduces non-production compute cost; start it before Helm or acceptance work. |
 | DP-011 | Use Workload Identity and OTLP for Application Insights | Confirmed | Do not create or deliver an Application Insights connection-string secret. |
-| DP-012 | Use an Azure regional DNS label and Let's Encrypt | Confirmed | Use the existing Application Routing load balancer with a GA `cloudapp.azure.com` hostname and cert-manager-managed TLS. No purchased domain, Azure DNS zone, or preview approval is required. |
+| DP-012 | Use an Azure regional DNS label and Let's Encrypt | Confirmed | Use the managed Gateway load balancer with a GA `cloudapp.azure.com` hostname and cert-manager-managed TLS. No purchased domain, Azure DNS zone, or preview approval is required. |
 | DP-013 | Install cert-manager separately with mirrored immutable images | Confirmed | The manual workflow scans and mirrors cert-manager v1.21.3 components; the operator installs the official versioned chart with protected ACR digests. |
-| DP-014 | Migrate from managed NGINX to managed AKS Gateway API | Confirmed | Run both data planes in parallel, route the Gateway through OAuth2 Proxy, use a new free regional hostname, and remove NGINX only after auth, SSE, resilience, and rollback acceptance. |
+| DP-014 | Migrate from managed NGINX to managed AKS Gateway API | Complete | Parallel acceptance, observation, final cleanup, and Gateway-only browser acceptance passed. Only the Gateway callback and public load balancer remain. |
 
 ## Required operator decisions
 
@@ -75,15 +108,15 @@ Record decisions here before creating environment-specific resources.
 | Input | Status | Selected value or reference |
 |---|---|---|
 | Entra operator group | Selected | Dedicated `kratos-aks-operators` group; do not record its object ID in this file. |
-| Public hostname | Pending allocation | Use an Azure-provided regional `cloudapp.azure.com` DNS label; do not record the generated hostname in this public repository. |
+| Public hostname | Allocated and verified | Gateway uses an Azure-provided regional `cloudapp.azure.com` DNS label; the generated hostname remains outside this public repository. |
 | Azure DNS zone and record owner | Not required | Azure publishes the regional DNS label on the existing load balancer. |
 | TLS certificate source | Selected | Let's Encrypt through separately installed cert-manager; test staging before production issuance. |
 | Secret delivery model | Selected | Key Vault CSI with separate backend and auth identities. |
 | Entra login application owner | Selected | Existing deployment service principal using `Application.ReadWrite.OwnedBy`. |
 | Users/groups allowed to sign in | Selected | Reuse `kratos-aks-operators` for initial acceptance by assigning the group to the enterprise application. |
-| Auth-proxy release | Blocked | Official v7.15.5 has fixable Go TLS/X.509 and HTTP findings. |
+| Auth-proxy release | Deployed and accepted | The reproducibly rebuilt v7.15.5 image passed the unchanged security gate and is mirrored and digest-pinned; see DP-004. |
 | ServiceNow target and credentials owner | Not required for initial release | Deploy with `serviceNow.enabled: false`; do not create placeholder credentials or expose ServiceNow tools. |
-| Initial live acceptance operators | Pending | |
+| Initial live acceptance operators | Verified | Assigned operator-group browser acceptance is recorded; personal identities remain outside Git. |
 
 ## Phase 1 - Establish operator access
 
@@ -121,7 +154,7 @@ coordinates.
 - [x] Mirror the auth-proxy image into ACR.
 - [x] Resolve its ACR digest.
 - [x] Store repositories and digests in a protected values file outside Git.
-- [ ] Verify no image uses `latest` or a tag without a digest.
+- [x] Verify no image uses `latest` or a tag without a digest.
 
 Exit gate:
 
@@ -142,7 +175,7 @@ exposed.
 - [x] Require assignment and declare the approved operator-group assignment.
 - [x] Create the client credential through the approved secret-management
   process.
-- [ ] Configure logout and post-logout behavior.
+- [x] Configure logout and post-logout behavior.
 - [ ] Record only non-secret operational ownership outside the repository.
 
 Exit gate:
@@ -173,7 +206,8 @@ Preferred implementation:
 Required secret categories:
 
 - OAuth2 Proxy client ID, client secret, and cookie secret.
-- ServiceNow client credentials.
+- ServiceNow client credentials only when enabling that integration; omitted
+  from the accepted initial release.
 - Application Insights connection string is not required; use Workload Identity
   and OTLP configuration.
 - Any Copilot runtime credential that cannot be replaced by federated identity.
@@ -190,13 +224,12 @@ Exit gate:
 
 ## Phase 5 - Configure DNS and TLS
 
-Goal: expose one approved HTTPS endpoint through Web Application Routing.
+Goal: expose one approved HTTPS endpoint through managed Gateway API.
 
 - [x] Select the GA Azure regional DNS-label path; no Azure DNS zone is
   required.
-- [x] Add a protected operator utility that configures the supported
-  `NginxIngressController` resource without printing or committing the
-  hostname.
+- [x] Configure the Gateway load balancer's regional DNS label without printing
+  or committing the hostname. The earlier NGINX utility was retired.
 - [x] Select Let's Encrypt and add a single-owner `ClusterIssuer` chart path.
 - [x] Add manual workflow gates to scan and mirror all pinned cert-manager
   images.
@@ -206,13 +239,13 @@ Goal: expose one approved HTTPS endpoint through Web Application Routing.
 - [x] Install cert-manager from the official versioned chart using protected
   ACR repositories and digests.
 - [x] Verify staging certificate issuance before switching to production.
-- [ ] Set the ingress host and certificate reference in protected Helm values.
-- [ ] Verify the certificate chain, hostname, renewal ownership, and expiration
-  monitoring.
+- [x] Set the Gateway host and certificate reference in protected Helm values.
+- [x] Verify the production certificate chain and hostname.
+- [ ] Verify renewal ownership and expiration monitoring.
 
 Exit gate:
 
-- DNS resolves to the ingress.
+- DNS resolves to the Gateway.
 - The certificate is valid for the approved hostname.
 - Plain HTTP does not provide an unauthenticated application path.
 
@@ -220,18 +253,18 @@ Exit gate:
 
 Goal: render the exact release before making cluster changes.
 
-- [ ] Copy the chart defaults to a protected values file outside the repository.
-- [ ] Set backend and frontend ACR repositories and digests.
-- [ ] Set the mirrored auth-proxy repository and digest.
-- [ ] Set `obo.enabled: false`.
-- [ ] Populate non-secret Bicep outputs in the protected values file.
-- [ ] Reference the approved Secret or Key Vault CSI objects.
-- [ ] Configure the hostname and TLS source.
-- [ ] Confirm resource requests, limits, HPAs, PDBs, probes, service accounts,
+- [x] Copy the chart defaults to a protected values file outside the repository.
+- [x] Set backend and frontend ACR repositories and digests.
+- [x] Set the mirrored auth-proxy repository and digest.
+- [x] Set `obo.enabled: false` and `serviceNow.enabled: false`.
+- [x] Populate non-secret Bicep outputs in the protected values file.
+- [x] Reference the approved Secret or Key Vault CSI objects.
+- [x] Configure the hostname and TLS source.
+- [x] Confirm resource requests, limits, HPAs, PDBs, probes, service accounts,
   and NetworkPolicies.
-- [ ] Run `helm lint` with the protected values.
-- [ ] Render with `helm template` to a protected temporary location.
-- [ ] Review the rendered resources for secrets, mutable images, privileged
+- [x] Run `helm lint` with the protected values.
+- [x] Render with `helm template` to a protected temporary location.
+- [x] Review the rendered resources for secrets, mutable images, privileged
   containers, host access, broad RBAC, and unintended public services.
 - [ ] Delete the rendered manifest after approval.
 
@@ -246,16 +279,17 @@ Exit gate:
 
 Goal: install the backend, frontend, and auth proxy atomically.
 
-- [ ] Confirm AKS is running.
-- [ ] Confirm the operator is using the approved subscription and cluster.
-- [ ] Create the namespace through the reviewed Helm operation.
-- [ ] Install with `helm upgrade --install --atomic --wait`.
-- [ ] Confirm all Deployments become available.
-- [ ] Confirm all Pods run as non-root with read-only root filesystems.
-- [ ] Confirm Services are ClusterIP and only ingress is externally reachable.
-- [ ] Confirm probes, HPAs, PDBs, service accounts, RBAC, and NetworkPolicies are
+- [x] Confirm AKS is running at installation time.
+- [x] Confirm the operator is using the approved subscription and cluster.
+- [x] Create the namespace through the reviewed Helm operation.
+- [x] Install with `helm upgrade --install --atomic --wait`.
+- [x] Confirm all Deployments become available.
+- [x] Confirm all Pods run as non-root with read-only root filesystems.
+- [x] Confirm application Services are ClusterIP; only the Gateway load
+  balancer is externally reachable.
+- [x] Confirm probes, HPAs, PDBs, service accounts, RBAC, and NetworkPolicies are
   present.
-- [ ] Record the Helm revision and release image digests outside this public
+- [x] Record the Helm revision and release image digests outside this public
   plan if they contain environment identifiers.
 
 Exit gate:
@@ -273,7 +307,7 @@ Goal: prove the deployed ARE works and preserves every authorization boundary.
 - [x] Frontend `/healthz` succeeds over TLS.
 - [x] Backend liveness and readiness endpoints succeed.
 - [x] Unauthenticated requests redirect to Entra login or are rejected.
-- [ ] Approved users can sign in and sign out.
+- [x] Approved users can sign in and sign out.
 - [x] Unassigned or wrong-tenant users are rejected.
 - [ ] Auth headers cannot be spoofed by direct backend access.
 
@@ -293,12 +327,16 @@ Goal: prove the deployed ARE works and preserves every authorization boundary.
 - [ ] Azure Monitor and Application Insights access is read-only and bounded.
 - [ ] Kubernetes inspection is GET-only and namespace-scoped.
 - [ ] Generic KQL, HTTP, Graph, or Kubernetes execution is unavailable.
+ServiceNow tests below are deferred integration acceptance, not blockers for the
+accepted ServiceNow-disabled core release. They become mandatory before enabling
+the integration.
+
 - [ ] ServiceNow reads succeed.
 - [ ] A ServiceNow write requires exact, conversation-bound, expiring,
   single-use approval.
 - [ ] The approved write is idempotent, audited, and independently re-read.
 - [ ] Reuse, expiry, mismatch, and denial cases cannot mutate ServiceNow.
-- [ ] Responses preserve uncertainty, stale-data, partial-result, and
+- [x] Responses preserve uncertainty, stale-data, partial-result, and
   coverage-gap reporting.
 
 ### Observability
@@ -373,6 +411,18 @@ Rollback immediately if any of the following occurs:
 - Required telemetry is unavailable during acceptance.
 
 ## Progress log
+
+### 2026-11-19
+
+- Reconciled the checklist against the recorded acceptance through revision 23;
+  no new live verification or deployment was performed for this update.
+- Marked proven image pinning, release preparation/installation, logout, and
+  certificate/hostname checks complete. Replaced superseded NGINX status and
+  resolved operator decisions with the accepted Gateway-only state.
+- Kept untested security, telemetry, scaling, rotation, data recovery, and
+  operational ownership items open. ServiceNow and Graph OBO remain deferred.
+- Existing progress entries below are historical snapshots: later successful
+  acceptance supersedes earlier pending/blocked statements.
 
 ### 2026-10-22
 

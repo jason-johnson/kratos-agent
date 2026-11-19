@@ -1,9 +1,11 @@
 # Kratos AKS Simplification Plan
 
-Last updated: 2026-11-17
+Last updated: 2026-11-19
 
-Repository implementation is complete. Live AKS delivery, environment decisions,
-Helm installation, and acceptance are tracked in
+Repository implementation and core Gateway-only AKS delivery are complete.
+Helm revision 23 passed final authenticated acceptance on 2026-11-17.
+Remaining production-readiness security, observability, scaling, rotation, and
+data-recovery exercises, plus deferred ServiceNow and Graph OBO enablement, are tracked in
 [DEPLOYMENT-PLAN.md](DEPLOYMENT-PLAN.md).
 
 ## Purpose
@@ -96,9 +98,10 @@ This is the lean default to validate together.
 7. **Blob-backed live skills:** retain Blob Storage and the existing skills admin
    experience so authorized users can update skills without rebuilding the image.
    Keep checked-in ARE skills as the seed and recovery baseline.
-8. **Foundry external-agent registration:** register the AKS-hosted runtime for
-   Foundry observability and evaluation, while AKS remains responsible for
-   invocation, scaling, identity, networking, and availability.
+8. **Foundry external-agent registration (deferred):** evaluate registration
+   separately for Foundry observability and evaluation; it is not implemented.
+   AKS remains responsible for invocation, scaling, identity, networking, and
+   availability.
 
 This removes the backend-to-hosted-agent proxy, hosted-agent session mapping,
 warm-pool maintenance, persona lazy loading, and multi-persona routing. Blob
@@ -938,3 +941,11 @@ Work through these in order:
 - Helm revision 23 passed final authenticated sign-in, sign-out/sign-in,
   persisted-history, and streaming acceptance through the single Gateway
   callback.
+
+### 2026-11-19
+
+- Reconciled the deployment checklist with recorded live acceptance through
+  revision 23. Core delivery and Gateway migration are complete; remaining
+  operational assurance is explicitly separated from deferred integrations.
+- This documentation update performs no new live checks and does not claim
+  full production-readiness sign-off.

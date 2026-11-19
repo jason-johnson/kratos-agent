@@ -250,6 +250,9 @@ cert-manager values file:
 ```yaml
 crds:
   enabled: true
+config:
+  gatewayAPI:
+    enabled: true
 image:
   repository: <acr>/platform/cert-manager-controller
   digest: sha256:<digest>
@@ -285,12 +288,11 @@ helm upgrade --install cert-manager \
   --timeout 10m
 ```
 
-Test issuance with `ingress.letsEncrypt.environment: staging` first. After the
-staging Certificate is ready, switch to `production`, use a distinct issuer
-name and account Secret name, delete only the staging TLS Secret, and upgrade
-the application release. The chart creates one `ClusterIssuer`; only the main
-Ingress requests the shared TLS Secret so the auth and application Ingresses do
-not contend for Certificate ownership.
+Test issuance with `gateway.letsEncrypt.environment: staging` first. After the
+staging Certificate is ready, switch to `production` with distinct issuer,
+account Secret, and TLS Secret names. Verify production issuance before
+deleting only the unreferenced staging resources. The chart creates one
+`ClusterIssuer`; cert-manager's Gateway integration requests the TLS certificate.
 
 Copy `deploy/helm/kratos-agent/values.yaml` to a protected location outside the
 repository. Populate:
@@ -300,8 +302,8 @@ repository. Populate:
 - Bicep outputs for endpoints, workspace/resource IDs, tenant, and Workload
   Identity client IDs;
 - Key Vault CSI object names when CSI is enabled;
-- the OBO public client values;
-- the ServiceNow origin;
+- the OBO public client values only when OBO is enabled;
+- the ServiceNow origin only when ServiceNow is enabled;
 - the protected public host, Let's Encrypt issuer name, environment, account
   email, account Secret name, and TLS Secret name;
 - an optional Azure Monitor action group during provisioning.
@@ -327,11 +329,12 @@ helm upgrade --install kratos-agent deploy/helm/kratos-agent \
   --timeout 15m
 ```
 
-### Migrate managed NGINX to Gateway API
+### Gateway-only operating baseline
 
-The managed NGINX application-routing path is a temporary rollback surface.
-Microsoft support for its critical security patches ends in November 2026.
-Migrate with both data planes running in parallel:
+The managed NGINX migration is complete. Revision 23 passed final authenticated
+acceptance on 2026-11-17; the legacy controller, public IP, callback, and TLS
+resources were removed. The following is the repeatable Gateway setup, not an
+outstanding cutover checklist:
 
 1. Provision the managed standard Gateway API CRDs and the `approuting-istio`
    implementation through Bicep.
@@ -354,13 +357,11 @@ Migrate with both data planes running in parallel:
 6. Exercise TLS, assigned and unassigned login, admin authorization, SSE,
    user-input responses, cancellation, refresh/reconnect, pod replacement, and
    rollback against the new hostname.
-7. After acceptance and an observation period, set the AKS default NGINX
-   controller type to `None`, delete the retired `NginxIngressController`
-   custom resource, and remove obsolete legacy TLS resources. Keep Web
-   Application Routing enabled because it owns the `approuting-istio`
-   implementation.
+7. Keep the AKS default NGINX controller type at `None`. Keep Web Application
+   Routing enabled because it owns the `approuting-istio` implementation. Do not
+   restore a legacy callback, Ingress, or controller as a routine Helm rollback.
 
-Do not commit either hostname, rendered manifests, callback URIs, or protected
+Do not commit hostnames, rendered manifests, callback URIs, or protected
 Gateway values.
 
 ## 5. Acceptance and rollback
@@ -372,12 +373,19 @@ Verify before sending production traffic:
 3. unauthenticated and cross-user requests are rejected;
 4. Workload Identity can read the configured managed services without keys;
 5. Kubernetes tools can read only the release namespace and cannot mutate;
-6. ServiceNow, Azure evidence, Graph OBO, and command-brief scenarios pass;
+6. Azure evidence and command-brief scenarios pass; ServiceNow and Graph OBO
+   acceptance is required only before enabling those integrations;
 7. telemetry reaches the configured OTLP/Azure Monitor target;
 8. the workbook is populated and both alert rules can be exercised safely;
 9. HPA, PDB, rolling restart, pod eviction, and one-node disruption preserve
    service; and
 10. Cosmos restore and Blob version recovery procedures are tested.
+
+Core functional, Gateway authentication, cancellation, pod replacement, and Helm
+rollback acceptance is already recorded in
+[DEPLOYMENT-PLAN.md](../../DEPLOYMENT-PLAN.md). Its reconciled checklist separates
+that evidence from outstanding security, observability, scaling, secret-rotation,
+and data-recovery drills; this runbook is not evidence that every drill passed.
 
 Rollback the Helm release without deleting managed data:
 
@@ -385,6 +393,10 @@ Rollback the Helm release without deleting managed data:
 helm history kratos-agent --namespace kratos-agent
 helm rollback kratos-agent <revision> --namespace kratos-agent --wait
 ```
+
+Choose a reviewed Gateway-only revision compatible with the current
+infrastructure. Historical dual-ingress revisions are not immediate rollback
+targets now that the NGINX controller, callback, and TLS resources are gone.
 
 Deleting retired cloud resources and managed data is always a separate,
 explicit operator decision.
